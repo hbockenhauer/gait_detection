@@ -34,7 +34,7 @@ def get_dominant_freq(win, fs=30):
 
 def prepare_batch_windows(df, window_size=300):
     X_windows, energy_values, freq_values, y_true, codes = [], [], [], [], []
-    GAIT_CODES = {'A', 'B', 'C'} # Walk, Jog, Stairs
+    GAIT_CODES = {'A', 'C'} # Walk, Stairs
     
     raw_xyz = df[['x', 'y', 'z']].values / 9.81
     raw_labels = df['activity'].values
@@ -82,8 +82,12 @@ for filename in files:
             probs = torch.softmax(model(windows.to(device)), dim=1)[:, 1].cpu().numpy()
 
         # Logic Gates
+        CONF_THRESH = 0.45
+        ENERGY_THRESH = 0.07
+        min_freq = 0.5
+        max_freq = 3.0
         probs_smoothed = np.convolve(probs, np.ones(3)/3, mode='same')
-        y_pred_raw = ((probs_smoothed > 0.45) & (energies > 0.07) & (freqs > 0.5) & (freqs < 3.0)).astype(int)
+        y_pred_raw = ((probs_smoothed > CONF_THRESH) & (energies > ENERGY_THRESH) & (freqs > min_freq) & (freqs < max_freq)).astype(int)
         y_pred = median_filter(y_pred_raw, size=3)
 
         # Break down by activity
