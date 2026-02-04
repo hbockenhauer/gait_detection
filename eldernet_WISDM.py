@@ -61,7 +61,7 @@ def prepare_batch_windows(df, window_size=300):
 
 # --- 2. BATCH CONFIG ---
 FOLDER_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\wisdm-dataset\raw\watch\accel'
-ACTIVITY_MAP = {'A':'Walk', 'B':'Jog', 'C':'Stairs', 'D':'Sit', 'E':'Stand', 'F':'Type', 'G':'Teeth', 'M':'Kick', 'O':'Catch', 'P':'Dribble', 'R':'Clap', 'S':'Fold', 'Q':'Write', 'K': 'Drink'}
+ACTIVITY_MAP = {'A':'Walk', 'B':'Jog', 'C':'Stairs', 'D':'Sit', 'E':'Stand', 'F':'Type', 'G':'Teeth', 'H':'Soup', 'I':'Chips', 'J':'Pasta', 'K':'Drink', 'L':'Sandwich', 'M':'Kicking', 'O':'Catch', 'P':'Dribbling', 'Q':'Writing', 'R':'Clapping', 'S':'Folding'}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = torch.hub.load('yonbrand/ElderNet', 'eldernet_ft').to(device)
@@ -106,7 +106,7 @@ for filename in files:
             'Precision': p, 'Recall': r, 'F1': f1,
             'ActivityDetails': activity_stats
         })
-        print(f"✅ ID {subject_id}: F1={f1:.2f}")
+        print(f"✅ ID {subject_id}: Precision={p:.2f}, Recall={r:.2f}, F1={f1:.2f}")
 
     except Exception as e:
         print(f"❌ Error {filename}: {e}")
