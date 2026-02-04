@@ -58,7 +58,7 @@ class WISDMLoader(GaitDataset):
 
 class HMPLoader(GaitDataset):
     # HMP is low-res; needs sensitive gates
-    CONF_THRESH = 0.20   # Lowered to capture muffled steps
+    CONF_THRESH = 0.10   # Lowered to capture muffled steps
     ENERGY_THRESH = 0.005 # Widened to detect low-amplitude movement
     def __init__(self, folder_path, window_size=300):
         super().__init__()
@@ -78,7 +78,7 @@ class HMPLoader(GaitDataset):
                     data = signal.resample(data, new_len)
                     if len(data) < window_size:
                         data = np.pad(data, ((0, window_size - len(data)), (0, 0)), mode='edge')
-                    step = window_size // 4 # High overlap helps recall
+                    step = window_size // 6 # High overlap helps recall
                     for i in range(0, len(data) - window_size + 1, step):
                         # Multiply by 1.3 to compensate for the +/- 1.5G cap
                         self.samples.append((data[i : i + window_size] * 1.3).T)
