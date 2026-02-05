@@ -69,7 +69,6 @@ def run_ullrich_detection(data_df, sampling_rate_hz=100.0):
         gs = gs[gs['duration'] >= 3.0].copy()
         
     return gs
-    return detector.gait_sequences_
 
 # --- 2. DATA LOADING (FIXED COLUMN HANDLING) ---
 def load_wisdm_full_6axis(acc_path):
@@ -297,15 +296,6 @@ def main():
         print(f"  TP: {overall_metrics['tp']}, FP: {overall_metrics['fp']}")
         print(f"  TN: {overall_metrics['tn']}, FN: {overall_metrics['fn']}")
         print("="*60 + "\n")
-    
-    # Save metrics to CSV
-    if all_metrics:
-        metrics_df = pd.DataFrame(all_metrics)
-        metrics_df.to_csv("gait_detection_metrics.csv", index=False)
-        print(f"\n✓ Metrics saved to 'gait_detection_metrics.csv'")
-        print(f"✓ Plots saved to '{PLOT_FOLDER}/'")
-        print(f"\nProcessed {len(all_metrics)} subjects total.")
-
 
 if __name__ == "__main__":
     main()
