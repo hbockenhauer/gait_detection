@@ -233,6 +233,21 @@ def main():
         
         print(f"{act:<20} | {p_a:>6.2f} | {r_a:>6.2f} | {f1_a:>6.2f}")
 
+    # --- 2b. PER-SUBJECT BREAKDOWN ---
+    print("\n" + "="*40)
+    print(f"{'SUBJECT':<10} | {'PREC':<6} | {'REC':<6} | {'F1':<6}")
+    print("-" * 40)
+    
+    unique_subjects = sorted(list(set(all_subject_ids)))
+    for subj in unique_subjects:
+        idx = np.where(all_subject_ids == subj)
+        y_t_sub = all_y_true[idx]
+        y_p_sub = all_y_pred[idx]
+        
+        p_s, r_s, f1_s, _ = precision_recall_fscore_support(y_t_sub, y_p_sub, labels=[1], average='binary', zero_division=0)
+        
+        print(f"{subj:<10} | {p_s:>6.2f} | {r_s:>6.2f} | {f1_s:>6.2f}")
+
     # --- 3. Prepare per-subject sequences for plotting ---
     plot_dir = 'ElderNet_ADL_Plots'
     os.makedirs(plot_dir, exist_ok=True)
@@ -296,6 +311,29 @@ def main():
         fig, axes = plt.subplots(3,1, figsize=(14,10))
         info = [('Confidence','ConfSeq','Confidence (probability)', axes[0]), ('Energy','EnergiesSeq','Energy (std)', axes[1]), ('Frequency','FreqsSeq','Mean Frequency (Hz)', axes[2])]
         acts = seqs['ActivitySeq']
+        conf_seq = np.array(seqs['ConfSeq'])
+        energy_seq = np.array(seqs['EnergiesSeq'])
+        freq_seq = np.array(seqs['FreqsSeq'])
+        # optional freq thresholds (useful if available)
+        min_freq = 0.5
+        max_freq = 3.0
+        # Gait detection mask: confidence AND energy (and freq if valid)
+        gait_mask = (conf_seq > CONF_THRESH) & (energy_seq > ENERGY_THRESH)
+        if not np.all(np.isnan(freq_seq)):
+            gait_mask &= (freq_seq > min_freq) & (freq_seq < max_freq)
+        # identify contiguous gait regions for shading
+        gait_regions = []
+        in_gait = False
+        start_idx = 0
+        for i, val in enumerate(gait_mask):
+            if val and not in_gait:
+                start_idx = i
+                in_gait = True
+            elif not val and in_gait:
+                gait_regions.append((start_idx, i-1))
+                in_gait = False
+        if in_gait:
+            gait_regions.append((start_idx, len(gait_mask)-1))
         
         # Group consecutive activities
         activity_transitions = []  # list of (start_idx, activity_name)
@@ -308,17 +346,32 @@ def main():
         for title, key, ylabel, ax in info:
             seq = seqs[key]
             x = np.arange(len(seq))
+            # Shade gait detection regions with light gold
+            for start, end in gait_regions:
+                ax.axvspan(start - 0.5, end + 0.5, alpha=0.15, color='gold')
             ax.plot(x, seq, color='steelblue', linewidth=1.5)
-            
-            # Mark activity transitions only
+
+            # Add threshold lines in gold
+            if key == 'ConfSeq':
+                ax.axhline(CONF_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Conf threshold={CONF_THRESH}')
+                ax.legend(loc='upper right', fontsize=8)
+            elif key == 'EnergiesSeq':
+                ax.axhline(ENERGY_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Energy threshold={ENERGY_THRESH}')
+                ax.legend(loc='upper right', fontsize=8)
+            elif key == 'FreqsSeq':
+                # draw optional freq bounds if desired
+                ax.axhline(min_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Min freq={min_freq}')
+                ax.axhline(max_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Max freq={max_freq}')
+                ax.legend(loc='upper right', fontsize=8)
+
+            # Mark activity transitions only (green for gait)
             for xi, act in activity_transitions:
-                # Use green for gait activities, red for others
                 line_color = 'green' if act in GAIT_CLASSES else 'red'
                 ax.axvline(xi, color=line_color, linestyle='--', alpha=0.4)
                 yval = seq[xi] if xi < len(seq) else None
                 if yval is not None:
                     ax.text(xi + 0.5, yval, act, rotation=90, fontsize=7, color=line_color, va='bottom')
-            
+
             ax.set_ylabel(ylabel)
             ax.set_xlabel('Window index')
             ax.set_title(f"Subject {subj_id} - {title}")

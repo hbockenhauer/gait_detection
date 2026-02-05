@@ -239,6 +239,32 @@ if len(results_list) > 0:
         ]
         
         codes = selected_subj.get('CodesSeq', [])
+        conf_seq = selected_subj.get('ConfSeq', [])
+        energy_seq = selected_subj.get('EnergiesSeq', [])
+        freq_seq = selected_subj.get('FreqsSeq', [])
+        
+        # Calculate gait detection mask (where all conditions are met)
+        gait_mask = np.ones(len(conf_seq), dtype=bool)
+        if conf_seq:
+            gait_mask &= np.array(conf_seq) > CONF_THRESH
+        if energy_seq:
+            gait_mask &= (np.array(energy_seq) > ENERGY_THRESH_MIN) & (np.array(energy_seq) < ENERGY_THRESH_MAX)
+        if freq_seq:
+            gait_mask &= (np.array(freq_seq) > min_freq) & (np.array(freq_seq) < max_freq)
+        
+        # Identify contiguous gait regions for shading
+        gait_regions = []
+        in_gait = False
+        start_idx = 0
+        for i, is_gait in enumerate(gait_mask):
+            if is_gait and not in_gait:
+                start_idx = i
+                in_gait = True
+            elif not is_gait and in_gait:
+                gait_regions.append((start_idx, i - 1))
+                in_gait = False
+        if in_gait:
+            gait_regions.append((start_idx, len(gait_mask) - 1))
         
         for metric_name, key, ylabel, ax in plots_info:
             seq = selected_subj.get(key, [])
@@ -247,17 +273,36 @@ if len(results_list) > 0:
                 continue
             
             x = np.arange(len(seq))
+            
+            # Shade gait detection regions with light gold background
+            for start, end in gait_regions:
+                ax.axvspan(start - 0.5, end + 0.5, alpha=0.15, color='gold')
+            
             ax.plot(x, seq, color='steelblue', linewidth=1.5, label=metric_name)
+            
+            # Add threshold lines if applicable (all gold now)
+            if key == 'ConfSeq':
+                ax.axhline(CONF_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Conf threshold={CONF_THRESH}')
+                ax.legend(loc='upper right', fontsize=8)
+            elif key == 'EnergiesSeq':
+                ax.axhline(ENERGY_THRESH_MIN, color='gold', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Min energy={ENERGY_THRESH_MIN}')
+                ax.axhline(ENERGY_THRESH_MAX, color='gold', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Max energy={ENERGY_THRESH_MAX}')
+                ax.legend(loc='upper right', fontsize=8)
+            elif key == 'FreqsSeq':
+                ax.axhline(min_freq, color='gold', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Min freq={min_freq}')
+                ax.axhline(max_freq, color='gold', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Max freq={max_freq}')
+                ax.legend(loc='upper right', fontsize=8)
             
             # Mark activity begins with vertical lines and labels
             last = None
             for seq_idx, code in enumerate(codes):
                 if seq_idx == 0 or code != last:
                     act_label = ACTIVITY_MAP.get(code, code)
-                    ax.axvline(seq_idx, color='red', linestyle='--', alpha=0.4, linewidth=1)
+                    line_color = 'green' if code in {'A', 'C'} else 'red'
+                    ax.axvline(seq_idx, color=line_color, linestyle='--', alpha=0.4, linewidth=1)
                     yval = seq[seq_idx] if seq_idx < len(seq) else None
                     if yval is not None:
-                        ax.text(seq_idx + 0.5, yval, act_label, rotation=90, fontsize=7, color='red', va='bottom')
+                        ax.text(seq_idx + 0.5, yval, act_label, rotation=90, fontsize=7, color=line_color, va='bottom')
                 last = code
             
             ax.set_ylabel(ylabel)
