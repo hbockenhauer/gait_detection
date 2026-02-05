@@ -4,15 +4,42 @@ from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import interp1d
 from sklearn.decomposition import PCA
 
+# implementation based on 
+# https://github.com/EWarmerdam/ArmSwingAlgorithm/tree/master 
+
 def arm_swing_algorithm(ang_vel, fs, TH_min_ampl, rmv_first_last=None):
     """
     Python implementation of the Arm Swing Algorithm.
     
-    Parameters:
+    inputs:
     - ang_vel: Nx3 (one arm) or Nx6 (two arms) array of angular velocity in rad/s.
     - fs: Sampling frequency (Hz).
     - TH_min_ampl: Minimum amplitude threshold (degrees).
     - rmv_first_last: Optional list/tuple [start, end] number of swings to remove.
+    
+    outputs:
+            amplitude  = amplitude per swing (range of motion) [deg]
+            pk_ang_vel = peak angular velocity per swing [deg/s]
+            start_idx  = sample number at which a swing starts
+            end_idx    = sample number at which a swing ends
+      regularity_angle = regularity of the angular signal (similarity of
+                         neighbouring swings; 1 = similar to neighbouring swings) (0-1)
+    regularity_ang_vel = regularity of the angular velocity signal
+        pk_vel_forward = average peak angular velocity of all the forward swings
+       pk_vel_backward = average peak angular velocity of all the backward swings
+       perc_time_swing = time during walking that there were swings detected [%]
+             frequency = frequency of the arm cycle [Hz]
+       perc_both_swing = percentage time during walking bout that there is
+                         arm swing detected in both arms [%]
+   amplitude_asymmetry = asymmetry of the amplitude between left and right swings (0% means no asymmetry) [%]
+peak_velocity_asymmetry= asymmetry of the peak angular velocity between left and right swings [%]
+      coordination_max = coordination of the timing between left and right swings (1 when the arms
+                        move exactly out of phase with each other) (0-1)
+    
+                        
+    Written by Elke Warmerdam, Kiel University,
+    e.warmerdam@neurologie.uni-kiel.de
+    
     """
     
     # 1. Preprocessing: Filtering
