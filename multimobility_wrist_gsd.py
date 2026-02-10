@@ -4,12 +4,22 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from multimob.GSD.GSD3 import KheirkhahanGSD
-from multimob.GSD.GSD2 import HickeyGSD
+from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
+dataset = "HAR"
+group = "healthy"
+if dataset == "WearGait":
+    if group == "healthy":
+        DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-Ctrl'
+    else:
+        DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-PD'
+elif dataset == "HAR":
+    DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HAR_data_acc"
+elif dataset == "HMP":
+    DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HMP_Dataset\Walk"
 
-DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait_ctrl'
 SAMPLING_RATE = 100 
 
 def process_weargait():
@@ -27,24 +37,32 @@ def process_weargait():
             
             # 2. Identify and Rename Columns to Anatomical Labels
             # The package requires: acc_pa, acc_ml, acc_is
-            acc_cols = [c for c in df.columns if 'Acc' in c]
-            if len(acc_cols) < 3:
-                continue
+            if dataset == "WearGait":
+                acc_cols = [c for c in df.columns if 'Acc' in c]
+                if len(acc_cols) < 3:
+                    continue
+            elif dataset == "HAR":
+                acc_cols = [c for c in df.columns if 'acc' in c]
+                if len(acc_cols) < 3:
+                    continue
+                
+
                 
             imu_df = df[acc_cols[:3]].copy()
             imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
             
             # 3. Ground Truth
-            label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label'])][0]
+            label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
             y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
             # 4. Run Kheirkhahan GSD
-            gsd = KheirkhahanGSD()
-            #gsd = HickeyGSD()
+            #gsd = KheirkhahanGSD()
+            gsd = HickeyGSD()
             # Note: KheirkhahanGSD in this package takes the DataFrame directly
-            #processed_data = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE)
-            #detected_bouts = gsd.detect_wrist(processed_data)
-            detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+            # HickeyGSD
+            detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=100).detect_wrist()
+            # KheirkhahanGSD
+            #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
             
             # 5. Convert Bout List to Binary Mask
             y_pred = np.zeros(len(df))
@@ -76,7 +94,7 @@ def process_weargait():
         res_df = pd.DataFrame(results)
         print("-" * 75)
         print(f"{'AVERAGE':<25} | {res_df['Accuracy'].mean():.2f}   | {res_df['Precision'].mean():.2f}   | {res_df['Recall'].mean():.2f}   | {res_df['F1'].mean():.2f}")
-        res_df.to_csv('KheirkhahanGSD_Results.csv', index=False)
+        res_df.to_csv('HickeyGSD_Results.csv', index=False)
 
 if __name__ == "__main__":
     process_weargait()
