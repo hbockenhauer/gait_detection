@@ -8,23 +8,29 @@ from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-dataset = "HAR"
+dataset = "QSense"
 group = "healthy"
-if dataset == "WearGait":
-    if group == "healthy":
-        DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-Ctrl'
-    else:
-        DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-PD'
-elif dataset == "HAR":
-    DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HAR_data_acc"
-elif dataset == "HMP":
-    DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HMP_Dataset\Walk"
+match dataset:
+    case "WearGait":
+        if group == "healthy":
+            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-Ctrl'
+        else:
+            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-PD'
+    case "HAR":
+        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HAR_data_acc"
+    case "HMP":
+        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HMP_Dataset\Walk"
+    case "QSense":
+        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data"
 
 SAMPLING_RATE = 100 
 
 def process_weargait():
     results = []
-    files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
+    if dataset == "QSense":
+        files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
+    else:
+        files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
     
     print(f"Processing {len(files)} files using HickeyGSD...")
     print(f"{'Subject':<25} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
@@ -33,27 +39,37 @@ def process_weargait():
     for file_name in files:
         try:
             # 1. Load Data
-            df = pd.read_csv(os.path.join(DATA_PATH, file_name), low_memory=False)
-            
+            if dataset == "QSense":
+                df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
+                           sep='\t',  # Use whitespace as separator (adjust if needed)
+                           low_memory=False)
+            else:
+                df = pd.read_csv(os.path.join(DATA_PATH, file_name), low_memory=False)
+
             # 2. Identify and Rename Columns to Anatomical Labels
             # The package requires: acc_pa, acc_ml, acc_is
+            #print("the df is ", df.columns)
             if dataset == "WearGait":
                 acc_cols = [c for c in df.columns if 'Acc' in c]
                 if len(acc_cols) < 3:
                     continue
-            elif dataset == "HAR":
+            elif dataset in ["HAR", "QSense"]:
+                #print(df.columns)
                 acc_cols = [c for c in df.columns if 'acc' in c]
+                #print(f"the acc_cols is {acc_cols} ")
                 if len(acc_cols) < 3:
                     continue
                 
-
                 
             imu_df = df[acc_cols[:3]].copy()
             imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
             
             # 3. Ground Truth
-            label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
-            y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
+            if dataset == "QSense":
+                y_true = np.ones(len(df))
+            else:
+                label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
+                y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
             # 4. Run Kheirkhahan GSD
             #gsd = KheirkhahanGSD()
@@ -80,7 +96,7 @@ def process_weargait():
             f1   = f1_score(y_true, y_pred, zero_division=0)
 
             results.append({
-                'Subject': file_name.replace('.csv', ''),
+                'Subject': file_name,
                 'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1
             })
 
