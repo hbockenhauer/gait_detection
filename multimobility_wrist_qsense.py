@@ -8,29 +8,15 @@ from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-dataset = "WearGait"
-group = "healthy"
-match dataset:
-    case "WearGait":
-        if group == "healthy":
-            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-Ctrl'
-        else:
-            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-PD'
-    case "HAR":
-        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HAR_data_acc"
-    case "HMP":
-        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HMP_Dataset\Walk"
-    case "QSense":
-        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data"
+SAMPLING_RATE = 50 
+DEBUG = False; 
 
-SAMPLING_RATE = 100 
 
 def process_weargait():
     results = []
-    if dataset == "QSense":
-        files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
-    else:
-        files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
+    files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
+    #files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
     
     print(f"Processing {len(files)} files using HickeyGSD...")
     print(f"{'Subject':<25} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
@@ -39,66 +25,74 @@ def process_weargait():
     for file_name in files:
         try:
             # 1. Load Data
-            if dataset == "QSense":
-                df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
+            df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
                            sep='\t',  # Use whitespace as separator (adjust if needed)
                            low_memory=False)
-            else:
-                df = pd.read_csv(os.path.join(DATA_PATH, file_name), low_memory=False)
+
+            # df = pd.read_csv(os.path.join(DATA_PATH, file_name), low_memory=False)
 
             # 2. Identify and Rename Columns to Anatomical Labels
             # The package requires: acc_pa, acc_ml, acc_is
             #print("the df is ", df.columns)
-            if dataset == "WearGait":
-                acc_cols = [c for c in df.columns if 'Acc' in c]
-                if len(acc_cols) < 3:
-                    continue
-            elif dataset in ["HAR", "QSense"]:
-                #print(df.columns)
-                acc_cols = [c for c in df.columns if 'acc' in c]
-                #print(f"the acc_cols is {acc_cols} ")
-                if len(acc_cols) < 3:
-                    continue
+
+            #print(df.columns)
+            acc_cols = [c for c in df.columns if 'acc' in c]
+            #print(f"the acc_cols is {acc_cols} ")
+            if len(acc_cols) < 3:
+                continue
                 
                 
             imu_df = df[acc_cols[:3]].copy()
+            imu_df = imu_df * 9.81  
+            #print(imu_df)
             imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
             
             # 3. Ground Truth
-            if dataset == "QSense":
+            if file_name.startswith('W'):
                 y_true = np.ones(len(df))
             else:
-                label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
-                y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
+                y_true = np.zeros(len(df))
+                #print("im here cuz of ",file_name )
+            #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
+            #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
             # 4. Run Kheirkhahan GSD
             #gsd = KheirkhahanGSD()
-            gsd = HickeyGSD()
+            gsd = HickeyGSD(debug=DEBUG)
             # Note: KheirkhahanGSD in this package takes the DataFrame directly
             # HickeyGSD
-            detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=100).detect_wrist()
+            detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
             # KheirkhahanGSD
             #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+            
+            if hasattr(detected_bouts, 'gs_list_') and DEBUG:
+                print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")
+                print(f"gs_list_ empty: {detected_bouts.gs_list_.empty}")
+                if not detected_bouts.gs_list_.empty:
+                    print(f"Detected bouts:\n{detected_bouts.gs_list_}")
+                else:
+                    print("No walking bouts detected!")
             
             # 5. Convert Bout List to Binary Mask
             y_pred = np.zeros(len(df))
             if hasattr(detected_bouts, 'gs_list_') and not detected_bouts.gs_list_.empty:
-                for _, row in detected_bouts.gs_list_.iterrows():
+                for idx, row in detected_bouts.gs_list_.iterrows():
                     # Ensure indices are within bounds
                     start = int(max(0, row['start']))
                     end = int(min(len(df), row['end']))
+                    #print(f"Bout {idx}: start={start}, end={end}, duration={end-start} samples")
                     y_pred[start:end] = 1
-            
-            # prints 
-            #print(f"\nPrediction shape: {y_pred.shape}")
-            #print(f"Prediction sum (detected walking samples): {y_pred.sum()}")
-            #print(f"Prediction percentage walking: {y_pred.sum() / len(y_pred) * 100:.2f}%")
-            
-            #print(f"--- Comparison ---")
-            #print(f"True Positives (both predict & true walking): {np.sum((y_pred == 1) & (y_true == 1))}")
-            #print(f"False Positives (predict walking, true not): {np.sum((y_pred == 1) & (y_true == 0))}")
-            #print(f"False Negatives (predict not walking, true walking): {np.sum((y_pred == 0) & (y_true == 1))}")
-            #print(f"True Negatives (both predict & true not walking): {np.sum((y_pred == 0) & (y_true == 0))}")
+            # prints
+            if DEBUG == True:
+                print(f"\nPrediction shape: {y_pred.shape}")
+                print(f"Prediction sum (detected walking samples): {y_pred.sum()}")
+                print(f"Prediction percentage walking: {y_pred.sum() / len(y_pred) * 100:.2f}%")
+                
+                print(f"--- Comparison ---")
+                print(f"True Positives (both predict & true walking): {np.sum((y_pred == 1) & (y_true == 1))}")
+                print(f"False Positives (predict walking, true not): {np.sum((y_pred == 1) & (y_true == 0))}")
+                print(f"False Negatives (predict not walking, true walking): {np.sum((y_pred == 0) & (y_true == 1))}")
+                print(f"True Negatives (both predict & true not walking): {np.sum((y_pred == 0) & (y_true == 0))}")
             
             # 6. Calculate Metrics
             acc  = accuracy_score(y_true, y_pred)

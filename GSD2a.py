@@ -32,7 +32,7 @@ class HickeyGSD:
     - Continuous walking bouts can optionally be merged if separated by short breaks (≤3s).
     """
 
-    def __init__(self, *, version: str = "wrist", cwb: bool = True):
+    def __init__(self, *, version: str = "wrist", cwb: bool = True, debug: bool = False):
         """
          Initialise the HickeyGSD class for wrist-worn sensors.
 
@@ -57,6 +57,7 @@ class HickeyGSD:
         self.gs_list_ = None
         self.ThresholdStill = thresholdstill
         self.ThresholdUpright = thresholdupright
+        self.debug = debug
 
     def preprocess(self, data, *, sampling_rate_hz: float = 100, target_sampling_rate_hz: float = 100) -> Self:
         """
@@ -99,7 +100,7 @@ class HickeyGSD:
 
         # Target sample rate is 100 which is similar to the sensor.
         # I added a check to see if the sensor sample rate is 100 and if it is then we don't resample
-        if self.sampling_rate_hz != 100:
+        if self.sampling_rate_hz != 50:
             filter_chain = [("resampling", Resample(self.target_sampling_rate_hz))]
             acc_norm = chain_transformers(acc_norm, filter_chain, sampling_rate_hz=self.sampling_rate_hz)
 
@@ -146,6 +147,12 @@ class HickeyGSD:
         # Calculating the number of 0.1s windows present in the data
         win_num = int(len(acc_norm_centered) // n)
 
+        if self.debug:
+            print(f"\nWindow analysis:")
+            print(f"Window size (samples): {n}")
+            print(f"Number of windows: {win_num}")
+            print(f"Total samples: {len(acc_norm_centered)}")
+
         # Performing a low pass butterworth filter on the data
         cutoff = 17
         # class instance
@@ -163,7 +170,8 @@ class HickeyGSD:
             end_idx = int((i + 1) * n)
 
             std_acc[i] = np.std(acc_filt[start_idx:end_idx])
-            mean_acc[i] = np.mean(data[start_idx:end_idx])
+            #mean_acc[i] = np.mean(data[start_idx:end_idx])
+            mean_acc[i] = np.mean(data.iloc[start_idx:end_idx])
 
         # Initialize the result array with zeros
         i_array_move_st_si = np.zeros(win_num)
@@ -172,6 +180,11 @@ class HickeyGSD:
         for i in range(win_num):
             if std_acc[i] >= self.ThresholdStill and mean_acc[i] <= self.ThresholdUpright:
                 i_array_move_st_si[i] = 1
+        
+        if self.debug:
+            print(f"\nMovement detection:")
+            print(f"Windows marked as movement: {i_array_move_st_si.sum()}/{win_num} ({i_array_move_st_si.sum()/win_num*100:.2f}%)")
+            print(f"First 20 windows: {i_array_move_st_si[:20]}")
 
         # if i_array_move_st_si is all ones then the function should return a dataframe with the start and end of the signal!
         if i_array_move_st_si.sum() == win_num:
