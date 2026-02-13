@@ -12,6 +12,8 @@ import random
 from datetime import datetime
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 from scipy.ndimage import median_filter
+import matplotlib.colors as mcolors
+import colorsys
 
 # --- CONFIGURATION ---
 DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
@@ -21,7 +23,7 @@ STEP_SIZE = 30
 GAIT_CLASSES = {'Walking', 'Stairs'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
 
-CONF_THRESH = 0.8
+CONF_THRESH = 0.6
 MIN_ENERGY = 0.1
 MAX_ENERGY = 2.0
 MIN_FREQ = 0.0
@@ -140,6 +142,31 @@ def apply_bout_filtering(predictions, min_bout_length=5):
     
     return filtered
 
+def generate_distinct_colors(n):
+    colors = []
+    for i in range(n):
+        # Spread hues evenly around the color wheel
+        hue = i / n
+        # Use high saturation (0.8) and value (0.9) for vivid colors
+        saturation = 0.8
+        value = 0.9
+        rgb = colorsys.hsv_to_rgb(hue, saturation, value)
+        colors.append(rgb)
+    return colors
+
+def get_wrist_variant(base_rgb, wrist):
+    h, l, s = colorsys.rgb_to_hls(*base_rgb)
+    
+    if wrist.lower() == 'right':
+        # Right wrist: use base color as-is (vivid)
+        return base_rgb
+    else:
+        # Left wrist: lighter and less saturated
+        # Increase lightness by 10%, reduce saturation by 40%
+        new_l = min(0.85, l+0.3)  # Cap to avoid white
+        new_s = max(0.3, s)    # Keep some saturation
+        return colorsys.hls_to_rgb(h, new_l, new_s)
+
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -154,7 +181,8 @@ def main():
 
         files = [
             os.path.join(DATASET_PATH, folder, 's1_1RW.txt'),  # Right wrist
-            os.path.join(DATASET_PATH, folder, 's3_3ST.txt')   # Left wrist
+            os.path.join(DATASET_PATH, folder, 's3_3ST.txt')   # Left wrist for QSense_data
+            #os.path.join(DATASET_PATH, folder, 's2_2LW.txt')   # Left wrist for QSense_data_edge
         ]
 
         for file in files:
@@ -181,7 +209,7 @@ def main():
                     save_path = os.path.join(DATASET_PATH, folder, f"{wrist}_window_outputs.csv")
                     output_df.to_csv(save_path, index=False)
 
-                print(f"Processed {os.path.basename(file)}: {len(probs)} windows")
+                print(f"             Processed {os.path.basename(file)}: {len(probs)} windows")
 
                 probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
                 y_pred_raw = (probs_sm > CONF_THRESH) #& (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
@@ -235,40 +263,72 @@ def main():
 
     # Subjects to plot
     subjects = ['Hendrik', 'Tanya']
-
-    # Wrists
     wrists = ['right', 'left']
-
-    # Metrics to plot
     metrics = ['probability', 'energy', 'frequency']
 
     for subject in subjects:
-        plt.figure(figsize=(16, 10))
+        fig = plt.figure(figsize=(20, 10))
         plt.suptitle(f"{subject} - ElderNet Window Metrics", fontsize=16)
-
+        
+        # Get all folders for this subject
+        unique_folders = sorted([
+            f for f in os.listdir(DATASET_PATH) 
+            if subject.lower() in f.lower()
+        ])
+        num_acts = len(unique_folders)
+    
+        base_colors = generate_distinct_colors(num_acts)
+        
+        # Create axes
+        axes = []
         for i, metric in enumerate(metrics, start=1):
-            plt.subplot(3, 1, i)
+            ax = plt.subplot(3, 1, i)
+            axes.append(ax)
 
-            for folder in os.listdir(DATASET_PATH):
-                if subject.lower() not in folder.lower():
-                    continue
-
+            # Plot each activity with its distinct color
+            for idx, folder in enumerate(unique_folders):
+                base_color = base_colors[idx]
+                
                 for wrist in wrists:
                     file_path = os.path.join(DATASET_PATH, folder, f"{wrist}_window_outputs.csv")
                     if not os.path.exists(file_path):
                         continue
 
+                    # Get wrist-specific color variant
+                    plot_color = get_wrist_variant(base_color, wrist)
+
                     df = pd.read_csv(file_path)
-                    # Shift timestamps so all files of the subject are on the same x-axis
-                    times = df['timestamp'] + (0 if 's1' in wrist else 0)  # optional offset if needed
-                    plt.plot(times, df[metric], label=f"{folder} | {wrist}")
+                    
+                    ax.plot(
+                        df['timestamp'], 
+                        df[metric], 
+                        label=f"{folder} | {wrist}", 
+                        color=plot_color,
+                        alpha=0.85
+                    )
 
-            plt.ylabel(metric.capitalize())
-            plt.legend(fontsize=8)
-            plt.grid(True)
+            ax.set_ylabel(metric.capitalize(), fontsize=12)
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(axis='both', labelsize=10)
 
-        plt.xlabel("Window index")
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        axes[-1].set_xlabel("Time (seconds)", fontsize=12)
+        
+        handles, labels = axes[-1].get_legend_handles_labels()
+        
+        # Sort legend entries by activity (groups wrists together)
+        sorted_pairs = sorted(zip(labels, handles), key=lambda x: x[0])
+        sorted_labels, sorted_handles = zip(*sorted_pairs)
+        
+        fig.legend(sorted_handles, sorted_labels, loc='center left', bbox_to_anchor=(0.851, 0.5), fontsize=8, title='Activity | Wrist', 
+            frameon=True, ncol=1, title_fontsize=9)
+
+        plt.tight_layout(rect=[0, 0, 0.85, 0.96])
+        
+        # Save figure
+        save_path = os.path.join(DATASET_PATH, f"{subject}_eldernet_metrics.png")
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved plot: {save_path}")
+        
         plt.show()
 
 if __name__ == "__main__":main()
