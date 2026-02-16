@@ -16,7 +16,7 @@ import matplotlib.colors as mcolors
 import colorsys
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      
 STEP_SIZE = 30
@@ -181,8 +181,7 @@ def main():
 
         files = [
             os.path.join(DATASET_PATH, folder, 's1_1RW.txt'),  # Right wrist
-            #os.path.join(DATASET_PATH, folder, 's3_3ST.txt')   # Left wrist for QSense_data
-            os.path.join(DATASET_PATH, folder, 's2_2LW.txt')   # Left wrist for QSense_data_edge
+            os.path.join(DATASET_PATH, folder, 's2_2LW.txt')   # Left wrist 
         ]
 
         for file in files:
