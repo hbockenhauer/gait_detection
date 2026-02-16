@@ -8,24 +8,30 @@ from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
 SAMPLING_RATE = 50 
 DEBUG = False; 
 
 
 def process_weargait():
     results = []
-    files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
-    #files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
     
-    print(f"Processing {len(files)} files using HickeyGSD...")
-    print(f"{'Subject':<25} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+    # Discover all .txt files in nested folder structure
+    file_paths = []
+    for root, dirs, files in os.walk(DATA_PATH):
+        for file in files:
+            if file.endswith('.txt'):
+                file_paths.append(os.path.join(root, file))
+    
+    print(f"Processing {len(file_paths)} files using HickeyGSD...")
+    print(f"{'Subject':<30} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
     print("-" * 75)
 
-    for file_name in files:
+    for file_path in file_paths:
+        file_name = os.path.basename(file_path)
         try:
             # 1. Load Data
-            df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
+            df = pd.read_csv(file_path, 
                            sep='\t',  # Use whitespace as separator (adjust if needed)
                            low_memory=False)
 
@@ -48,13 +54,7 @@ def process_weargait():
             imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
             
             # 3. Ground Truth
-            if file_name.startswith('W'):
-                y_true = np.ones(len(df))
-            else:
-                y_true = np.zeros(len(df))
-                #print("im here cuz of ",file_name )
-            #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
-            #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
+            y_true = np.ones(len(df))
 
             # 4. Run Kheirkhahan GSD
             #gsd = KheirkhahanGSD()
@@ -65,6 +65,7 @@ def process_weargait():
             # KheirkhahanGSD
             #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
             
+            # debug prints
             if hasattr(detected_bouts, 'gs_list_') and DEBUG:
                 print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")
                 print(f"gs_list_ empty: {detected_bouts.gs_list_.empty}")
@@ -100,32 +101,68 @@ def process_weargait():
             rec  = recall_score(y_true, y_pred, zero_division=0)
             f1   = f1_score(y_true, y_pred, zero_division=0)
 
+            # Extract folder name and condition
+            folder_name = os.path.basename(os.path.dirname(file_path))
+            display_label = f"{folder_name}/{file_name}"
+
+            # Extract condition from folder name (e.g., "c1", "c2", etc.)
+            folder_lower = folder_name.lower()
+            if 'pockets' in folder_lower:
+                condition = 'pockets'
+            elif 'rail' in folder_lower:
+                condition = 'rail'
+            elif 'phone' in folder_lower:
+                condition = 'phone'
+            elif 'limp' in folder_lower:
+                condition = 'limp'
+            elif 'armfixed' in folder_lower:
+                condition = 'armfixed'
+            else:
+                condition = folder_name  # Use folder name if no condition pattern found
+
             results.append({
-                'Subject': file_name,
+                'Subject': display_label,
+                'Folder': folder_name,
+                'Condition': condition,
                 'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1
             })
 
-            print(f"{file_name[:25]:<25} | {acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
+            print(f"{display_label[:30]:<30} | {acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
         except Exception as e:
-            print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
+            folder_name = os.path.basename(os.path.dirname(file_path))
+            display_label = f"{folder_name}/{file_name}"
+            print(f"{display_label[:30]:<30} | ERROR: {str(e)}")
 
     # Final Summary
     if results:
         res_df = pd.DataFrame(results)
         print("-" * 75)
         
-        # Separate results by file type
-        rw_files = res_df[res_df['Subject'].str.endswith('RW.txt')]
-        other_files = res_df[~res_df['Subject'].str.endswith('RW.txt')]
+        # Separate results by wrist type (RW vs LW)
+        rw_files = res_df[res_df['Subject'].str.contains('RW', case=False)]
+        lw_files = res_df[res_df['Subject'].str.contains('LW', case=False)]
         
-        # Print RW.txt average
+        # Print RW (Right Wrist) average
         if not rw_files.empty:
-            print(f"{'AVERAGE right wrist ':<25} | {rw_files['Accuracy'].mean():.2f}   | {rw_files['Precision'].mean():.2f}   | {rw_files['Recall'].mean():.2f}   | {rw_files['F1'].mean():.2f}")
+            print(f"{'AVERAGE (RW - Right)':<30} | {rw_files['Accuracy'].mean():.2f}   | {rw_files['Precision'].mean():.2f}   | {rw_files['Recall'].mean():.2f}   | {rw_files['F1'].mean():.2f}")
         
-        # Print other files average
-        if not other_files.empty:
-            print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.2f}   | {other_files['Precision'].mean():.2f}   | {other_files['Recall'].mean():.2f}   | {other_files['F1'].mean():.2f}")
+        # Print LW (Left Wrist) average
+        if not lw_files.empty:
+            print(f"{'AVERAGE (LW - Left)':<30} | {lw_files['Accuracy'].mean():.2f}   | {lw_files['Precision'].mean():.2f}   | {lw_files['Recall'].mean():.2f}   | {lw_files['F1'].mean():.2f}")
+        
+            # Group by condition and calculate averages
+        unique_conditions = res_df['Condition'].unique()
+        
+        for condition in sorted(unique_conditions):
+            condition_data = res_df[res_df['Condition'] == condition]
+            avg_label = f"AV({condition})"
+            print(f"{avg_label:<30} | {condition_data['Accuracy'].mean():.2f}   | {condition_data['Precision'].mean():.2f}   | {condition_data['Recall'].mean():.2f}   | {condition_data['F1'].mean():.2f}")
+ 
+        
+        # Print overall average
+        print("-" * 75)
+        print(f"{'AVERAGE (Overall)':<30} | {res_df['Accuracy'].mean():.2f}   | {res_df['Precision'].mean():.2f}   | {res_df['Recall'].mean():.2f}   | {res_df['F1'].mean():.2f}")
         
         res_df.to_csv('HickeyGSD_Results.csv', index=False)
 
