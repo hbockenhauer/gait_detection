@@ -1,0 +1,1 @@
+yyyy-MM-dd	HH:mm:ss.fff	gyrX	gyrY	gyrZ	accX	accY	accZ	magX	magY	magZ	Marker	Energy	Angle	Classification
