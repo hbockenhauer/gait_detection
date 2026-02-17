@@ -14,7 +14,7 @@ from sklearn.metrics import precision_recall_fscore_support, accuracy_score, con
 from scipy.ndimage import median_filter
 import matplotlib.colors as mcolors
 import colorsys
-from eldernet_owndata import prepare_windows_overlapping, apply_bout_filtering, generate_distinct_colors, get_wrist_variant, load_data, resample_to_30hz, obtain_ground_truth
+from eldernet_owndata import prepare_windows_overlapping, apply_bout_filtering, load_data, resample_to_30hz, obtain_ground_truth
 
 # --- CONFIGURATION ---
 DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
@@ -121,10 +121,10 @@ def main():
         output_df.to_csv(save_path, index=False)
 
         # Apply filtering
-        probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
-        y_pred_raw = (probs_sm > CONF_THRESH)
-        y_pred = median_filter(y_pred_raw, size=3)
-        y_pred = apply_bout_filtering(y_pred, min_bout_length=5)
+        #probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
+        y_pred = (probs > CONF_THRESH)
+        #y_pred = median_filter(y_pred_raw, size=3)
+        #y_pred = apply_bout_filtering(y_pred, min_bout_length=5)
 
         # Ground truth
         df_len = meta["df_len"]
@@ -168,74 +168,74 @@ def main():
     print("\n=== OVERALL SUMMARY ===")
     print(results_df.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
 
-    # Subjects to plot
-    subjects = ['Hendrik', 'Tanya']
-    wrists = ['right', 'left']
-    metrics = ['probability', 'energy', 'frequency']
+    # # Subjects to plot
+    # subjects = ['Hendrik', 'Tanya']
+    # wrists = ['right', 'left']
+    # metrics = ['probability', 'energy', 'frequency']
 
-    for subject in subjects:
-        fig = plt.figure(figsize=(20, 10))
-        plt.suptitle(f"{subject} - ElderNet Window Metrics", fontsize=16)
+    # for subject in subjects:
+    #     fig = plt.figure(figsize=(20, 10))
+    #     plt.suptitle(f"{subject} - ElderNet Window Metrics", fontsize=16)
         
-        # Get all folders for this subject
-        unique_folders = sorted([
-            f for f in os.listdir(DATASET_PATH) 
-            if subject.lower() in f.lower()
-        ])
-        num_acts = len(unique_folders)
+    #     # Get all folders for this subject
+    #     unique_folders = sorted([
+    #         f for f in os.listdir(DATASET_PATH) 
+    #         if subject.lower() in f.lower()
+    #     ])
+    #     num_acts = len(unique_folders)
     
-        base_colors = generate_distinct_colors(num_acts)
+    #     base_colors = generate_distinct_colors(num_acts)
         
-        # Create axes
-        axes = []
-        for i, metric in enumerate(metrics, start=1):
-            ax = plt.subplot(3, 1, i)
-            axes.append(ax)
+    #     # Create axes
+    #     axes = []
+    #     for i, metric in enumerate(metrics, start=1):
+    #         ax = plt.subplot(3, 1, i)
+    #         axes.append(ax)
 
-            # Plot each activity with its distinct color
-            for idx, folder in enumerate(unique_folders):
-                base_color = base_colors[idx]
+    #         # Plot each activity with its distinct color
+    #         for idx, folder in enumerate(unique_folders):
+    #             base_color = base_colors[idx]
                 
-                for wrist in wrists:
-                    file_path = os.path.join(DATASET_PATH, folder, f"{wrist}_window_outputs.csv")
-                    if not os.path.exists(file_path):
-                        continue
+    #             for wrist in wrists:
+    #                 file_path = os.path.join(DATASET_PATH, folder, f"{wrist}_window_outputs.csv")
+    #                 if not os.path.exists(file_path):
+    #                     continue
 
-                    # Get wrist-specific color variant
-                    plot_color = get_wrist_variant(base_color, wrist)
+    #                 # Get wrist-specific color variant
+    #                 plot_color = get_wrist_variant(base_color, wrist)
 
-                    df = pd.read_csv(file_path)
+    #                 df = pd.read_csv(file_path)
                     
-                    ax.plot(
-                        df['timestamp'], 
-                        df[metric], 
-                        label=f"{folder} | {wrist}", 
-                        color=plot_color,
-                        alpha=0.85
-                    )
+    #                 ax.plot(
+    #                     df['timestamp'], 
+    #                     df[metric], 
+    #                     label=f"{folder} | {wrist}", 
+    #                     color=plot_color,
+    #                     alpha=0.85
+    #                 )
 
-            ax.set_ylabel(metric.capitalize(), fontsize=12)
-            ax.grid(True, alpha=0.3)
-            ax.tick_params(axis='both', labelsize=10)
+    #         ax.set_ylabel(metric.capitalize(), fontsize=12)
+    #         ax.grid(True, alpha=0.3)
+    #         ax.tick_params(axis='both', labelsize=10)
 
-        axes[-1].set_xlabel("Time (seconds)", fontsize=12)
+    #     axes[-1].set_xlabel("Time (seconds)", fontsize=12)
         
-        handles, labels = axes[-1].get_legend_handles_labels()
+    #     handles, labels = axes[-1].get_legend_handles_labels()
         
-        # Sort legend entries by activity (groups wrists together)
-        sorted_pairs = sorted(zip(labels, handles), key=lambda x: x[0])
-        sorted_labels, sorted_handles = zip(*sorted_pairs)
+    #     # Sort legend entries by activity (groups wrists together)
+    #     sorted_pairs = sorted(zip(labels, handles), key=lambda x: x[0])
+    #     sorted_labels, sorted_handles = zip(*sorted_pairs)
         
-        fig.legend(sorted_handles, sorted_labels, loc='center left', bbox_to_anchor=(0.851, 0.5), fontsize=8, title='Activity | Wrist', 
-            frameon=True, ncol=1, title_fontsize=9)
+    #     fig.legend(sorted_handles, sorted_labels, loc='center left', bbox_to_anchor=(0.851, 0.5), fontsize=8, title='Activity | Wrist', 
+    #         frameon=True, ncol=1, title_fontsize=9)
 
-        plt.tight_layout(rect=[0, 0, 0.85, 0.96])
+    #     plt.tight_layout(rect=[0, 0, 0.85, 0.96])
         
-        # Save figure
-        # save_path = os.path.join(DATASET_PATH, f"{subject}_eldernet_metrics.png")
-        # plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        # print(f"Saved plot: {save_path}")
+    #     # Save figure
+    #     # save_path = os.path.join(DATASET_PATH, f"{subject}_eldernet_metrics.png")
+    #     # plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    #     # print(f"Saved plot: {save_path}")
         
-        # plt.show()
+    #     # plt.show()
 
 if __name__ == "__main__":main()
