@@ -8,7 +8,7 @@ from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Qsense_data\QSense_data_edge"
 SAMPLING_RATE = 50 
 DEBUG = False; 
 
@@ -54,7 +54,13 @@ def process_weargait():
             imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
             
             # 3. Ground Truth
-            y_true = np.ones(len(df))
+            folder_path = os.path.dirname(file_path)
+            folder_name = os.path.basename(folder_path)
+            folder_lower = folder_name.lower()
+            if 'free' in folder_lower:
+                y_true = np.zeros(len(df))
+            else:
+                y_true = np.ones(len(df))
 
             # 4. Run Kheirkhahan GSD
             #gsd = KheirkhahanGSD()

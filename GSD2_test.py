@@ -1,6 +1,7 @@
 from typing_extensions import Self
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from multimob.GSD.utils.gravity_remove_butter import gravity_motion_butterworth
 from multimob.GSD.utils.cwb import cwb
 from mobgap.data_transform import (
@@ -8,6 +9,8 @@ from mobgap.data_transform import (
     chain_transformers,
     ButterworthFilter
 )
+
+# extra functions 
 
 class HickeyGSD:
     """
@@ -32,7 +35,7 @@ class HickeyGSD:
     - Continuous walking bouts can optionally be merged if separated by short breaks (≤3s).
     """
 
-    def __init__(self, *, version: str = "wrist", cwb: bool = True, debug: bool = False):
+    def __init__(self, *, version: str = "wrist", cwb: bool = True, debug: bool = False, visual: bool = True):
         """
          Initialise the HickeyGSD class for wrist-worn sensors.
 
@@ -58,6 +61,7 @@ class HickeyGSD:
         self.ThresholdStill = thresholdstill
         self.ThresholdUpright = thresholdupright
         self.debug = debug
+        self.visual = visual
 
     def preprocess(self, data, *, sampling_rate_hz: float = 100, target_sampling_rate_hz: float = 100) -> Self:
         """
@@ -88,6 +92,9 @@ class HickeyGSD:
         self.target_sampling_rate_hz = target_sampling_rate_hz
         acc = self.data.iloc[:, 0:3]
 
+        if self.visual == True:
+            plot_acceleration_data(data, sampling_rate_hz)
+        
         # removing gravity from the 3 axes using custom function
         acc_nograv = gravity_motion_butterworth(acc, sampling_rate_hz) 
         # sampling_rate_hz becomes the cutoff in the lowpass filter
@@ -107,8 +114,32 @@ class HickeyGSD:
         self.imu_preprocessed = acc_norm
 
         return self
+    
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float) -> None:
+        """
+        Plot 3-axis acceleration data over time.
 
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Input acceleration data with three axes.
+        sampling_rate_hz : float
+            Original sampling rate of the data.
+        """
+        time = np.arange(len(data)) / sampling_rate_hz
+        cols = list(data.columns[:3])
 
+        plt.figure(figsize=(10, 4))
+        for col in cols:
+            plt.plot(time, data[col], label=col)
+
+        plt.xlabel("Time (s)")
+        plt.ylabel("Acceleration (g)")
+        plt.title("3-Axis Acceleration")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+    
     def detect_wrist(self) -> Self:
         """
         Detect walking bouts from wrist acceleration data.
