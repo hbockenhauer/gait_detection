@@ -73,7 +73,7 @@ for d = 1:length(dataPaths)
                 vm = sqrt(accX(validRows).^2 + accY(validRows).^2 + accZ(validRows).^2);
                 time = time(validRows);
                 fs = round(1 / median(diff(time)));
-                if isnan(fs) || fs < 1, fs = 100; end
+                if isnan(fs) || fs < 1, fs = 50; end
     
                 % Create Ground Truth
                 isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
@@ -191,6 +191,16 @@ if ~isempty(summaryResults)
 else
     disp('No data processed.');
 end
+
+% --- 4. EXPORT RESULTS TO CSV ---
+% Define the full path for the CSV file
+csvFileName = fullfile(PlotPath, 'MStra_Summary.csv');
+
+% Create the folder if it doesn't exist (safety check)
+if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
+
+% Write the table to a CSV file
+writetable(summaryResults, csvFileName);
 
 %% --- OPTIMIZED DETECTION FUNCTION ---
 function [wi, steps, peakFs, ampVals, maxPks, T_vec] = run_straczkiewicz_optimized(vm, fs, fMin, fMax, pThr, aThr)

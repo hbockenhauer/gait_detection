@@ -16,7 +16,7 @@ import matplotlib.colors as mcolors
 import colorsys
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      
 STEP_SIZE = 30
@@ -46,24 +46,26 @@ def set_seed(seed=42):
 
 set_seed(42)
 
-# --- DATA LOADING AND PREPROCESSING ---
 def load_data(filepath):
     df = pd.read_csv(filepath, sep=r"\s+", engine="python")
-    timestamps = pd.to_datetime(
-        df['yyyy-MM-dd'] + ' ' + df['HH:mm:ss.fff'],
-        format='%Y-%m-%d %H:%M:%S.%f'
-    )
-    time_seconds = (timestamps - timestamps.iloc[0]).dt.total_seconds()
+
+    # Reset index to ensure clean sample numbering
+    df = df.reset_index(drop=True)
+
+    # Reconstruct time purely from sampling rate (50 Hz)
+    time_seconds = np.arange(len(df)) / SAMPLE_RATE_QSENSE
+
     parent_folder = os.path.basename(os.path.dirname(filepath))
     activity_label = parent_folder.split('_')[0]
+
     data = pd.DataFrame({
-        'datetime': timestamps,
         'time_sec': time_seconds,
         'accX': pd.to_numeric(df['accX'], errors='coerce'),
         'accY': pd.to_numeric(df['accY'], errors='coerce'),
         'accZ': pd.to_numeric(df['accZ'], errors='coerce'),
         'activity': activity_label
     })
+
     return data
 
 # --- RESAMPLE DATA TO 30Hz ---

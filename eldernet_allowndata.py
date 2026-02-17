@@ -14,7 +14,7 @@ from sklearn.metrics import precision_recall_fscore_support, accuracy_score, con
 from scipy.ndimage import median_filter
 import matplotlib.colors as mcolors
 import colorsys
-from eldernet_owndata import prepare_windows_overlapping, apply_bout_filtering, load_data, resample_to_30hz, obtain_ground_truth
+from eldernet_owndata import prepare_windows_overlapping, load_data, resample_to_30hz, obtain_ground_truth
 
 # --- CONFIGURATION ---
 DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
