@@ -11,6 +11,7 @@ from mobgap.data_transform import (
 )
 
 # extra functions 
+plt.ion()
 
 class HickeyGSD:
     """
@@ -63,7 +64,7 @@ class HickeyGSD:
         self.debug = debug
         self.visual = visual
 
-    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration") -> None:
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration", vertical_lines=None) -> None:
         """
         Plot 3-axis acceleration data over time.
 
@@ -74,20 +75,99 @@ class HickeyGSD:
         sampling_rate_hz : float
             Original sampling rate of the data.
         """
+        data = data[:150]
         time = np.arange(len(data)) / sampling_rate_hz
         cols = list(data.columns[:3])
 
-        plt.figure(figsize=(10, 4))
+        fig, ax = plt.subplots(figsize=(10, 4))
         for col in cols:
-            plt.plot(time, data[col], label=col)
+            ax.plot(time, data[col], label=col)
 
-        plt.xlabel("Time (s)")
-        plt.ylabel("Acceleration (g)")
-        plt.title(title)
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Acceleration (g)")
+        ax.set_title(title)
+        ax.legend()
+        if vertical_lines is not None:
+            for idx in vertical_lines:
+                if 0 <= idx < len(data):
+                    time_at_idx = time[idx]
+                    ax.axvline(x=time_at_idx, color='red', linestyle='--', alpha=0.7, linewidth=1)
 
+        fig.tight_layout()
+        fig.show()
+        return fig
+
+    def plot_mean_sd_with_thresholds(self, mean_values, sd_values, mean_threshold=None, 
+                                  sd_threshold=None, labels=None) -> None:
+        """
+        Plot mean and SD values with threshold highlighting.
+
+        Parameters
+        ----------
+        mean_values : array-like
+            Mean values to plot.
+        sd_values : array-like
+            Standard deviation values to plot.
+        mean_threshold : float, optional
+            Threshold for mean values. Values above this are highlighted.
+        sd_threshold : float, optional
+            Threshold for SD values. Values above this are highlighted.
+        labels : array-like, optional
+            Labels for x-axis (e.g., sample names, time points).
+        """
+        mean_values = mean_values[:150]
+        sd_values = sd_values[:150]
+        mean_values = np.array(mean_values)
+        sd_values = np.array(sd_values)
+        n_points = len(mean_values)
+        
+        if labels is None:
+            labels = np.arange(n_points)
+        
+        x = np.arange(n_points)
+        
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        
+        # --- Plot Mean Values ---
+        colors_mean = ['green' if mean_threshold is None or val <= mean_threshold 
+                    else 'red' for val in mean_values]
+        
+        ax1.bar(x, mean_values, color=colors_mean, alpha=0.7, edgecolor='black', linewidth=0.5)
+        ax1.set_ylabel('Mean Value', fontsize=11)
+        ax1.set_title('Mean Values', fontsize=12, fontweight='bold')
+        ax1.grid(True, alpha=0.3, axis='y')
+        
+        if mean_threshold is not None:
+            ax1.axhline(y=mean_threshold, color='orange', linestyle='--', 
+                        linewidth=2, label=f'Threshold: {mean_threshold}')
+            ax1.legend(loc='upper right')
+        
+        # --- Plot SD Values ---
+        colors_sd = ['green' if sd_threshold is None or val >= sd_threshold 
+                    else 'red' for val in sd_values]
+        
+        ax2.bar(x, sd_values, color=colors_sd, alpha=0.7, edgecolor='black', linewidth=0.5)
+        ax2.set_ylabel('Standard Deviation', fontsize=11)
+        ax2.set_xlabel('Sample Index', fontsize=11)
+        ax2.set_title('Standard Deviation Values', fontsize=12, fontweight='bold')
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        if sd_threshold is not None:
+            ax2.axhline(y=sd_threshold, color='orange', linestyle='--', 
+                        linewidth=2, label=f'Threshold: {sd_threshold}')
+            ax2.legend(loc='upper right')
+        
+        # Set x-ticks
+        ax1.set_xticks(x)
+        ax1.set_xticklabels([])
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(labels, rotation=45, ha='right')
+        
+        fig.tight_layout()
+        fig.show()
+        return fig
+    
     def preprocess(self, data, *, sampling_rate_hz: float = 100, target_sampling_rate_hz: float = 100) -> Self:
         """
         Preprocess wrist acceleration data.
@@ -118,7 +198,7 @@ class HickeyGSD:
         acc = self.data.iloc[:, 0:3]
 
         if self.visual == True:
-            self.plot_acceleration_data(data, sampling_rate_hz, title="Raw data")
+            self.plot_acceleration_data(acc, sampling_rate_hz, title="Raw data")
         
         # removing gravity from the 3 axes using custom function
         acc_nograv = gravity_motion_butterworth(acc, sampling_rate_hz) 
@@ -144,9 +224,7 @@ class HickeyGSD:
         self.imu_preprocessed = acc_norm
 
         return self
-    
-
-    
+     
     def detect_wrist(self) -> Self:
         """
         Detect walking bouts from wrist acceleration data.
@@ -178,9 +256,13 @@ class HickeyGSD:
         # centering the norm acceleration
         acc_norm_mean = data.mean()
         acc_norm_centered = data - acc_norm_mean
+        if self.visual == True:
+            self.plot_acceleration_data(acc_norm_centered, self.sampling_rate_hz, title="acc_norm_centered",)
+
 
         # Defining the window size which is 0.1s
-        n = self.target_sampling_rate_hz / (self.target_sampling_rate_hz / 10)
+        n = self.target_sampling_rate_hz / 10
+        # n is always 10 ? 
 
         # Calculating the number of 0.1s windows present in the data
         win_num = int(len(acc_norm_centered) // n)
@@ -199,20 +281,27 @@ class HickeyGSD:
         # application to all corrected axes
         acc_filt = np.asarray(chain_transformers(acc_norm_centered, filter_chain, sampling_rate_hz=self.sampling_rate_hz))
 
-        if self.visual == True:
-            self.plot_acceleration_data(acc_filt, self.sampling_rate_hz, title="filtere acc")
 
         # SD and mean calculation for all axes every 0.1s
         std_acc = np.zeros(win_num)
         mean_acc = np.zeros(win_num)
+        plot_ind = []
 
         for i in range(win_num):
             start_idx = int(i * n)
             end_idx = int((i + 1) * n)
 
             std_acc[i] = np.std(acc_filt[start_idx:end_idx])
-            #mean_acc[i] = np.mean(data[start_idx:end_idx])
-            mean_acc[i] = np.mean(data.iloc[start_idx:end_idx])
+            mean_acc[i] = np.mean(data[start_idx:end_idx])
+            plot_ind.append(start_idx)
+            #mean_acc[i] = np.mean(data.iloc[start_idx:end_idx])
+        if self.visual == True:
+            self.plot_acceleration_data(pd.DataFrame(acc_filt, columns=['acc_filt']), 
+                                        self.sampling_rate_hz, title="filtered acc", 
+                                        vertical_lines=plot_ind)
+            self.plot_mean_sd_with_thresholds(mean_acc, std_acc, self.ThresholdUpright, self.ThresholdStill)
+
+
 
         # Initialize the result array with zeros
         i_array_move_st_si = np.zeros(win_num)
@@ -221,6 +310,10 @@ class HickeyGSD:
         for i in range(win_num):
             if std_acc[i] >= self.ThresholdStill and mean_acc[i] <= self.ThresholdUpright:
                 i_array_move_st_si[i] = 1
+
+        if self.visual ==True: 
+            self.plot_acceleration_data(pd.DataFrame(i_array_move_st_si, columns=["i_array_move_st_si"]), 
+                                        self.sampling_rate_hz, title="i_array_move_st_si")
         
         if self.debug:
             print(f"\nMovement detection:")

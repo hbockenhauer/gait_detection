@@ -5,13 +5,15 @@ import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from multimob.GSD.GSD3 import KheirkhahanGSD
 from GSD2_test import HickeyGSD
+from GSD3_test import KheirkhahanGSD
+import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data\Walking_Tanya"
 file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
-DEBUG = False; 
+DEBUG = True; 
 
 if __name__ == "__main__":
 
@@ -45,7 +47,7 @@ if __name__ == "__main__":
         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
         
         # 3. Ground Truth
-        if file_name.startswith('W'):
+        if True:
             y_true = np.ones(len(df))
         else:
             y_true = np.zeros(len(df))
@@ -55,15 +57,15 @@ if __name__ == "__main__":
 
         # 4. Run Kheirkhahan GSD
         #gsd = KheirkhahanGSD()
-        gsd = HickeyGSD(debug=DEBUG, visual=True)
+        #gsd = HickeyGSD(debug=DEBUG, visual=True)
         # Note: KheirkhahanGSD in this package takes the DataFrame directly
         #gsd.plot_acceleration_data(imu_df, SAMPLING_RATE)
 
 
         # HickeyGSD
-        detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
+        #detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
         # KheirkhahanGSD
-        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+        detected_bouts = KheirkhahanGSD().detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:
             print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")
@@ -127,4 +129,5 @@ if __name__ == "__main__":
         if not other_files.empty:
             print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.2f}   | {other_files['Precision'].mean():.2f}   | {other_files['Recall'].mean():.2f}   | {other_files['F1'].mean():.2f}")
         
-        res_df.to_csv('HickeyGSD_Results.csv', index=False)
+        #res_df.to_csv('HickeyGSD_Results.csv', index=False)
+        plt.show()

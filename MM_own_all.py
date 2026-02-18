@@ -115,9 +115,9 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
     and return a result dict (or None on error).
     """
     try:
-        #gsd = HickeyGSD(debug=DEBUG)
-        #detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
-        #                  .detect_wrist())
+        gsd = HickeyGSD(debug=DEBUG)
+        detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
+                          .detect_wrist())
         
         # OR Run Kheirkhahan GSD
         #gsd = KheirkhahanGSD()
@@ -128,8 +128,8 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
         #detected_bouts = gsd.detect(imu_df)
 
         # OR 
-        gsd = KerenGSD()
-        detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+        #gsd = KerenGSD()
+        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)
@@ -139,12 +139,12 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 end   = int(min(len(imu_df), row['end']))
                 y_pred[start:end] = 1
 
+        tp = np.sum((y_pred == 1) & (y_true == 1))
+        fp = np.sum((y_pred == 1) & (y_true == 0))
+        fn = np.sum((y_pred == 0) & (y_true == 1))
+        tn = np.sum((y_pred == 0) & (y_true == 0))
         if DEBUG:
             print(f"\n[{label}] pred walking: {y_pred.sum()} / {len(y_pred)} samples")
-            tp = np.sum((y_pred == 1) & (y_true == 1))
-            fp = np.sum((y_pred == 1) & (y_true == 0))
-            fn = np.sum((y_pred == 0) & (y_true == 1))
-            tn = np.sum((y_pred == 0) & (y_true == 0))
             print(f"  TP={tp}  FP={fp}  FN={fn}  TN={tn}")
 
         return {
@@ -152,6 +152,10 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
             'Precision': precision_score(y_true, y_pred, zero_division=0),
             'Recall':    recall_score(y_true, y_pred, zero_division=0),
             'F1':        f1_score(y_true, y_pred, zero_division=0),
+            'TP': tp, 
+            'FP': fp, 
+            'FN': fn,
+            'TN': tn,
         }
 
     except Exception as e:
@@ -209,6 +213,7 @@ def process_weargait(rw_merged: pd.DataFrame,
     res_df = pd.DataFrame(results)
 
     METRIC_COLS = ['Accuracy', 'Precision', 'Recall', 'F1']
+    VARIABLES = ['TP', 'FP', 'FN', 'TN']
 
     def _avg_row(row_type: str, label: str,
                  wrist: str, condition: str,
@@ -286,8 +291,8 @@ def process_weargait(rw_merged: pd.DataFrame,
         ignore_index=True
     )
 
-    csv_df.to_csv('KerenGSD_Results.csv', index=False)
-    print("\nSaved → KerenGSD_Results.csv")
+    csv_df.to_csv('HickeyGSD_Results.csv', index=False)
+    print("\nSaved → HickeyGSD_Results.csv")
 
     return res_df
 
