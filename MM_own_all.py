@@ -5,11 +5,15 @@ import glob
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from multimob.GSD.GSD3 import KheirkhahanGSD
+from multimob.GSD.GSD4 import MacLeanGSD
+from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
 
-# Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
+DATA_PATHS = [
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data"
+]
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
@@ -22,40 +26,49 @@ def extract_condition(folder_name: str) -> str:
             return kw
     return 'normal' 
 
+def is_gait(folder_name: str) -> int:
+    activity = folder_name.split('_')[0].lower()
+    return 1 if activity in GAIT_CLASSES else 0
+
+
 def load_wrist_file(filepath: str) -> pd.DataFrame | None:
-    """Load a wrist IMU file and return a DataFrame with renamed acc columns."""
+    """Read one sensor file, scale acc to m/s², rename columns. Returns None on failure."""
     try:
         df = pd.read_csv(filepath, sep='\t', low_memory=False)
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
             print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
             return None
-
         imu_df = df[acc_cols[:3]].copy()
-        imu_df = imu_df * 9.81  # convert to m/s²
+        imu_df = imu_df * 9.81          # convert g → m/s²
         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
         return imu_df
-
     except Exception as e:
         print(f"  [ERROR] Failed to load {filepath}: {e}")
         return None
 
-def merge_all_wrists() -> tuple[pd.DataFrame, pd.DataFrame]:
+
+def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Walk data_path, load every s1_1RW.txt and s2_2LW.txt, attach metadata,
+    and return (rw_merged, lw_merged).
+
+    Each returned DataFrame has columns:
+        subject | condition | y_true | acc_pa | acc_ml | acc_is
+    """
     rw_chunks: list[pd.DataFrame] = []
     lw_chunks: list[pd.DataFrame] = []
 
-    print(f"Scanning: {DATA_PATH}\n")
+    print(f"Scanning: {data_path}\n")
     print(f"{'Folder':<35} | {'Cond':<10} | {'Gait':<5} | {'RW rows':>8} | {'LW rows':>8}")
     print("-" * 80)
 
-    for folder in sorted(os.listdir(DATA_PATH)):
-        folder_path = os.path.join(DATA_PATH, folder)
+    for folder in sorted(os.listdir(data_path)):
+        folder_path = os.path.join(data_path, folder)
         if not os.path.isdir(folder_path):
             continue
 
-        activity = folder.split('_')[0].lower()
-        
-        y_label   = 1 if activity in GAIT_CLASSES else 0
+        y_label   = is_gait(folder)
         condition = extract_condition(folder)
         subject   = folder
 
@@ -93,12 +106,6 @@ def merge_all_wrists() -> tuple[pd.DataFrame, pd.DataFrame]:
     lw_merged = (pd.concat(lw_chunks, ignore_index=True)[col_order]
                  if lw_chunks else pd.DataFrame(columns=col_order))
 
-    # Save copies so you have them on disk too
-    rw_merged.to_csv('merged_RW.csv', index=False)
-    lw_merged.to_csv('merged_LW.csv', index=False)
-    print(f"\n[RW] {len(rw_merged):,} rows saved → merged_RW.csv")
-    print(f"[LW] {len(lw_merged):,} rows saved → merged_LW.csv\n")
-
     return rw_merged, lw_merged
 
 def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
@@ -108,12 +115,21 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
     and return a result dict (or None on error).
     """
     try:
-        gsd = HickeyGSD(debug=DEBUG)
-        detected_bouts = (gsd
-                          .preprocess(imu_df,
-                                      sampling_rate_hz=SAMPLING_RATE,
-                                      target_sampling_rate_hz=SAMPLING_RATE)
-                          .detect_wrist())
+        #gsd = HickeyGSD(debug=DEBUG)
+        #detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
+        #                  .detect_wrist())
+        
+        # OR Run Kheirkhahan GSD
+        #gsd = KheirkhahanGSD()
+        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+
+        # OR Run MacLean 
+        #gsd = MacLeanGSD()
+        #detected_bouts = gsd.detect(imu_df)
+
+        # OR 
+        gsd = KerenGSD()
+        detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)
@@ -142,14 +158,18 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
         print(f"  [ERROR] GSD failed on {label}: {e}")
         return None
 
-def process_weargait():
+
+def process_weargait(rw_merged: pd.DataFrame,
+                     lw_merged: pd.DataFrame) -> pd.DataFrame:
+    """
+    Run HickeyGSD on every (subject, wrist) segment inside the merged DataFrames.
+    Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
+    """
     results = []
-    
+
     print(f"\n{'Subject':<35} | {'Wrist':<5} | {'Cond':<10} | "
           f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
     print("-" * 90)
-
-    rw_merged, lw_merged = merge_all_wrists()
 
     for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged)]:
         if merged_df.empty:
@@ -182,7 +202,6 @@ def process_weargait():
                   f"{metrics['Accuracy']:.2f}   | {metrics['Precision']:.2f}   | "
                   f"{metrics['Recall']:.2f}   | {metrics['F1']:.2f}")
 
-    # ── Summary ──────────────────────────────────────────────────────────────
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
@@ -213,6 +232,7 @@ def process_weargait():
               f"{subset['Recall'].mean():.2f}   | "
               f"{subset['F1'].mean():.2f}")
 
+    # Collect average rows for CSV
     avg_rows: list[dict] = []
 
     # Per-wrist averages
@@ -220,14 +240,14 @@ def process_weargait():
         sub = res_df[res_df['Wrist'] == wrist]
         if not sub.empty:
             avg_rows.append(_avg_row('avg_wrist',
-                                     f"AVERAGE ({wrist})",
+                                     f"{wrist} average",
                                      wrist, '', sub))
 
     # Per-condition averages (all wrists combined)
     for condition in sorted(res_df['Condition'].unique()):
         sub = res_df[res_df['Condition'] == condition]
         avg_rows.append(_avg_row('avg_condition',
-                                  f"AVERAGE (cond={condition})",
+                                  f"Cond={condition}) average",
                                   '', condition, sub))
 
     # Per-wrist × per-condition averages
@@ -243,7 +263,7 @@ def process_weargait():
     # Overall average
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
 
-    # ── Print summary to console ──────────────────────────────────────────────
+    # Print summary to console 
     print("-" * 90)
     _print_avg("AVERAGE (RW – Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
     _print_avg("AVERAGE (LW – Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
@@ -253,8 +273,7 @@ def process_weargait():
     print("-" * 90)
     _print_avg("AVERAGE (Overall)", res_df)
 
-    # ── Build & save CSV ──────────────────────────────────────────────────────
-    # Tag raw result rows so they're distinguishable in the CSV
+    # Save the csv
     res_df.insert(0, 'row_type', 'result')
 
     avg_df    = pd.DataFrame(avg_rows)
@@ -267,10 +286,38 @@ def process_weargait():
         ignore_index=True
     )
 
-    csv_df.to_csv('HickeyGSD_Results.csv', index=False)
-    print("\nSaved → HickeyGSD_Results.csv")
+    csv_df.to_csv('KerenGSD_Results.csv', index=False)
+    print("\nSaved → KerenGSD_Results.csv")
 
     return res_df
 
 if __name__ == "__main__":
-    process_weargait()
+    all_rw: list[pd.DataFrame] = []
+    all_lw: list[pd.DataFrame] = []
+
+    for data_path in DATA_PATHS:
+        dataset_name = os.path.basename(data_path.rstrip('/\\'))
+        print(f"\n{'=' * 80}")
+        print(f"  Merging: {dataset_name}")
+        print(f"{'=' * 80}")
+        rw, lw = merge_all_wrists(data_path)
+        # Tag each row with its source dataset for traceability
+        rw['dataset'] = dataset_name
+        lw['dataset'] = dataset_name
+        all_rw.append(rw)
+        all_lw.append(lw)
+
+    # Pool across all datasets
+    rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
+    lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
+
+    # Save pooled merged files
+    rw_merged.to_csv('merged_RW.csv', index=False)
+    lw_merged.to_csv('merged_LW.csv', index=False)
+    print(f"\n[POOLED RW] {len(rw_merged):,} rows → merged_RW.csv")
+    print(f"[POOLED LW] {len(lw_merged):,} rows → merged_LW.csv")
+
+    print(f"\n{'=' * 80}")
+    print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
+    print(f"{'=' * 80}")
+    process_weargait(rw_merged, lw_merged)

@@ -63,6 +63,31 @@ class HickeyGSD:
         self.debug = debug
         self.visual = visual
 
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration") -> None:
+        """
+        Plot 3-axis acceleration data over time.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Input acceleration data with three axes.
+        sampling_rate_hz : float
+            Original sampling rate of the data.
+        """
+        time = np.arange(len(data)) / sampling_rate_hz
+        cols = list(data.columns[:3])
+
+        plt.figure(figsize=(10, 4))
+        for col in cols:
+            plt.plot(time, data[col], label=col)
+
+        plt.xlabel("Time (s)")
+        plt.ylabel("Acceleration (g)")
+        plt.title(title)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
     def preprocess(self, data, *, sampling_rate_hz: float = 100, target_sampling_rate_hz: float = 100) -> Self:
         """
         Preprocess wrist acceleration data.
@@ -93,10 +118,12 @@ class HickeyGSD:
         acc = self.data.iloc[:, 0:3]
 
         if self.visual == True:
-            plot_acceleration_data(data, sampling_rate_hz)
+            self.plot_acceleration_data(data, sampling_rate_hz, title="Raw data")
         
         # removing gravity from the 3 axes using custom function
         acc_nograv = gravity_motion_butterworth(acc, sampling_rate_hz) 
+        if self.visual == True:
+            self.plot_acceleration_data(acc_nograv, sampling_rate_hz, title="after gravity was removed")
         # sampling_rate_hz becomes the cutoff in the lowpass filter
         #! adjust it maybe
 
@@ -104,6 +131,9 @@ class HickeyGSD:
         acc_norm = np.linalg.norm(acc_nograv, axis=1)
         # converting to pandas DataFrame
         acc_norm = pd.DataFrame(acc_norm, columns=['acc_norm'])
+        if self.visual == True:
+            self.plot_acceleration_data(acc_norm, sampling_rate_hz, title="norm acceleration")
+
 
         # Target sample rate is 100 which is similar to the sensor.
         # I added a check to see if the sensor sample rate is 100 and if it is then we don't resample
@@ -115,30 +145,7 @@ class HickeyGSD:
 
         return self
     
-    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float) -> None:
-        """
-        Plot 3-axis acceleration data over time.
 
-        Parameters
-        ----------
-        data : pd.DataFrame
-            Input acceleration data with three axes.
-        sampling_rate_hz : float
-            Original sampling rate of the data.
-        """
-        time = np.arange(len(data)) / sampling_rate_hz
-        cols = list(data.columns[:3])
-
-        plt.figure(figsize=(10, 4))
-        for col in cols:
-            plt.plot(time, data[col], label=col)
-
-        plt.xlabel("Time (s)")
-        plt.ylabel("Acceleration (g)")
-        plt.title("3-Axis Acceleration")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
     
     def detect_wrist(self) -> Self:
         """
@@ -191,6 +198,9 @@ class HickeyGSD:
 
         # application to all corrected axes
         acc_filt = np.asarray(chain_transformers(acc_norm_centered, filter_chain, sampling_rate_hz=self.sampling_rate_hz))
+
+        if self.visual == True:
+            self.plot_acceleration_data(acc_filt, self.sampling_rate_hz, title="filtere acc")
 
         # SD and mean calculation for all axes every 0.1s
         std_acc = np.zeros(win_num)

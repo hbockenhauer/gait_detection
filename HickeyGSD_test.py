@@ -8,7 +8,7 @@ from GSD2_test import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data\distance_test\test1"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data\Walking_Tanya"
 file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = False; 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         #gsd = KheirkhahanGSD()
         gsd = HickeyGSD(debug=DEBUG, visual=True)
         # Note: KheirkhahanGSD in this package takes the DataFrame directly
-        gsd.plot_acceleration_data(imu_df, SAMPLING_RATE)
+        #gsd.plot_acceleration_data(imu_df, SAMPLING_RATE)
 
 
         # HickeyGSD

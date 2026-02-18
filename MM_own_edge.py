@@ -17,14 +17,6 @@ GAIT_CLASSES = {'Walking', 'Stairs'}
 def process_weargait():
     results = []
     
-    # Discover all .txt files in nested folder structure
-    #file_paths = []
-    #for root, dirs, files in os.walk(DATA_PATH):
-    #    for file in files:
-    #        if file.endswith('.txt'):
-    #            file_paths.append(os.path.join(root, file))
-    
-    #print(f"Processing {len(file_paths)} files using HickeyGSD...")
     print(f"{'Subject':<30} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
     print("-" * 75)
 
