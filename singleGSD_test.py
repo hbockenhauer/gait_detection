@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from multimob.GSD.GSD3 import KheirkhahanGSD
+#from multimob.GSD.GSD3 import KheirkhahanGSD
 from GSD2_test import HickeyGSD
 from GSD3_test import KheirkhahanGSD
 import matplotlib.pyplot as plt
@@ -21,7 +21,6 @@ if __name__ == "__main__":
     files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
     #files = [f for f in os.listdir(DATA_PATH) if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))]
     
-    print(f"Processing {len(files)} files using HickeyGSD...")
     print(f"{'Subject':<25} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
     print("-" * 75)
 
@@ -55,17 +54,15 @@ if __name__ == "__main__":
         #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
         #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
-        # 4. Run Kheirkhahan GSD
-        #gsd = KheirkhahanGSD()
-        #gsd = HickeyGSD(debug=DEBUG, visual=True)
-        # Note: KheirkhahanGSD in this package takes the DataFrame directly
-        #gsd.plot_acceleration_data(imu_df, SAMPLING_RATE)
-
-
+        # 4. Run GSD
+        
         # HickeyGSD
+        #gsd = HickeyGSD(debug=DEBUG, visual=True)
         #detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
+        
         # KheirkhahanGSD
-        detected_bouts = KheirkhahanGSD().detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+        gsd = KheirkhahanGSD(visual=True)
+        detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:
             print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")

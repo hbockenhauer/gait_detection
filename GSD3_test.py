@@ -1,8 +1,9 @@
 from typing_extensions import Self, Literal
 import pandas as pd
 import  numpy as np
+import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
-from multimob.GSD.utils.ActivityCounts import ActivityCounts
+from ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
 
 
@@ -38,7 +39,7 @@ class KheirkhahanGSD:
     """
 
 
-    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True):
+    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True, visual: bool=False):
         """
         Initialize the class.
 
@@ -58,7 +59,43 @@ class KheirkhahanGSD:
         self.win_shift_s = 1
         self.threshold = 0.58
         self.cwb = cwb
+        self.visual = visual
 
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration", vertical_lines=None) -> None:
+        """
+        Plot 3-axis acceleration data over time.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Input acceleration data with three axes.
+        sampling_rate_hz : float
+            Original sampling rate of the data.
+        """
+        if type(data) is np.ndarray:
+            #names = 
+            data = pd.DataFrame(data, columns=[title])
+        data = data[:150]
+        time = np.arange(len(data)) / sampling_rate_hz
+        cols = list(data.columns[:3])
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        for col in cols:
+            ax.plot(time, data[col], label=col)
+
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Acceleration (g)")
+        ax.set_title(title)
+        ax.legend()
+        if vertical_lines is not None:
+            for idx in vertical_lines:
+                if 0 <= idx < len(data):
+                    time_at_idx = time[idx]
+                    ax.axvline(x=time_at_idx, color='red', linestyle='--', alpha=0.7, linewidth=1)
+
+        fig.tight_layout()
+        fig.show()
+        return fig
 
     def detect(self, data, *, sampling_rate_hz: float = 100) -> Self:
         """
@@ -82,6 +119,9 @@ class KheirkhahanGSD:
         self.data = data
         self.data_len = len(data)
 
+        if self.visual == True:
+            self.plot_acceleration_data(data, sampling_rate_hz)
+
         # In the current implementation for wrist worn sensors we use the norm
         acc = self.data.iloc[:, 0:3]
         norm_acc = np.linalg.norm(acc, axis=1)
@@ -89,8 +129,12 @@ class KheirkhahanGSD:
         # Finds the activity counts per second
         # turning acc to g-units for activity counts calculation
         norm_acc = norm_acc / 9.81
+        if self.visual == True:
+            self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, title="norm_acc")
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(), sampling_rate=self.sampling_rate_hz).activity_counts_
-
+        if self.visual == True: 
+            self.plot_acceleration_data(activity_counts, sampling_rate_hz, title="activity counts")
+        
         # shortcut if all activity counts are 0 no gait can be detected
         if np.all(activity_counts == 0):
             self.gs_list_ = pd.DataFrame(columns=["start", "end"])

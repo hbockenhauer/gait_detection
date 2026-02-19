@@ -182,7 +182,7 @@ def process_weargait():
                   f"{metrics['Accuracy']:.2f}   | {metrics['Precision']:.2f}   | "
                   f"{metrics['Recall']:.2f}   | {metrics['F1']:.2f}")
 
-    # ── Summary ──────────────────────────────────────────────────────────────
+    # Summary
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
@@ -243,7 +243,7 @@ def process_weargait():
     # Overall average
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
 
-    # ── Print summary to console ──────────────────────────────────────────────
+    # Print summary to console
     print("-" * 90)
     _print_avg("AVERAGE (RW – Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
     _print_avg("AVERAGE (LW – Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
@@ -253,8 +253,7 @@ def process_weargait():
     print("-" * 90)
     _print_avg("AVERAGE (Overall)", res_df)
 
-    # ── Build & save CSV ──────────────────────────────────────────────────────
-    # Tag raw result rows so they're distinguishable in the CSV
+    # 
     res_df.insert(0, 'row_type', 'result')
 
     avg_df    = pd.DataFrame(avg_rows)

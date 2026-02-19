@@ -11,7 +11,7 @@ from mobgap.data_transform import (
 )
 
 # extra functions 
-plt.ion()
+#plt.ion()
 
 class HickeyGSD:
     """
