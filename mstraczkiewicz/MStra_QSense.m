@@ -1,0 +1,163 @@
+clear; clc;
+%% --- MStra detection on QSense wrist data (tuned) ---
+
+fs = 50;                % Sample frequency
+min_amp = 0.08;         % Minimum amplitude in g (lower to capture wrist swings)
+T = 3;                  % Minimum walking duration (s)
+delta = round(0.5 * fs);              % Local step peak window
+alpha = 2;            % Min ratio below step frequency (allow small hand motion)
+beta = 2;             % Max ratio above step frequency (ignore high harmonics)
+step_freq = [0.8 2.5];  % Walking cadence frequency range (Hz)
+
+% --- CONFIGURATION ---
+dataPaths = {
+   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+};
+
+PlotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots';
+
+summaryResults = table();
+
+for d = 1:length(dataPaths)
+    dataPath = dataPaths{d};
+    fprintf('\nProcessing dataset: %s\n', dataPath);
+
+    subDirs = dir(dataPath);
+    subDirs = subDirs([subDirs.isdir] & ~ismember({subDirs.name}, {'.', '..'}));
+    
+    fprintf('%-30s | %-8s | %-8s | %-8s | %-8s\n', 'Subject_Wrist', 'Accuracy', 'Precision', 'Recall', 'F1-Score');
+    fprintf('--------------------------------------------------------------------------------\n');
+    
+    for i = 1:length(subDirs)
+        folderName = subDirs(i).name;
+        folderPath = fullfile(dataPath, folderName);
+    
+        targetFiles = {'s1_1RW.txt', 'Right'; 's2_2LW.txt', 'Left'};
+    
+        for t = 1:size(targetFiles, 1)
+            fileName = targetFiles{t, 1};
+            sideLabel = targetFiles{t, 2};
+            fullFilePath = fullfile(folderPath, fileName);
+    
+            if ~isfile(fullFilePath), continue; end
+    
+            try
+                % --- LOAD DATA ---
+                opts = detectImportOptions(fullFilePath, 'FileType', 'text');
+                opts.Delimiter = '\t';
+                opts.VariableNamingRule = 'preserve';
+                opts.VariableTypes{1} = 'char';
+                opts.VariableTypes{2} = 'char';
+                data = readtable(fullFilePath, opts);
+
+                % Remove first 10s
+                startRow = fs * 10;
+                if height(data) <= startRow
+                    continue;
+                end
+                data = data(startRow:end, :);
+
+                % Extract acceleration
+                accX = data{:, 6};
+                accY = data{:, 7};
+                accZ = data{:, 8};
+
+                % Remove NaN
+                validRows = ~isnan(accX) & ~isnan(accY) & ~isnan(accZ);
+                accX = accX(validRows);
+                accY = accY(validRows);
+                accZ = accZ(validRows);
+
+                % Vector magnitude (column vector)
+                vm = sqrt(accX.^2 + accY.^2 + accZ.^2);
+                vm = vm(:);
+
+                if length(vm) < fs * T
+                    continue;
+                end
+
+                % % --- BANDPASS FILTERING ---
+                % [b,a] = butter(4,[0.5 4]/(fs/2),'bandpass');  % focus on walking frequencies
+                % vm = filtfilt(b,a,vm);
+
+                % Ground truth
+                isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
+                y_true = double(isGaitActivity) * ones(size(vm));
+                y_true = y_true(:);
+
+                % --- RUN MStra WALKING DETECTION ---
+                [wi, steps, cad] = find_walking(vm, fs, min_amp, T, delta, alpha, beta, step_freq);
+
+                wi = wi(:);
+                if length(wi) ~= length(vm)
+                    if length(wi) < length(vm)
+                        wi = [wi; zeros(length(vm) - length(wi), 1)];
+                    else
+                        wi = wi(1:length(vm));
+                    end
+                end
+
+                y_pred = wi;
+
+                % --- METRICS ---
+                tp = sum(y_true == 1 & y_pred == 1);
+                tn = sum(y_true == 0 & y_pred == 0);
+                fp = sum(y_true == 0 & y_pred == 1);
+                fn = sum(y_true == 1 & y_pred == 0);
+
+                total = tp + tn + fp + fn;
+                if total == 0, continue; end
+
+                acc = (tp + tn) / total;
+                prec = tp / (tp + fp); if (tp + fp) == 0, prec = 1; end
+                rec = tp / (tp + fn); if (tp + fn) == 0, rec = 1; end
+                f1 = 2 * (prec * rec) / (prec + rec); if (prec + rec) == 0, f1 = 0; end
+
+                steps_count = length(steps);
+
+                % --- STORE ---
+                fullID = sprintf('%s_%s', folderName, sideLabel);
+                resRow = table({fullID}, {folderName}, {sideLabel}, acc, prec, rec, f1, ...
+                               steps_count, tp, tn, fp, fn, ...
+                    'VariableNames', {'ID', 'Subject', 'Wrist', 'Accuracy', ...
+                                      'Precision', 'Recall', 'F1', 'Steps', ...
+                                      'TP', 'TN', 'FP', 'FN'});
+                summaryResults = [summaryResults; resRow];
+
+                fprintf('%-30s | %8.4f | %8.4f | %8.4f | %8.4f\n', ...
+                    fullID, acc, prec, rec, f1);
+
+            catch ME
+                fprintf('%-30s | ERROR: %s at line %d\n', ...
+                    [folderName '_' sideLabel], ME.message, ME.stack(1).line);
+            end
+        end
+    end
+end
+
+%% --- GLOBAL STATISTICS ---
+if ~isempty(summaryResults)
+    TP = sum(summaryResults.TP);
+    TN = sum(summaryResults.TN);
+    FP = sum(summaryResults.FP);
+    FN = sum(summaryResults.FN);
+
+    globalAcc = (TP + TN) / (TP + TN + FP + FN);
+    globalPrec = TP / (TP + FP); if (TP + FP) == 0, globalPrec = 1; end
+    globalRec = TP / (TP + FN); if (TP + FN) == 0, globalRec = 1; end
+    globalF1 = 2 * (globalPrec * globalRec) / (globalPrec + globalRec);
+    if (globalPrec + globalRec) == 0, globalF1 = 0; end
+
+    fprintf('\nGLOBAL PERFORMANCE\n');
+    fprintf('Accuracy: %.4f | Precision: %.4f | Recall: %.4f | F1: %.4f\n', ...
+        globalAcc, globalPrec, globalRec, globalF1);
+end
+
+%% --- EXPORT RESULTS ---
+if ~isempty(summaryResults)
+    if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
+    csvFileName = fullfile(PlotPath, 'MStra_Summary_Tuned.csv');
+    writetable(summaryResults, csvFileName);
+    fprintf('Results saved to: %s\n', csvFileName);
+end

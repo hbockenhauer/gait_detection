@@ -16,6 +16,8 @@ F_MAX = 3.50;
 P_THRESH = 3;
 A_THRESH = 0.1; 
 
+fs = 50;
+
 % --- 2. FILE DISCOVERY (Nested Subfolders) ---
 summaryResults = table();
 for d = 1:length(dataPaths)
@@ -58,22 +60,21 @@ for d = 1:length(dataPaths)
                 
                 data = readtable(fullFilePath, opts);
                 
-                % Handle Time
-                try
-                    timeStr = string(data{:,1}) + " " + string(data{:,2});
-                    t_abs = datetime(timeStr); 
-                    time = seconds(t_abs - t_abs(1));
-                catch
-                    time = (0:height(data)-1)' / 100;
-                end
+                % Handle Time (Force 50Hz row-by-row)
+                numRows = height(data);
+
+                % Remove first 10s (500 rows) from data due to latency
+                startRow = fs * 10;
+                data = data(startRow:end, :);
+                              
+                % Create time vector: starts at 0, increments by 1/fs per row
+                time = (0:numRows-1)' / fs;   
                 
                 % Extract and Clean Acceleration
                 accX = data{:, 6}; accY = data{:, 7}; accZ = data{:, 8};
                 validRows = ~isnan(accX) & ~isnan(accY) & ~isnan(accZ);
                 vm = sqrt(accX(validRows).^2 + accY(validRows).^2 + accZ(validRows).^2);
                 time = time(validRows);
-                fs = round(1 / median(diff(time)));
-                if isnan(fs) || fs < 1, fs = 50; end
     
                 % Create Ground Truth
                 isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
@@ -116,59 +117,59 @@ for d = 1:length(dataPaths)
             end
         end
 
-        % --- PAIRED PLOTTING ---
-        if ~isempty(fieldnames(plotData))
-            fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950]);
-            sgtitle(['Detailed Debug: ', folderName], 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
-            colors = {'#0072BD', '#D95319'}; % Blue (R), Red (L)
-            
-            % Subplot 1: Frequency
-            subplot(4,1,1); hold on;
-            t_end = 0;
-            if isfield(plotData, 'Right'), t_end = max(t_end, max(plotData.Right.T_vec)); end
-            if isfield(plotData, 'Left'),  t_end = max(t_end, max(plotData.Left.T_vec)); end
-            fill([0 t_end t_end 0], [F_MIN F_MIN F_MAX F_MAX], 'g', 'FaceAlpha', 0.05, 'EdgeColor', 'none');
-            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.peakF, 'Color', colors{1}, 'LineWidth', 1.2); end
-            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.peakF,  'Color', colors{2}, 'LineWidth', 1.2); end
-            yline(F_MIN, 'r-', 'F-Min', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-            yline(F_MAX, 'r-', 'F-Max', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-            ylabel('Peak Freq (Hz)'); grid on; ylim([0 5]); title('Criteria 1: Frequency Range');
-            xlim([0 t_end]);
-
-            % Subplot 2: Power
-            subplot(4,1,2); hold on;
-            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.maxPk, 'Color', colors{1}); end
-            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.maxPk,  'Color', colors{2}); end
-            yline(P_THRESH, 'r-', 'P-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-            ylabel('Power'); grid on; title('Criteria 2: Spectrogram Power');
-            xlim([0 t_end]);
-
-            % Subplot 3: Amplitude
-            subplot(4,1,3); hold on;
-            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.ampVal, 'Color', colors{1}); end
-            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.ampVal,  'Color', colors{2}); end
-            yline(A_THRESH, 'r-', 'A-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-            ylabel('StdDev Amp'); grid on; title('Criteria 3: Time-Domain Amplitude');
-            xlim([0 t_end]);
-
-            % Subplot 4: Detection
-            subplot(4,1,4); hold on;
-            if isfield(plotData, 'Right'), stairs(plotData.Right.time, plotData.Right.y_pred, 'Color', colors{1}, 'LineWidth', 2); end
-            if isfield(plotData, 'Left'),  stairs(plotData.Left.time,  plotData.Left.y_pred,  'Color', colors{2}, 'LineWidth', 1.5); end
-            ylabel('Binary Decision'); xlabel('Time (s)'); ylim([-0.1 1.1]); grid on;
-            legend({'Right Wrist', 'Left Wrist'}, 'Location', 'best');
-            xlim([0 t_end]);
-            title('Final Gait Detection (1=Gait, 0=No Gait)');
-
-            % Create a filename
-            saveName = fullfile(PlotPath, [folderName, '_Plot.png']);
-            
-            % Export at high resolution (300 DPI)
-            exportgraphics(fig, saveName, 'Resolution', 300);
-            
-            % Optional: Close figure to save memory during long loops
-            close(fig);
-        end
+        % % --- PAIRED PLOTTING ---
+        % if ~isempty(fieldnames(plotData))
+        %     fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950]);
+        %     sgtitle(['Detailed Debug: ', folderName], 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
+        %     colors = {'#0072BD', '#D95319'}; % Blue (R), Red (L)
+        % 
+        %     % Subplot 1: Frequency
+        %     subplot(4,1,1); hold on;
+        %     t_end = 0;
+        %     if isfield(plotData, 'Right'), t_end = max(t_end, max(plotData.Right.T_vec)); end
+        %     if isfield(plotData, 'Left'),  t_end = max(t_end, max(plotData.Left.T_vec)); end
+        %     fill([0 t_end t_end 0], [F_MIN F_MIN F_MAX F_MAX], 'g', 'FaceAlpha', 0.05, 'EdgeColor', 'none');
+        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.peakF, 'Color', colors{1}, 'LineWidth', 1.2); end
+        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.peakF,  'Color', colors{2}, 'LineWidth', 1.2); end
+        %     yline(F_MIN, 'r-', 'F-Min', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+        %     yline(F_MAX, 'r-', 'F-Max', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+        %     ylabel('Peak Freq (Hz)'); grid on; ylim([0 5]); title('Criteria 1: Frequency Range');
+        %     xlim([0 t_end]);
+        % 
+        %     % Subplot 2: Power
+        %     subplot(4,1,2); hold on;
+        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.maxPk, 'Color', colors{1}); end
+        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.maxPk,  'Color', colors{2}); end
+        %     yline(P_THRESH, 'r-', 'P-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+        %     ylabel('Power'); grid on; title('Criteria 2: Spectrogram Power');
+        %     xlim([0 t_end]);
+        % 
+        %     % Subplot 3: Amplitude
+        %     subplot(4,1,3); hold on;
+        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.ampVal, 'Color', colors{1}); end
+        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.ampVal,  'Color', colors{2}); end
+        %     yline(A_THRESH, 'r-', 'A-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+        %     ylabel('StdDev Amp'); grid on; title('Criteria 3: Time-Domain Amplitude');
+        %     xlim([0 t_end]);
+        % 
+        %     % Subplot 4: Detection
+        %     subplot(4,1,4); hold on;
+        %     if isfield(plotData, 'Right'), stairs(plotData.Right.time, plotData.Right.y_pred, 'Color', colors{1}, 'LineWidth', 2); end
+        %     if isfield(plotData, 'Left'),  stairs(plotData.Left.time,  plotData.Left.y_pred,  'Color', colors{2}, 'LineWidth', 1.5); end
+        %     ylabel('Binary Decision'); xlabel('Time (s)'); ylim([-0.1 1.1]); grid on;
+        %     legend({'Right Wrist', 'Left Wrist'}, 'Location', 'best');
+        %     xlim([0 t_end]);
+        %     title('Final Gait Detection (1=Gait, 0=No Gait)');
+        % 
+        %     % Create a filename
+        %     saveName = fullfile(PlotPath, [folderName, '_Plot.png']);
+        % 
+        %     % Export at high resolution (300 DPI)
+        %     exportgraphics(fig, saveName, 'Resolution', 300);
+        % 
+        %     % Optional: Close figure to save memory during long loops
+        %     close(fig);
+        % end
     end
 end
 

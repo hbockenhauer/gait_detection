@@ -66,6 +66,9 @@ def load_data(filepath):
         'activity': activity_label
     })
 
+    # Exclude first 10s of data due to latency issues at the start of recording
+    data = data[data['time_sec'] >= 10.0].reset_index(drop=True)
+
     return data
 
 # --- RESAMPLE DATA TO 30Hz ---

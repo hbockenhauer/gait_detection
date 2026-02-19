@@ -4,6 +4,12 @@ clear; clc; close all;
 % --- 1. CONFIGURATION ---
 dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\WearGait-PD';
 
+F_MIN = 0.50;
+F_MAX = 3.50;
+P_THRESH = 3;
+A_THRESH = 0.1; 
+fs = 100;
+
 % --- 2. FILE INITIALIZATION ---
 wFiles = dir(fullfile(dataPath, 'W*.csv')); 
 nFiles = dir(fullfile(dataPath, 'N*.csv')); 
@@ -73,8 +79,7 @@ for i = 1:length(files)
             end
             
             % Run Detection
-            fs = round(1 / median(diff(timeClean(1:min(1000, end)))));
-            [y_pred, steps] = run_straczkiewicz_lite(vm, fs);
+            [y_pred, steps] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
             
             % Calculate Metrics
             tp = sum(y_true == 1 & y_pred == 1);
@@ -117,17 +122,21 @@ fprintf('Mean Precision: %.2f\n', avgPrec);
 fprintf('Mean Recall:    %.2f\n', avgRec);
 fprintf('Mean F1-Score:  %.2f\n', avgF1);
 
-function [wi, steps] = run_straczkiewicz_lite(vm, fs)
+%% --- OPTIMIZED DETECTION FUNCTION ---
+function [wi, steps, peakFs, ampVals, maxPks, T_vec] = run_straczkiewicz_optimized(vm, fs, fMin, fMax, pThr, aThr)
     fs_int = round(fs);
-    nSec = floor(length(vm)/fs_int);
     [S, F, T_vec] = spectrogram(detrend(vm), 2*fs_int, fs_int, 512, fs);
     Cabs = abs(S).^2;
-    wi_raw = zeros(size(T_vec));
-    for i = 1:length(T_vec)
-        [pks, locs] = findpeaks(Cabs(:,i), F);
-        if isempty(pks), continue; end
-        [maxPk, maxIdx] = max(pks);
-        if locs(maxIdx) >= 0.6 && locs(maxIdx) <= 3.4 && maxPk > 0.0001 % Lowered threshold for better recall
+    numWindows = length(T_vec);
+    peakFs = zeros(1, numWindows); maxPks = zeros(1, numWindows); ampVals = zeros(1, numWindows); wi_raw = zeros(1, numWindows);
+    for i = 1:numWindows
+        t_center = T_vec(i);
+        idx = round(t_center * fs);
+        win_idx = max(1, idx-fs_int):min(length(vm), idx+fs_int);
+        ampVals(i) = std(vm(win_idx));
+        [maxPks(i), maxIdx] = max(Cabs(:,i));
+        peakFs(i) = F(maxIdx);
+        if peakFs(i) >= fMin && peakFs(i) <= fMax && maxPks(i) > pThr && ampVals(i) > aThr
             wi_raw(i) = 1;
         end
     end
