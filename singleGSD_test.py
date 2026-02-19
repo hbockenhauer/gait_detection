@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data\Walking_Tanya"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test1"
 file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True; 
@@ -46,10 +46,14 @@ if __name__ == "__main__":
         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
         
         # 3. Ground Truth
-        if True:
+        if False:
             y_true = np.ones(len(df))
         else:
             y_true = np.zeros(len(df))
+            y_true = df.columns[-1]
+            print('y true', y_true)
+            print('ones',len(y_true==1))
+            print('zeros', len(y_true==0))
             #print("im here cuz of ",file_name )
         #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
         #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values

@@ -18,7 +18,7 @@ GSD_n = 3
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
-CONDITION_KEYWORDS = ['pockets', 'phone', 'limp', 'armfixed', 'rail', 'free']
+CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker']
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -114,6 +114,13 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
     """
     Run GSD on a single contiguous imu_df block, evaluate against y_true,
     and return a result dict (or None on error).
+    Input: 
+     - data
+     - true labels 
+     - label (for finding the error)
+    Ooutput: 
+     - metrics 
+     - name of the algo for the file 
     """
     try:
         match GSD_n:
@@ -162,7 +169,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
             'FP': fp, 
             'FN': fn,
             'TN': tn,
-        }
+        }, output_name
 
     except Exception as e:
         print(f"  [ERROR] GSD failed on {label}: {e}")
@@ -196,7 +203,7 @@ def process_weargait(rw_merged: pd.DataFrame,
             condition = grp['condition'].iloc[0]
             label     = f"{subject}/{wrist_label}"
 
-            metrics = _run_gsd_on_group(imu_df, y_true, label)
+            metrics, output_name = _run_gsd_on_group(imu_df, y_true, label)
             if metrics is None:
                 continue
 
