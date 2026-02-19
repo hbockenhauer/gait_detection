@@ -18,8 +18,8 @@ import colorsys
 # --- CONFIGURATION ---
 DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
 REPO_NAME = 'yonbrand/ElderNet'
-WINDOW_SIZE = 300      
-STEP_SIZE = 30
+WINDOW_SIZE = 300      #10s at 30Hz
+STEP_SIZE = 30          #1s at 30Hz
 GAIT_CLASSES = {'Walking', 'Stairs'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
 # SMOOTHING_SEC = 10.0
@@ -27,11 +27,11 @@ SAMPLE_RATE_QSENSE = 50.0 #Hz
 # N_SMOOTH = int(SMOOTHING_SEC / STEP_SEC)
 # MIN_BOUT_SEC = 5.0
 
-CONF_THRESH = 0.6
-MIN_ENERGY = 0.1
-MAX_ENERGY = 2.0
-MIN_FREQ = 0.0
-MAX_FREQ = 3.0
+CONF_THRESH = 0.1
+MIN_ENERGY = 0.07
+MAX_ENERGY = 0.4
+MIN_FREQ = 0.5
+MAX_FREQ = 3.5
 
 
 # --- REPRODUCIBILITY ---
@@ -56,7 +56,12 @@ def load_data(filepath):
     time_seconds = np.arange(len(df)) / SAMPLE_RATE_QSENSE
 
     parent_folder = os.path.basename(os.path.dirname(filepath))
-    activity_label = parent_folder.split('_')[0]
+    grandparent_folder = os.path.basename(os.path.dirname(os.path.dirname(filepath)))
+
+    if grandparent_folder == 'QSense_data_mixed':
+        activity_label = df.columns[-1]  # Last column has the activity label for mixed data
+    else:
+        activity_label = parent_folder.split('_')[0]  # Extract activity from folder name (e.g. "Walking_Hendrik" -> "Walking")
 
     data = pd.DataFrame({
         'time_sec': time_seconds,
@@ -389,7 +394,7 @@ def main():
                 # y_pred = apply_bout_filtering(y_pred, min_bout_length=n_bout)
 
                 #probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
-                y_pred = (probs > CONF_THRESH) #& (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
                 #y_pred = median_filter(y_pred_raw, size=3)
                 #y_pred = apply_bout_filtering(y_pred, min_bout_length=5) # Remove bouts shorter than 5 windows (1s)
 
@@ -441,7 +446,7 @@ def main():
     # --- PLOTTING: one plot per activity ---
     subjects  = ['Hendrik', 'Tanya']
     wrists    = ['right', 'left']
-    metrics   = ['probability']   # add 'energy', 'frequency' if needed
+    metrics   = ['probability', 'energy', 'frequency']   # add 'energy', 'frequency' if needed
 
     SMOOTHING_SEC = 10.0
     STEP_SEC      = STEP_SIZE / 30.0   # 1.0 second per step
