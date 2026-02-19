@@ -16,11 +16,11 @@ import matplotlib.colors as mcolors
 import colorsys
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
-GAIT_CLASSES = {'Walking', 'Stairs'}
+GAIT_CLASSES = {'Walking', 'Stairs', '1'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
 # SMOOTHING_SEC = 10.0
 # STEP_SEC = STEP_SIZE / 30.0

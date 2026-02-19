@@ -5,20 +5,17 @@ import csv
 from datetime import time
 
 # EDIT THIS BEFORE RUNNING
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
-THRESHOLD = time(14, 25, 0)
+DATA_PATH = r"C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed\Test2"
+THRESHOLD = time(14, 57, 0)
 
 def annotate(data_path, time_switch):
-    for folder in sorted(os.listdir(data_path)):
-        folder_path = os.path.join(data_path, folder)
-        if not os.path.isdir(folder_path):
-            continue
+    for file in os.listdir(data_path):
 
-        rw_path = os.path.join(folder_path, 's1_1RW.txt')
-        lw_path = os.path.join(folder_path, 's2_2LW.txt')
+        rw_path = os.path.join(data_path, 's1_1RW.txt')
+        lw_path = os.path.join(data_path, 's2_2LW.txt')
 
         if os.path.exists(rw_path):
-            new_file = os.path.join(folder_path, 's1_1RW_ed.txt')
+            new_file = os.path.join(data_path, 's1_1RW_ed.txt')
             with open(rw_path, newline='') as infile, open(new_file, 'w', newline='') as outfile:
                 reader = csv.DictReader(infile, delimiter='\t')
                 fieldnames = reader.fieldnames + ['Label']
@@ -36,7 +33,7 @@ def annotate(data_path, time_switch):
                     writer.writerow(row)
 
         if os.path.exists(lw_path):
-            new_file = os.path.join(folder_path, 's2_2LW_ed.txt')
+            new_file = os.path.join(data_path, 's2_2LW_ed.txt')
             with open(lw_path, newline='') as infile, open(new_file, 'w', newline='') as outfile:
                 reader = csv.DictReader(infile, delimiter='\t')
                 fieldnames = reader.fieldnames + ['Label']
