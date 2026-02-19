@@ -14,6 +14,7 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
+GSD_n = 3 
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
@@ -111,25 +112,30 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                       label: str) -> dict | None:
     """
-    Run HickeyGSD on a single contiguous imu_df block, evaluate against y_true,
+    Run GSD on a single contiguous imu_df block, evaluate against y_true,
     and return a result dict (or None on error).
     """
     try:
-        gsd = HickeyGSD(debug=DEBUG)
-        detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
+        match GSD_n:
+            case 2:
+                # Run the Hickey GSD method
+                gsd = HickeyGSD(debug=DEBUG)
+                detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
                           .detect_wrist())
-        
-        # OR Run Kheirkhahan GSD
-        #gsd = KheirkhahanGSD()
-        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-
-        # OR Run MacLean 
-        #gsd = MacLeanGSD()
-        #detected_bouts = gsd.detect(imu_df)
-
-        # OR 
-        #gsd = KerenGSD()
-        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                output_name ='HickeyGSD_Results.csv'
+            case 3:
+                # Run Kheirkhahan GSD
+                gsd = KheirkhahanGSD()
+                detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                output_name = 'KheirkhahanGSD_Results.csv'
+            case 4: 
+                # Run MacLean GSD
+                gsd = MacLeanGSD()
+                detected_bouts = gsd.detect(imu_df)
+            case 5:
+                # Run Keren GSD
+                gsd = KerenGSD()
+                detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)
@@ -166,7 +172,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
 def process_weargait(rw_merged: pd.DataFrame,
                      lw_merged: pd.DataFrame) -> pd.DataFrame:
     """
-    Run HickeyGSD on every (subject, wrist) segment inside the merged DataFrames.
+    Run GSD on every (subject, wrist) segment inside the merged DataFrames.
     Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
     """
     results = []
@@ -270,8 +276,8 @@ def process_weargait(rw_merged: pd.DataFrame,
 
     # Print summary to console 
     print("-" * 90)
-    _print_avg("AVERAGE (RW – Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
-    _print_avg("AVERAGE (LW – Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
+    _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
+    _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
     print()
     for condition in sorted(res_df['Condition'].unique()):
         _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
@@ -291,8 +297,8 @@ def process_weargait(rw_merged: pd.DataFrame,
         ignore_index=True
     )
 
-    csv_df.to_csv('HickeyGSD_Results.csv', index=False)
-    print("\nSaved → HickeyGSD_Results.csv")
+    csv_df.to_csv(output_name, index=False)
+    print(f"\nSaved → {output_name}")
 
     return res_df
 
