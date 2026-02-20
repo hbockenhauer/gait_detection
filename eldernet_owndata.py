@@ -20,7 +20,7 @@ DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Interns
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
-GAIT_CLASSES = {'Walking', 'Stairs', '1'}
+GAIT_CLASSES = {'Walking', 'Stairs'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
 # SMOOTHING_SEC = 10.0
 # STEP_SEC = STEP_SIZE / 30.0
@@ -47,49 +47,55 @@ def set_seed(seed=42):
 set_seed(42)
 
 def load_data(filepath):
-    df = pd.read_csv(filepath, sep=r"\s+", engine="python")
-
-    # Reset index to ensure clean sample numbering
+    df = pd.read_csv(filepath, sep=None, engine="python")
     df = df.reset_index(drop=True)
 
-    # Reconstruct time purely from sampling rate (50 Hz)
     time_seconds = np.arange(len(df)) / SAMPLE_RATE_QSENSE
 
     parent_folder = os.path.basename(os.path.dirname(filepath))
-    grandparent_folder = os.path.basename(os.path.dirname(os.path.dirname(filepath)))
 
-    if grandparent_folder == 'QSense_data_mixed':
-        activity_label = df.columns[-1]  # Last column has the activity label for mixed data
+    # -------- CASE 1: Sample-level label exists --------
+    if 'label' in df.columns or 'Label' in df.columns:
+        label_col = 'label' if 'label' in df.columns else 'Label'
+        sample_gt = pd.to_numeric(df[label_col], errors='coerce').fillna(0).astype(int)
+
+    # -------- CASE 2: Folder-level activity --------
     else:
-        activity_label = parent_folder.split('_')[0]  # Extract activity from folder name (e.g. "Walking_Hendrik" -> "Walking")
+        activity_name = parent_folder.split('_')[0]
+        sample_gt = np.ones(len(df), dtype=int) if activity_name in GAIT_CLASSES else np.zeros(len(df), dtype=int)
 
     data = pd.DataFrame({
         'time_sec': time_seconds,
         'accX': pd.to_numeric(df['accX'], errors='coerce'),
         'accY': pd.to_numeric(df['accY'], errors='coerce'),
         'accZ': pd.to_numeric(df['accZ'], errors='coerce'),
-        'activity': activity_label
+        'gt': sample_gt
     })
 
-    # Exclude first 10s of data due to latency issues at the start of recording
     data = data[data['time_sec'] >= 10.0].reset_index(drop=True)
 
     return data
 
-# --- RESAMPLE DATA TO 30Hz ---
+# --- RESAMPLE DATA TO 30Hz ----
 def resample_to_30hz(filepath, original_fs=SAMPLE_RATE_QSENSE):
     df = load_data(filepath)
-    if abs(original_fs - 30.0) < 0.1: return df
+
+    if abs(original_fs - 30.0) < 0.1:
+        return df
+
     t = df['time_sec'].values
     new_time = np.linspace(t[0], t[-1], int((t[-1] - t[0]) * 30.0) + 1)
+
     resampled = pd.DataFrame({
         'time_sec': new_time,
         'accX': np.interp(new_time, t, df['accX'].values),
         'accY': np.interp(new_time, t, df['accY'].values),
         'accZ': np.interp(new_time, t, df['accZ'].values),
-        'activity': df['activity'].iloc[0] 
+        'gt': np.round(np.interp(new_time, t, df['gt'].values)).astype(int)
     })
+
     return resampled
+
 
 # --- OBTAIN GROUND TRUTH FROM DIRECTORY NAME ---   
 def obtain_ground_truth(filepath):
@@ -103,7 +109,9 @@ def obtain_ground_truth(filepath):
 # --- PREPARE WINDOWS FOR ELDERNET ---
 def prepare_windows_overlapping(df):
     acc_data = df[['accX', 'accY', 'accZ']].values
-    activities_raw = df['activity'].values
+    gt_raw = df['gt'].values
+
+    #activities_raw = df['activity'].values
     times = df['time_sec'].values
     windows, energies, freqs, activities, timestamps = [], [], [], [], []
     
@@ -116,13 +124,16 @@ def prepare_windows_overlapping(df):
     
     for i in range(0, len(acc_data) - WINDOW_SIZE + 1, STEP_SIZE):
         win = acc_data[i:i + WINDOW_SIZE]
-        act_win = activities_raw[i:i + WINDOW_SIZE]
-        unique, counts = np.unique(act_win, return_counts=True)
+        #act_win = activities_raw[i:i + WINDOW_SIZE]
+        act_win = gt_raw[i:i + WINDOW_SIZE]
+        #unique, counts = np.unique(act_win, return_counts=True)
         
         windows.append(win.T)
         energies.append(np.std(np.sqrt(np.sum(win**2, axis=1))))
         freqs.append(get_dominant_freq(win.T))
-        activities.append(unique[np.argmax(counts)])
+        activities.append(int(np.mean(act_win) > 0.5))
+
+        #activities.append(unique[np.argmax(counts)])
         timestamps.append(times[i])
 
     return torch.FloatTensor(np.array(windows)), np.array(energies), np.array(freqs), activities, np.array(timestamps)
@@ -339,6 +350,8 @@ def plot_per_activity(dataset_path, subjects, wrists, metrics, conf_thresh, n_sm
         plt.tight_layout(rect=[0, 0, 0.86, 0.95])
         
         # Save
+        plots_dir = os.path.join(dataset_path, "Plots")
+        os.makedirs(plots_dir, exist_ok=True)   # <-- ADD THIS LINE
         save_path = os.path.join(dataset_path, "Plots", f"activity_{activity_type}.png")
         plt.savefig(save_path, dpi=150, bbox_inches='tight')        
         plt.show()
@@ -398,9 +411,12 @@ def main():
                 #y_pred = median_filter(y_pred_raw, size=3)
                 #y_pred = apply_bout_filtering(y_pred, min_bout_length=5) # Remove bouts shorter than 5 windows (1s)
 
-                y_true_full = np.ones(len(df_30hz), dtype=int) \
-                    if df_30hz['activity'].iloc[0] in GAIT_CLASSES \
-                    else np.zeros(len(df_30hz), dtype=int)
+                # y_true_full = np.ones(len(df_30hz), dtype=int) \
+                #     if df_30hz['activity'].iloc[0] in GAIT_CLASSES \
+                #     else np.zeros(len(df_30hz), dtype=int)
+                
+                y_true_full = df_30hz['gt'].values
+
 
                 # Convert sample-level GT to window-level GT
                 y_true = []
