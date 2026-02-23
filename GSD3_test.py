@@ -3,7 +3,8 @@ import pandas as pd
 import  numpy as np
 import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
-from ActivityCounts import ActivityCounts
+#from ActivityCounts import ActivityCounts
+from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
 
 
@@ -75,7 +76,7 @@ class KheirkhahanGSD:
         if type(data) is np.ndarray:
             #names = 
             data = pd.DataFrame(data, columns=[title])
-        data = data[:150]
+        data = data[600:]
         time = np.arange(len(data)) / sampling_rate_hz
         cols = list(data.columns[:3])
 
@@ -131,8 +132,10 @@ class KheirkhahanGSD:
         norm_acc = norm_acc / 9.81
         if self.visual == True:
             self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, title="norm_acc")
+        #AC = ActivityCounts()
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(), sampling_rate=self.sampling_rate_hz).activity_counts_
         if self.visual == True: 
+            #self.plot_acceleration_data(tmp, sampling_rate_hz, title="tmp")
             self.plot_acceleration_data(activity_counts, sampling_rate_hz, title="activity counts")
         
         # shortcut if all activity counts are 0 no gait can be detected
@@ -162,6 +165,8 @@ class KheirkhahanGSD:
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
         walking_windows[inactivity_parameter < self.threshold] = 1
+        if self.visual == True: 
+            self.plot_acceleration_data(walking_windows, sampling_rate_hz, title='walking windows')
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)

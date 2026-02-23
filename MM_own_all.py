@@ -14,7 +14,7 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
-GSD_n = 3 
+GSD_n = 2 
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
@@ -228,6 +228,17 @@ def process_weargait(rw_merged: pd.DataFrame,
     METRIC_COLS = ['Accuracy', 'Precision', 'Recall', 'F1']
     VARIABLES = ['TP', 'FP', 'FN', 'TN']
 
+    def _sum_row(row_type: str, label: str,
+                 wrist: str, condition: str,
+                 subset: pd.DataFrame) -> dict:
+        return {
+            'row_type':  row_type,
+            'Subject':   label,
+            'Wrist':     wrist,
+            'Folder':    '',
+            'Condition': condition,
+            **{m: round(subset[m].mean(), 4) for m in METRIC_COLS},
+        }
     def _avg_row(row_type: str, label: str,
                  wrist: str, condition: str,
                  subset: pd.DataFrame) -> dict:

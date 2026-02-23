@@ -28,7 +28,7 @@ if __name__ == "__main__":
     try:
         # 1. Load Data
         df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
-                        sep='\t',  # Use whitespace as separator (adjust if needed)
+                        sep=',',  # Use whitespace as separator (adjust if needed)
                         low_memory=False)
 
         # 2. Identify and Rename Columns to Anatomical Labels
@@ -38,6 +38,7 @@ if __name__ == "__main__":
         #print(f"the acc_cols is {acc_cols} ")
         if len(acc_cols) < 3:
             print("Incorrect number of columns")
+            print(f"Only {len(acc_cols)} columns found")
             
             
         imu_df = df[acc_cols[:3]].copy()
@@ -50,7 +51,7 @@ if __name__ == "__main__":
             y_true = np.ones(len(df))
         else:
             y_true = np.zeros(len(df))
-            y_true = df.columns[-1]
+            y_true = df['Label']
             print('y true', y_true)
             print('ones',len(y_true==1))
             print('zeros', len(y_true==0))
@@ -61,12 +62,12 @@ if __name__ == "__main__":
         # 4. Run GSD
         
         # HickeyGSD
-        #gsd = HickeyGSD(debug=DEBUG, visual=True)
-        #detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
+        gsd = HickeyGSD(debug=DEBUG, visual=True)
+        detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
         
         # KheirkhahanGSD
-        gsd = KheirkhahanGSD(visual=True)
-        detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+        #gsd = KheirkhahanGSD(visual=True)
+        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:
             print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")
