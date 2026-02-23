@@ -69,11 +69,11 @@ for i = 1:length(files)
         
         % D. Run Detection
         fs = round(1 / median(diff(time(1:min(500, end)))));
-        %[y_pred, steps] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
-        [wi, steps, cad] = find_walking(vm, fs, min_amp, T, ...
-                                            delta, alpha, beta, step_freq);
-        % [wi, steps, cad] = find_walking(...)
-        y_pred = wi(:);
+        [y_pred, steps] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
+        % [wi, steps, cad] = find_walking(vm, fs, min_amp, T, ...
+        %                                     delta, alpha, beta, step_freq);
+        % 
+        % y_pred = wi(:);
         y_true = y_true(:);
 
         % --- ADD THIS ALIGNMENT BLOCK ---

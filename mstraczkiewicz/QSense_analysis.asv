@@ -6,7 +6,6 @@ clear; clc; close all;
 dataPaths = {
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 };
 
 PlotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots';
@@ -80,33 +79,13 @@ for d = 1:length(dataPaths)
                 validRows = ~isnan(accX) & ~isnan(accY) & ~isnan(accZ);
                 vm = sqrt(accX(validRows).^2 + accY(validRows).^2 + accZ(validRows).^2);
                 time = time(validRows);
-  
-                % Ground Truth Extraction
-                % -------------------------------
-                varNames = data.Properties.VariableNames;
-                
-                % CASE 1: Sample-level label column exists
-                labelIdx = find(strcmpi(varNames, 'label'), 1);
-                
-                if ~isempty(labelIdx)
+    
+                % Create Ground Truth
+                if data{1, end} == 'label':
                     
-                    raw_gt = data{:, labelIdx};
-                    
-                    % Convert to numeric (like pd.to_numeric)
-                    if iscell(raw_gt) || isstring(raw_gt)
-                        raw_gt = str2double(raw_gt);
-                    end
-                    
-                    raw_gt(isnan(raw_gt)) = 0;
-                    raw_gt = double(raw_gt);
-                    
-                    y_true = raw_gt(validRows);
-                
-                % CASE 2: Folder-level activity
-                else
-                    isGaitActivity = contains(lower(folderName), ["walk","stairs"]);
-                    y_true = double(isGaitActivity) * ones(size(vm));
-                end
+                isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
+                isGaitActivity = 
+                y_true = isGaitActivity * ones(size(vm));
                 
                 % Run Detection
                 [y_pred, steps, peakF, ampVal, maxPk, T_vec] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
@@ -211,7 +190,7 @@ if ~isempty(summaryResults)
     globalF1   = 2 * (globalPrec * globalRec) / (globalPrec + globalRec);
     if (globalPrec + globalRec)==0, globalF1 = 0; end
     fprintf('\n======================================================================\n');
-    fprintf('GLOBAL PERFORMANCE (Combined All Folders)\n');
+    fprintf('GLOBAL PERFORMANCE (Combined Both Folders)\n');
     fprintf('----------------------------------------------------------------------\n');
     fprintf('Accuracy:  %.4f\n', globalAcc);
     fprintf('Precision: %.4f\n', globalPrec);

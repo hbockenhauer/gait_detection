@@ -16,16 +16,16 @@ import matplotlib.colors as mcolors
 import colorsys
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
 GAIT_CLASSES = {'Walking', 'Stairs'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
 # SMOOTHING_SEC = 10.0
-# STEP_SEC = STEP_SIZE / 30.0
+STEP_SEC = STEP_SIZE / 30.0
 # N_SMOOTH = int(SMOOTHING_SEC / STEP_SEC)
-# MIN_BOUT_SEC = 5.0
+MIN_BOUT_SEC = 10.0
 
 CONF_THRESH = 0.1
 MIN_ENERGY = 0.07
@@ -95,16 +95,6 @@ def resample_to_30hz(filepath, original_fs=SAMPLE_RATE_QSENSE):
     })
 
     return resampled
-
-
-# --- OBTAIN GROUND TRUTH FROM DIRECTORY NAME ---   
-def obtain_ground_truth(filepath):
-    df = load_data(filepath)
-    activity = df['activity'].iloc[0]
-    if activity in GAIT_CLASSES:
-        return np.ones(len(df), dtype=int)
-    else:
-        return np.zeros(len(df), dtype=int)
     
 # --- PREPARE WINDOWS FOR ELDERNET ---
 def prepare_windows_overlapping(df):
@@ -183,7 +173,7 @@ def prepare_windows_overlapping(df):
 #     return filtered
 
 # --- PLOTTING FUNCTION ---
-def plot_per_activity(dataset_path, subjects, wrists, metrics, conf_thresh, n_smooth):
+def plot_per_activity(dataset_path, subjects, wrists, metrics, conf_thresh):
     
     # --- COLLECT ALL UNIQUE ACTIVITIES ---
     all_folders = set()
@@ -400,23 +390,16 @@ def main():
                 print(f"             Processed {os.path.basename(file)}: {len(probs)} windows")
 
                 # n_smooth = int(SMOOTHING_SEC / STEP_SEC)     # 10 windows
-                # n_bout   = int(MIN_BOUT_SEC  / STEP_SEC)     # 5 windows
+                n_bout   = int(MIN_BOUT_SEC  / STEP_SEC)     # 5 windows
 
                 #probs_smoothed = uniform_filter1d(probs, size=n_smooth)
                 # y_pred = (probs_smoothed > CONF_THRESH).astype(int)
-                # y_pred = apply_bout_filtering(y_pred, min_bout_length=n_bout)
 
                 #probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
                 y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
                 #y_pred = median_filter(y_pred_raw, size=3)
-                #y_pred = apply_bout_filtering(y_pred, min_bout_length=5) # Remove bouts shorter than 5 windows (1s)
-
-                # y_true_full = np.ones(len(df_30hz), dtype=int) \
-                #     if df_30hz['activity'].iloc[0] in GAIT_CLASSES \
-                #     else np.zeros(len(df_30hz), dtype=int)
-                
+                #y_pred = apply_bout_filtering(y_pred, min_bout_length=MIN_BOUT_SEC) # Remove bouts shorter than MIN_BOUT_SEC windows           
                 y_true_full = df_30hz['gt'].values
-
 
                 # Convert sample-level GT to window-level GT
                 y_true = []
@@ -426,7 +409,6 @@ def main():
 
                 y_true = np.array(y_true)
 
-                
                 # Metrics
                 if np.sum(y_true) == 0:
                     p, r, f1 = 0.0, 0.0, 0.0
@@ -464,17 +446,12 @@ def main():
     wrists    = ['right', 'left']
     metrics   = ['probability', 'energy', 'frequency']   # add 'energy', 'frequency' if needed
 
-    SMOOTHING_SEC = 10.0
-    STEP_SEC      = STEP_SIZE / 30.0   # 1.0 second per step
-    N_SMOOTH      = int(SMOOTHING_SEC / STEP_SEC)  # 10 windows
-
-    plot_per_activity(
-        dataset_path = DATASET_PATH,
-        subjects     = subjects,
-        wrists       = wrists,
-        metrics      = metrics,
-        conf_thresh  = CONF_THRESH,
-        n_smooth     = N_SMOOTH
-    )
+    # plot_per_activity(
+    #     dataset_path = DATASET_PATH,
+    #     subjects     = subjects,
+    #     wrists       = wrists,
+    #     metrics      = metrics,
+    #     conf_thresh  = CONF_THRESH
+    # )
 
 if __name__ == "__main__":main()
