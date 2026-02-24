@@ -12,10 +12,10 @@ A_THRESH = 0.1;
 % --- Straczkiewicz Parameters ---
 fs = 20; 
 min_amp   = 0.1;          % Minimum amplitude (g)
-T         = 6;             % Minimum walking duration (s)
-alpha     = 3.5;
+T         = 3;             % Minimum walking duration (s)
+alpha     = 2;
 beta      = 2;
-step_freq = [1 2.5];     % Cadence range (Hz)
+step_freq = [0.5 3.5];     % Cadence range (Hz)
 delta = round(0.5 * fs);
 
 % --- 2. ACTIVITY MAPPING ---
@@ -69,11 +69,11 @@ for i = 1:length(files)
         
         % D. Run Detection
         fs = round(1 / median(diff(time(1:min(500, end)))));
-        [y_pred, steps] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
-        % [wi, steps, cad] = find_walking(vm, fs, min_amp, T, ...
-        %                                     delta, alpha, beta, step_freq);
-        % 
-        % y_pred = wi(:);
+        %[y_pred, steps] = run_straczkiewicz_optimized(vm, fs, F_MIN, F_MAX, P_THRESH, A_THRESH);
+        [wi, steps, cad] = find_walking(vm, fs, min_amp, T, ...
+                                            delta, alpha, beta, step_freq);
+
+        y_pred = wi(:);
         y_true = y_true(:);
 
         % --- ADD THIS ALIGNMENT BLOCK ---
