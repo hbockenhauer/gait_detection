@@ -55,7 +55,6 @@ if __name__ == "__main__":
             print('y true', y_true)
             print('ones',len(y_true==1))
             print('zeros', len(y_true==0))
-            #print("im here cuz of ",file_name )
         #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
         #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 

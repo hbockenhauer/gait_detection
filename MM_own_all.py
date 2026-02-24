@@ -12,13 +12,14 @@ from GSD2a import HickeyGSD
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
 GSD_n = 2 
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
-CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker']
+CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -27,23 +28,32 @@ def extract_condition(folder_name: str) -> str:
             return kw
     return 'normal' 
 
-def is_gait(folder_name: str) -> int:
-    activity = folder_name.split('_')[0].lower()
-    return 1 if activity in GAIT_CLASSES else 0
+def is_gait(folder_name: str, df:pd.DataFrame = None) -> int:
+    if 'test' in folder_name.lower():
+        #print(df.columns)
+        #print(df)
+        return df['Label']
+    else:
+        activity = folder_name.split('_')[0].lower()
+        return 1 if activity in GAIT_CLASSES else 0
 
 
 def load_wrist_file(filepath: str) -> pd.DataFrame | None:
     """Read one sensor file, scale acc to m/s², rename columns. Returns None on failure."""
     try:
-        df = pd.read_csv(filepath, sep='\t', low_memory=False)
+        df = pd.read_csv(filepath, sep=None, engine="python")
+        df = df.reset_index(drop=True)
+
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
             print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
             return None
+        
         imu_df = df[acc_cols[:3]].copy()
         imu_df = imu_df * 9.81          # convert g → m/s²
         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
-        return imu_df
+
+        return imu_df, df
     except Exception as e:
         print(f"  [ERROR] Failed to load {filepath}: {e}")
         return None
@@ -61,7 +71,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     lw_chunks: list[pd.DataFrame] = []
 
     print(f"Scanning: {data_path}\n")
-    print(f"{'Folder':<35} | {'Cond':<10} | {'Gait':<5} | {'RW rows':>8} | {'LW rows':>8}")
+    print(f"{'Folder':<35} | {'Cond':<10} | {'RW rows':>8} | {'LW rows':>8}")
     print("-" * 80)
 
     for folder in sorted(os.listdir(data_path)):
@@ -69,7 +79,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         if not os.path.isdir(folder_path):
             continue
 
-        y_label   = is_gait(folder)
+        #y_label   = 
         condition = extract_condition(folder)
         subject   = folder
 
@@ -78,25 +88,26 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         rw_rows = lw_rows = 0
 
         if os.path.exists(rw_path):
-            rw_df = load_wrist_file(rw_path)
+            rw_df, df_full = load_wrist_file(rw_path)
             if rw_df is not None:
-                rw_df['y_true']    = y_label
+                rw_df['y_true']    = is_gait(folder, df_full)
                 rw_df['condition'] = condition
                 rw_df['subject']   = subject
                 rw_chunks.append(rw_df)
                 rw_rows = len(rw_df)
 
         if os.path.exists(lw_path):
-            lw_df = load_wrist_file(lw_path)
+            lw_df, df_full = load_wrist_file(lw_path)
             if lw_df is not None:
-                lw_df['y_true']    = y_label
+                lw_df['y_true']    = is_gait(folder, df_full)
                 lw_df['condition'] = condition
                 lw_df['subject']   = subject
                 lw_chunks.append(lw_df)
                 lw_rows = len(lw_df)
 
+        
         if rw_rows > 0 or lw_rows > 0:
-            print(f"{folder[:35]:<35} | {condition:<10} | {y_label:<5} | {rw_rows:>8} | {lw_rows:>8}")
+            print(f"{folder[:35]:<35} | {condition:<10} | {rw_rows:>8} | {lw_rows:>8}")
 
     print("-" * 80)
 
@@ -118,7 +129,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
      - data
      - true labels 
      - label (for finding the error)
-    Ooutput: 
+    Output: 
      - metrics 
      - name of the algo for the file 
     """
@@ -139,10 +150,12 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 # Run MacLean GSD
                 gsd = MacLeanGSD()
                 detected_bouts = gsd.detect(imu_df)
+                output_name = 'MacLeanGSD_Results.csv'
             case 5:
                 # Run Keren GSD
                 gsd = KerenGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                output_name = 'KerenGSD_Results.csv'
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)
@@ -203,9 +216,11 @@ def process_weargait(rw_merged: pd.DataFrame,
             condition = grp['condition'].iloc[0]
             label     = f"{subject}/{wrist_label}"
 
-            metrics, output_name = _run_gsd_on_group(imu_df, y_true, label)
-            if metrics is None:
+            result = _run_gsd_on_group(imu_df, y_true, label)
+            if result is None:
                 continue
+            metrics, output_name = result
+            
 
             results.append({
                 'Subject':   label,
@@ -214,6 +229,7 @@ def process_weargait(rw_merged: pd.DataFrame,
                 'Condition': condition,
                 **metrics,
             })
+            
 
             print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
                   f"{metrics['Accuracy']:.2f}   | {metrics['Precision']:.2f}   | "
@@ -225,41 +241,58 @@ def process_weargait(rw_merged: pd.DataFrame,
 
     res_df = pd.DataFrame(results)
 
-    METRIC_COLS = ['Accuracy', 'Precision', 'Recall', 'F1']
+    #METRIC_COLS = ['Accuracy', 'Precision', 'Recall', 'F1']
     VARIABLES = ['TP', 'FP', 'FN', 'TN']
 
-    def _sum_row(row_type: str, label: str,
-                 wrist: str, condition: str,
-                 subset: pd.DataFrame) -> dict:
-        return {
-            'row_type':  row_type,
-            'Subject':   label,
-            'Wrist':     wrist,
-            'Folder':    '',
-            'Condition': condition,
-            **{m: round(subset[m].mean(), 4) for m in METRIC_COLS},
-        }
     def _avg_row(row_type: str, label: str,
                  wrist: str, condition: str,
                  subset: pd.DataFrame) -> dict:
         """Build a single summary dict from a subset of res_df."""
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
+        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
+                                                              if (precision_av + recall_av) > 0 else 0.0
+
         return {
             'row_type':  row_type,
             'Subject':   label,
             'Wrist':     wrist,
             'Folder':    '',
             'Condition': condition,
-            **{m: round(subset[m].mean(), 4) for m in METRIC_COLS},
+            'Accuracy':     accuracy_av,
+            'Precision':    precision_av,
+            'Recall':       recall_av,
+            'F1':           f1_av,
+            #**{m: round(subset[m].mean(), 4) for m in METRIC_COLS},
+            **{p: round(subset[p].sum(), 4) for p in VARIABLES}
         }
 
     def _print_avg(label: str, subset: pd.DataFrame):
         if subset.empty:
             return
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
+        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
+                                                              if (precision_av + recall_av) > 0 else 0.0
         print(f"{label:<35} | {'':5} | {'':10} | "
-              f"{subset['Accuracy'].mean():.2f}   | "
-              f"{subset['Precision'].mean():.2f}   | "
-              f"{subset['Recall'].mean():.2f}   | "
-              f"{subset['F1'].mean():.2f}")
+              f"{accuracy_av:.2f}   | "
+              f"{precision_av:.2f}   | "
+              f"{recall_av:.2f}   | "
+              f"{f1_av:.2f}")
 
     # Collect average rows for CSV
     avg_rows: list[dict] = []
@@ -276,18 +309,8 @@ def process_weargait(rw_merged: pd.DataFrame,
     for condition in sorted(res_df['Condition'].unique()):
         sub = res_df[res_df['Condition'] == condition]
         avg_rows.append(_avg_row('avg_condition',
-                                  f"Cond={condition}) average",
+                                  f"Cond={condition} average",
                                   '', condition, sub))
-
-    # Per-wrist × per-condition averages
-    for wrist in ['RW', 'LW']:
-        for condition in sorted(res_df['Condition'].unique()):
-            sub = res_df[(res_df['Wrist'] == wrist) &
-                         (res_df['Condition'] == condition)]
-            if not sub.empty:
-                avg_rows.append(_avg_row('avg_wrist_condition',
-                                          f"AVERAGE ({wrist}, cond={condition})",
-                                          wrist, condition, sub))
 
     # Overall average
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
