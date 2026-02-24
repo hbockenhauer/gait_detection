@@ -16,7 +16,7 @@ import matplotlib.colors as mcolors
 import colorsys
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
@@ -173,151 +173,181 @@ def prepare_windows_overlapping(df):
 #     return filtered
 
 # --- PLOTTING FUNCTION ---
-def plot_per_activity(dataset_path, subjects, wrists, metrics, conf_thresh):
+def plot_per_activity(results_list, subjects, metrics):
+    """Plot metrics and GT/predictions using pre-calculated results"""
     
-    # --- COLLECT ALL UNIQUE ACTIVITIES ---
-    all_folders = set()
-    for folder in os.listdir(dataset_path):
-        if os.path.isdir(os.path.join(dataset_path, folder)):
-            all_folders.add(folder)
+    # --- GROUP RESULTS BY ACTIVITY TYPE ---
+    activities_by_type = {}
+    for result in results_list:
+        activity_type = result['activity_type']
+        if activity_type not in activities_by_type:
+            activities_by_type[activity_type] = []
+        activities_by_type[activity_type].append(result)
     
-    # Extract unique activity types (strip subject name)
-    # e.g. "Walking_Hendrik" -> "Walking"
-    # e.g. "Walking_pockets_Hendrik" -> "Walking_pockets"
-    def get_activity_type(folder_name):
-        """Strip subject name from folder to get activity type"""
-        for subject in subjects:
-            folder_name = folder_name.replace(f'_{subject}', '')
-            folder_name = folder_name.replace(f'_{subject.lower()}', '')
-        return folder_name
-    
-    activity_types = sorted(set(get_activity_type(f) for f in all_folders))
+    activity_types = sorted(activities_by_type.keys())
     
     print(f"\nFound {len(activity_types)} unique activities: {activity_types}")
     
     # --- COLOR SCHEME ---
-    # One color per subject, line style per wrist
-    subject_colors = {
-        subjects[0]: "#0891f4",   # Blue for first subject
-        subjects[1]: "#fb0404",   # Red for second subject
+    wrist_colors = {
+        'right': '#1f77b4',   # Blue
+        'left':  '#ff7f0e',   # Orange
     }
-    wrist_linestyles = {
-        'right': '-',    # Solid for right
-        'left': '--',    # Dashed for left
-    }
-    
+
     # --- ONE PLOT PER ACTIVITY ---
-    for activity_type in activity_types:
+    for activity_type, activity_results in activities_by_type.items():
         
-        # Find all folders matching this activity type
-        matching_folders = {
-            folder: get_activity_type(folder) 
-            for folder in all_folders 
-            if get_activity_type(folder) == activity_type
-        }
-        
-        if not matching_folders:
-            continue
-        
-        # Create figure: one subplot per metric
-        fig, axes = plt.subplots(len(metrics), 1, 
-                                  figsize=(16, 4 * len(metrics)), 
+        # Create figure: metrics + GT/Pred row
+        n_rows = len(metrics) + 1  # +1 for GT/Pred row
+        fig, axes = plt.subplots(n_rows, 1, 
+                                  figsize=(16, 4 * n_rows), 
                                   sharex=False)
         
-        if len(metrics) == 1:
+        if n_rows == 1:
             axes = [axes]  # Ensure iterable
         
         fig.suptitle(f"Activity: {activity_type}", fontsize=16, fontweight='bold')
         
         has_data = False
         
-        for ax, metric in zip(axes, metrics):
+        for ax, metric in zip(axes[:-1], metrics):
             
             # Plot each subject
             for subject in subjects:
-                color = subject_colors.get(subject, 'black')
                 
-                # Find the folder for this subject + activity combination
-                subject_folder = None
-                for folder in matching_folders:
-                    if subject.lower() in folder.lower():
-                        subject_folder = folder
-                        break
+                # Filter results for this subject and metric
+                subject_results = [r for r in activity_results if r['subject'] == subject]
                 
-                if subject_folder is None:
+                if not subject_results:
                     print(f"  No data for {subject} in {activity_type}")
                     continue
                 
                 # Plot each wrist
-                for wrist in wrists:
-                    file_path = os.path.join(
-                        dataset_path, subject_folder, f"{wrist}_window_outputs.csv"
-                    )
-                    
-                    if not os.path.exists(file_path):
-                        print(f"  Missing: {file_path}")
-                        continue
-                    
-                    df = pd.read_csv(file_path)
-                    
-                    if metric not in df.columns:
-                        print(f"  Missing column '{metric}' in {file_path}")
+                for result in subject_results:
+                    if metric not in ['probability', 'energy', 'frequency']:
                         continue
                     
                     has_data = True
-                    timestamps = df['timestamp'].values
-                    values = df[metric].values
+                    timestamps = result['timestamps']
                     
-                    # Compute smoothed signal
-                    #smoothed = uniform_filter1d(values, size=n_smooth)
+                    if metric == 'probability':
+                        values = result['probability']
+                    elif metric == 'energy':
+                        values = result['energy']
+                    elif metric == 'frequency':
+                        values = result['frequency']
                     
-                    linestyle = wrist_linestyles[wrist]
-                    label_raw = f"{subject} | {wrist}"
-                    #label_smooth = f"{subject} | {wrist} (smoothed)"
-                    
-                    # Raw line (faint)
+                    wrist = result['wrist']
+                    color = wrist_colors[wrist]
+
+                    label_raw = f"{wrist} | {subject}"
+
                     ax.plot(timestamps, values,
                             color=color,
-                            linestyle=linestyle,
-                            linewidth=1.0,
+                            linewidth=1.5,
                             alpha=0.95,
                             label=label_raw)
-                    
-                    # Smoothed line (bold)
-                    # ax.plot(timestamps, smoothed,
-                    #         color=color,
-                    #         linestyle=linestyle,
-                    #         linewidth=2.5,
-                    #         alpha=0.95,
-                    #         label=label_smooth)
             
-            # Add threshold line for probability
+            # --- Threshold lines ---
             if metric == 'probability':
-                ax.axhline(conf_thresh,
-                           color='black',
-                           linestyle=':',
-                           linewidth=1.5,
-                           alpha=0.7,
-                           label=f'Threshold = {conf_thresh}')
+                ax.axhline(CONF_THRESH,
+                        color='black',
+                        linestyle='--',
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f'Prob thresh = {CONF_THRESH}')
                 ax.set_ylim(-0.05, 1.1)
-            
+
+            elif metric == 'energy':
+                ax.axhline(MIN_ENERGY,
+                        color='black',
+                        linestyle='--',
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f'Min energy = {MIN_ENERGY}')
+                ax.axhline(MAX_ENERGY,
+                        color='black',
+                        linestyle='--',
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f'Max energy = {MAX_ENERGY}')
+
+            elif metric == 'frequency':
+                ax.axhline(MIN_FREQ,
+                        color='black',
+                        linestyle='--',
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f'Min freq = {MIN_FREQ}')
+                ax.axhline(MAX_FREQ,
+                        color='black',
+                        linestyle='--',
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f'Max freq = {MAX_FREQ}')
+                        
             ax.set_ylabel(metric.capitalize(), fontsize=12)
             ax.grid(True, alpha=0.3)
             ax.tick_params(axis='both', labelsize=10)
         
-        # Shared x-label
-        axes[-1].set_xlabel("Time (seconds)", fontsize=12)
-        
+        # --- GROUND TRUTH AND PREDICTIONS ROW ---
+        ax_gt_pred = axes[-1]
+
+        for subject in subjects:
+            subject_results = [r for r in activity_results if r['subject'] == subject]
+            if not subject_results:
+                continue
+
+            for result in subject_results:
+                timestamps = result['timestamps']
+                y_true = result['y_true']
+                y_pred = result['y_pred']
+                wrist = result['wrist']
+
+                # --- Color encodes wrist ---
+                if wrist == 'right':
+                    base_color = '#1f77b4' 
+                else:
+                    base_color = '#ff7f0e'  
+
+                # --- Ground Truth (thick solid band) ---
+                ax_gt_pred.fill_between(
+                    timestamps,
+                    0,
+                    y_true,
+                    step='post',
+                    alpha=0.25,
+                    color=base_color,
+                    label=f'{wrist} | {subject} | GT'
+                )
+
+                # --- Prediction (sharp line, slightly offset) ---
+                ax_gt_pred.step(
+                    timestamps,
+                    y_pred + 0.05,
+                    where='post',
+                    color=base_color,
+                    linewidth=2.5,
+                    label=f'{wrist} | {subject} | Pred'
+                )
+
+        ax_gt_pred.set_ylabel("GT / Prediction", fontsize=12)
+        ax_gt_pred.set_ylim(-0.1, 1.15)
+        ax_gt_pred.grid(True, alpha=0.3)
+        ax_gt_pred.set_xlabel("Time (seconds)", fontsize=12)
+                
         if not has_data:
             print(f"  Skipping {activity_type}: no data found")
             plt.close(fig)
             continue
         
         # --- LEGEND ---
-        # Build a clean legend: one entry per subject-wrist combo (raw + smoothed)
-        handles, labels = axes[0].get_legend_handles_labels()
-        
-        # Deduplicate while preserving order
+        handles, labels = [], []
+        for ax in axes:
+            h, l = ax.get_legend_handles_labels()
+            handles.extend(h)
+            labels.extend(l)
+                
         seen = set()
         unique_handles, unique_labels = [], []
         for h, l in zip(handles, labels):
@@ -339,10 +369,10 @@ def plot_per_activity(dataset_path, subjects, wrists, metrics, conf_thresh):
         
         plt.tight_layout(rect=[0, 0, 0.86, 0.95])
         
-        # Save
-        plots_dir = os.path.join(dataset_path, "Plots")
-        os.makedirs(plots_dir, exist_ok=True)   # <-- ADD THIS LINE
-        save_path = os.path.join(dataset_path, "Plots", f"activity_{activity_type}.png")
+        # Save - use DATASET_PATH from config
+        plots_dir = os.path.join(DATASET_PATH, "Plots")
+        os.makedirs(plots_dir, exist_ok=True)
+        save_path = os.path.join(plots_dir, f"activity_{activity_type}.png")
         plt.savefig(save_path, dpi=150, bbox_inches='tight')        
         plt.show()
 
@@ -357,6 +387,11 @@ def main():
     for folder in os.listdir(DATASET_PATH):
         if not os.path.isdir(os.path.join(DATASET_PATH, folder)):
             continue
+
+        # Extract subject name and activity type from folder name
+        parts = folder.split('_')
+        activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
+        subject = parts[-1] if len(parts) > 1 else 'Unknown'
 
         files = [
             os.path.join(DATASET_PATH, folder, 's1_1RW.txt'),  # Right wrist
@@ -389,69 +424,99 @@ def main():
 
                 print(f"             Processed {os.path.basename(file)}: {len(probs)} windows")
 
-                # n_smooth = int(SMOOTHING_SEC / STEP_SEC)     # 10 windows
-                n_bout   = int(MIN_BOUT_SEC  / STEP_SEC)     # 5 windows
-
-                #probs_smoothed = uniform_filter1d(probs, size=n_smooth)
-                # y_pred = (probs_smoothed > CONF_THRESH).astype(int)
-
-                #probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
-                y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
-                #y_pred = median_filter(y_pred_raw, size=3)
-                #y_pred = apply_bout_filtering(y_pred, min_bout_length=MIN_BOUT_SEC) # Remove bouts shorter than MIN_BOUT_SEC windows           
+                # Compute predictions
+                y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
+                         (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                
                 y_true_full = df_30hz['gt'].values
 
                 # Convert sample-level GT to window-level GT
                 y_true = []
+                timestamps = []
                 for i in range(0, len(y_true_full) - WINDOW_SIZE + 1, STEP_SIZE):
                     segment = y_true_full[i:i + WINDOW_SIZE]
                     y_true.append(int(np.mean(segment) > 0.5))
+                    timestamps.append(df_30hz['time_sec'].values[i])
 
                 y_true = np.array(y_true)
+                timestamps = np.array(timestamps)
 
-                # Metrics
+                # Compute metrics
                 if np.sum(y_true) == 0:
-                    p, r, f1 = 0.0, 0.0, 0.0
+                    precision = 0.0
+                    recall = 0.0
+                    f1 = 0.0
                 else:
-                    p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, labels=[1], average='binary', zero_division=0)
-                acc = accuracy_score(y_true, y_pred)
+                    precision, recall, f1, _ = precision_recall_fscore_support(
+                        y_true, y_pred, labels=[1], average='binary', zero_division=0
+                    )
+                accuracy = accuracy_score(y_true, y_pred)
+                cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
 
                 print(
                     f"{folder} | {wrist.upper()} | "
-                    f"Precision: {p:.3f} | Recall: {r:.3f} | "
-                    f"F1: {f1:.3f} | Accuracy: {acc:.3f}"
+                    f"Precision: {precision:.3f} | Recall: {recall:.3f} | "
+                    f"F1: {f1:.3f} | Accuracy: {accuracy:.3f}"
                 )
 
+                # Create a comprehensive results dictionary
                 results.append({
-                    "activity": folder,
-                    "wrist": wrist,
-                    "precision": p,
-                    "recall": r,
-                    "f1": f1,
-                    "accuracy": acc,
-                    "num_windows": len(probs)
+                    'subject': subject,
+                    'folder': folder,
+                    'activity_type': activity_type,
+                    'wrist': wrist,
+                    'file_path': file,
+                    # Raw data for plotting
+                    'timestamps': timestamps,
+                    'y_true': y_true,
+                    'y_pred': y_pred,
+                    'probability': probs,
+                    'energy': engs,
+                    'frequency': frqs,
+                    # Performance metrics
+                    'precision': precision,
+                    'recall': recall,
+                    'f1': f1,
+                    'accuracy': accuracy,
+                    'confusion_matrix': cm.tolist()
                 })
             except Exception as e:
                 print(f"Error processing {os.path.basename(file)}: {e}")
                 continue
-    results_df = pd.DataFrame(results)
-    summary_path = os.path.join(DATASET_PATH, "overall_wrist_summary.csv")
-    results_df.to_csv(summary_path, index=False)
-
+    
+    # --- CREATE METRICS SUMMARY ---
+    metrics_data = []
+    for result in results:
+        metrics_data.append({
+            'subject': result['subject'],
+            'activity': result['activity_type'],
+            'wrist': result['wrist'],
+            'precision': result['precision'],
+            'recall': result['recall'],
+            'f1': result['f1'],
+            'accuracy': result['accuracy']
+        })
+    
+    df_metrics = pd.DataFrame(metrics_data)
+    
+    # Save metrics summary
+    plots_dir = os.path.join(DATASET_PATH, "Plots")
+    os.makedirs(plots_dir, exist_ok=True)
+    metrics_path = os.path.join(plots_dir, 'performance_metrics.csv')
+    df_metrics.to_csv(metrics_path, index=False)
+    
     print("\n=== OVERALL SUMMARY ===")
-    print(results_df.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
+    print("\nBy Wrist:")
+    print(df_metrics.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
+    print("\nBy Activity:")
+    print(df_metrics.groupby("activity")[["precision", "recall", "f1", "accuracy"]].mean())
+    print("\nBy Subject:")
+    print(df_metrics.groupby("subject")[["precision", "recall", "f1", "accuracy"]].mean())
 
     # --- PLOTTING: one plot per activity ---
     subjects  = ['Hendrik', 'Tanya']
-    wrists    = ['right', 'left']
-    metrics   = ['probability', 'energy', 'frequency']   # add 'energy', 'frequency' if needed
+    metrics   = ['probability', 'energy', 'frequency']
 
-    # plot_per_activity(
-    #     dataset_path = DATASET_PATH,
-    #     subjects     = subjects,
-    #     wrists       = wrists,
-    #     metrics      = metrics,
-    #     conf_thresh  = CONF_THRESH
-    # )
+    plot_per_activity(results, subjects, metrics)
 
 if __name__ == "__main__":main()

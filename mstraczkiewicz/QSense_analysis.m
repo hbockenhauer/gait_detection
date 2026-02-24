@@ -4,8 +4,8 @@ clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
 dataPaths = {
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+   %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+   %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 };
 
@@ -145,59 +145,59 @@ for d = 1:length(dataPaths)
             end
         end
 
-        % % --- PAIRED PLOTTING ---
-        % if ~isempty(fieldnames(plotData))
-        %     fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950]);
-        %     sgtitle(['Detailed Debug: ', folderName], 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
-        %     colors = {'#0072BD', '#D95319'}; % Blue (R), Red (L)
-        % 
-        %     % Subplot 1: Frequency
-        %     subplot(4,1,1); hold on;
-        %     t_end = 0;
-        %     if isfield(plotData, 'Right'), t_end = max(t_end, max(plotData.Right.T_vec)); end
-        %     if isfield(plotData, 'Left'),  t_end = max(t_end, max(plotData.Left.T_vec)); end
-        %     fill([0 t_end t_end 0], [F_MIN F_MIN F_MAX F_MAX], 'g', 'FaceAlpha', 0.05, 'EdgeColor', 'none');
-        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.peakF, 'Color', colors{1}, 'LineWidth', 1.2); end
-        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.peakF,  'Color', colors{2}, 'LineWidth', 1.2); end
-        %     yline(F_MIN, 'r-', 'F-Min', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-        %     yline(F_MAX, 'r-', 'F-Max', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-        %     ylabel('Peak Freq (Hz)'); grid on; ylim([0 5]); title('Criteria 1: Frequency Range');
-        %     xlim([0 t_end]);
-        % 
-        %     % Subplot 2: Power
-        %     subplot(4,1,2); hold on;
-        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.maxPk, 'Color', colors{1}); end
-        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.maxPk,  'Color', colors{2}); end
-        %     yline(P_THRESH, 'r-', 'P-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-        %     ylabel('Power'); grid on; title('Criteria 2: Spectrogram Power');
-        %     xlim([0 t_end]);
-        % 
-        %     % Subplot 3: Amplitude
-        %     subplot(4,1,3); hold on;
-        %     if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.ampVal, 'Color', colors{1}); end
-        %     if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.ampVal,  'Color', colors{2}); end
-        %     yline(A_THRESH, 'r-', 'A-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
-        %     ylabel('StdDev Amp'); grid on; title('Criteria 3: Time-Domain Amplitude');
-        %     xlim([0 t_end]);
-        % 
-        %     % Subplot 4: Detection
-        %     subplot(4,1,4); hold on;
-        %     if isfield(plotData, 'Right'), stairs(plotData.Right.time, plotData.Right.y_pred, 'Color', colors{1}, 'LineWidth', 2); end
-        %     if isfield(plotData, 'Left'),  stairs(plotData.Left.time,  plotData.Left.y_pred,  'Color', colors{2}, 'LineWidth', 1.5); end
-        %     ylabel('Binary Decision'); xlabel('Time (s)'); ylim([-0.1 1.1]); grid on;
-        %     legend({'Right Wrist', 'Left Wrist'}, 'Location', 'best');
-        %     xlim([0 t_end]);
-        %     title('Final Gait Detection (1=Gait, 0=No Gait)');
-        % 
-        %     % Create a filename
-        %     saveName = fullfile(PlotPath, [folderName, '_Plot.png']);
-        % 
-        %     % Export at high resolution (300 DPI)
-        %     exportgraphics(fig, saveName, 'Resolution', 300);
-        % 
-        %     % Optional: Close figure to save memory during long loops
-        %     close(fig);
-        % end
+        % --- PAIRED PLOTTING ---
+        if ~isempty(fieldnames(plotData))
+            fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950]);
+            sgtitle(['Detailed Debug: ', folderName], 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold');
+            colors = {'#0072BD', '#D95319'}; % Blue (R), Red (L)
+
+            % Subplot 1: Frequency
+            subplot(4,1,1); hold on;
+            t_end = 0;
+            if isfield(plotData, 'Right'), t_end = max(t_end, max(plotData.Right.T_vec)); end
+            if isfield(plotData, 'Left'),  t_end = max(t_end, max(plotData.Left.T_vec)); end
+            fill([0 t_end t_end 0], [F_MIN F_MIN F_MAX F_MAX], 'g', 'FaceAlpha', 0.05, 'EdgeColor', 'none');
+            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.peakF, 'Color', colors{1}, 'LineWidth', 1.2); end
+            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.peakF,  'Color', colors{2}, 'LineWidth', 1.2); end
+            yline(F_MIN, 'r-', 'F-Min', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+            yline(F_MAX, 'r-', 'F-Max', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+            ylabel('Peak Freq (Hz)'); grid on; ylim([0 5]); title('Criteria 1: Frequency Range');
+            xlim([0 t_end]);
+
+            % Subplot 2: Power
+            subplot(4,1,2); hold on;
+            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.maxPk, 'Color', colors{1}); end
+            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.maxPk,  'Color', colors{2}); end
+            yline(P_THRESH, 'r-', 'P-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+            ylabel('Power'); grid on; title('Criteria 2: Spectrogram Power');
+            xlim([0 t_end]);
+
+            % Subplot 3: Amplitude
+            subplot(4,1,3); hold on;
+            if isfield(plotData, 'Right'), plot(plotData.Right.T_vec, plotData.Right.ampVal, 'Color', colors{1}); end
+            if isfield(plotData, 'Left'),  plot(plotData.Left.T_vec,  plotData.Left.ampVal,  'Color', colors{2}); end
+            yline(A_THRESH, 'r-', 'A-Thresh', 'LabelHorizontalAlignment', 'right', 'FontWeight', 'bold');
+            ylabel('StdDev Amp'); grid on; title('Criteria 3: Time-Domain Amplitude');
+            xlim([0 t_end]);
+
+            % Subplot 4: Detection
+            subplot(4,1,4); hold on;
+            if isfield(plotData, 'Right'), stairs(plotData.Right.time, plotData.Right.y_pred, 'Color', colors{1}, 'LineWidth', 2); end
+            if isfield(plotData, 'Left'),  stairs(plotData.Left.time,  plotData.Left.y_pred,  'Color', colors{2}, 'LineWidth', 1.5); end
+            ylabel('Binary Decision'); xlabel('Time (s)'); ylim([-0.1 1.1]); grid on;
+            legend({'Right Wrist', 'Left Wrist'}, 'Location', 'best');
+            xlim([0 t_end]);
+            title('Final Gait Detection (1=Gait, 0=No Gait)');
+
+            % Create a filename
+            saveName = fullfile(PlotPath, [folderName, '_Plot.png']);
+
+            % Export at high resolution (300 DPI)
+            exportgraphics(fig, saveName, 'Resolution', 300);
+
+            % Optional: Close figure to save memory during long loops
+            close(fig);
+        end
     end
 end
 
@@ -231,31 +231,31 @@ if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
 % Write the table to a CSV file
 writetable(summaryResults, csvFileName);
 
-%% --- OPTIMIZED DETECTION FUNCTION ---
-function [wi, steps, peakFs, ampVals, maxPks, T_vec] = run_straczkiewicz_optimized(vm, fs, fMin, fMax, pThr, aThr)
-    fs_int = round(fs);
-    [S, F, T_vec] = spectrogram(detrend(vm), 2*fs_int, fs_int, 512, fs);
-    Cabs = abs(S).^2;
-    numWindows = length(T_vec);
-    peakFs = zeros(1, numWindows); maxPks = zeros(1, numWindows); ampVals = zeros(1, numWindows); wi_raw = zeros(1, numWindows);
-    for i = 1:numWindows
-        t_center = T_vec(i);
-        idx = round(t_center * fs);
-        win_idx = max(1, idx-fs_int):min(length(vm), idx+fs_int);
-        ampVals(i) = std(vm(win_idx));
-        [maxPks(i), maxIdx] = max(Cabs(:,i));
-        peakFs(i) = F(maxIdx);
-        if peakFs(i) >= fMin && peakFs(i) <= fMax && maxPks(i) > pThr && ampVals(i) > aThr
-            wi_raw(i) = 1;
-        end
-    end
-    wi_refined = movsum(wi_raw, [2 0]) >= 3;
-    wi = zeros(size(vm));
-    for i = 1:length(T_vec)
-        if wi_refined(i)
-            idx = round(T_vec(i) * fs);
-            wi(max(1, idx-fs_int):min(length(wi), idx)) = 1;
-        end
-    end
-    steps = sum(wi_refined);
-end
+% %% --- OPTIMIZED DETECTION FUNCTION ---
+% function [wi, steps, peakFs, ampVals, maxPks, T_vec] = run_straczkiewicz_optimized(vm, fs, fMin, fMax, pThr, aThr)
+%     fs_int = round(fs);
+%     [S, F, T_vec] = spectrogram(detrend(vm), 2*fs_int, fs_int, 512, fs);
+%     Cabs = abs(S).^2;
+%     numWindows = length(T_vec);
+%     peakFs = zeros(1, numWindows); maxPks = zeros(1, numWindows); ampVals = zeros(1, numWindows); wi_raw = zeros(1, numWindows);
+%     for i = 1:numWindows
+%         t_center = T_vec(i);
+%         idx = round(t_center * fs);
+%         win_idx = max(1, idx-fs_int):min(length(vm), idx+fs_int);
+%         ampVals(i) = std(vm(win_idx));
+%         [maxPks(i), maxIdx] = max(Cabs(:,i));
+%         peakFs(i) = F(maxIdx);
+%         if peakFs(i) >= fMin && peakFs(i) <= fMax && maxPks(i) > pThr && ampVals(i) > aThr
+%             wi_raw(i) = 1;
+%         end
+%     end
+%     wi_refined = movsum(wi_raw, [2 0]) >= 3;
+%     wi = zeros(size(vm));
+%     for i = 1:length(T_vec)
+%         if wi_refined(i)
+%             idx = round(T_vec(i) * fs);
+%             wi(max(1, idx-fs_int):min(length(wi), idx)) = 1;
+%         end
+%     end
+%     steps = sum(wi_refined);
+% end
