@@ -2,17 +2,18 @@ clear; clc;
 %% --- MStra detection on QSense wrist data (tuned) ---
 
 fs = 50;                % Sample frequency
-min_amp = 0.08;         % Minimum amplitude in g (lower to capture wrist swings)
+min_amp = 0.1;         % Minimum amplitude in g (lower to capture wrist swings)
 T = 3;                  % Minimum walking duration (s)
 delta = round(0.5 * fs);              % Local step peak window
 alpha = 2;            % Min ratio below step frequency (allow small hand motion)
 beta = 2;             % Max ratio above step frequency (ignore high harmonics)
-step_freq = [0.8 2.5];  % Walking cadence frequency range (Hz)
+step_freq = [0.5 3.5];  % Walking cadence frequency range (Hz)
 
 % --- CONFIGURATION ---
 dataPaths = {
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 };
 
 PlotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots';
@@ -43,20 +44,27 @@ for d = 1:length(dataPaths)
             if ~isfile(fullFilePath), continue; end
     
             try
-                % --- LOAD DATA ---
-                opts = detectImportOptions(fullFilePath, 'FileType', 'text');
-                opts.Delimiter = '\t';
+                % Load QSense Data
+                opts = detectImportOptions(fullFilePath);
                 opts.VariableNamingRule = 'preserve';
-                opts.VariableTypes{1} = 'char';
-                opts.VariableTypes{2} = 'char';
-                data = readtable(fullFilePath, opts);
-
-                % Remove first 10s
-                startRow = fs * 10;
-                if height(data) <= startRow
-                    continue;
+                
+                % Ensure first two columns are read as text (date + time)
+                if width(opts.VariableTypes) >= 2
+                    opts.VariableTypes{1} = 'char';
+                    opts.VariableTypes{2} = 'char';
                 end
+                
+                data = readtable(fullFilePath, opts);               
+              
+                % Remove first 10s (500 rows) from data due to latency
+                startRow = fs * 10;
                 data = data(startRow:end, :);
+
+                % Handle Time (Force 50Hz row-by-row)
+                numRows = height(data);
+                              
+                % Create time vector: starts at 0, increments by 1/fs per row
+                time = (0:numRows-1)' / fs;   
 
                 % Extract acceleration
                 accX = data{:, 6};
@@ -81,10 +89,32 @@ for d = 1:length(dataPaths)
                 % [b,a] = butter(4,[0.5 4]/(fs/2),'bandpass');  % focus on walking frequencies
                 % vm = filtfilt(b,a,vm);
 
-                % Ground truth
-                isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
-                y_true = double(isGaitActivity) * ones(size(vm));
-                y_true = y_true(:);
+                % Ground Truth Extraction
+                % -------------------------------
+                varNames = data.Properties.VariableNames;
+                
+                % CASE 1: Sample-level label column exists
+                labelIdx = find(strcmpi(varNames, 'label'), 1);
+                
+                if ~isempty(labelIdx)
+                    
+                    raw_gt = data{:, labelIdx};
+                    
+                    % Convert to numeric (like pd.to_numeric)
+                    if iscell(raw_gt) || isstring(raw_gt)
+                        raw_gt = str2double(raw_gt);
+                    end
+                    
+                    raw_gt(isnan(raw_gt)) = 0;
+                    raw_gt = double(raw_gt);
+                    
+                    y_true = raw_gt(validRows);
+
+                    % CASE 2: Folder-level activity
+                else
+                    isGaitActivity = contains(lower(folderName), ["walk","stairs"]);
+                    y_true = double(isGaitActivity) * ones(size(vm));
+                end
 
                 % --- RUN MStra WALKING DETECTION ---
                 [wi, steps, cad] = find_walking(vm, fs, min_amp, T, delta, alpha, beta, step_freq);

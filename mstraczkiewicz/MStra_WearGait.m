@@ -3,11 +3,11 @@
 clear; clc;
 
 % --- Straczkiewicz Parameters ---
-min_amp   = 0.08;          % Minimum amplitude (g)
+min_amp   = 0.1;          % Minimum amplitude (g)
 T         = 3;             % Minimum walking duration (s)
 alpha     = 2;
 beta      = 2;
-step_freq = [0.8 2.5];     % Cadence range (Hz)
+step_freq = [0.5 3.5];     % Cadence range (Hz)
 
 % --- Paths ---
 dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\WearGait-PD';
