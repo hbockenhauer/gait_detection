@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test1"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test1_Tanya"
 file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True; 
@@ -33,9 +33,7 @@ if __name__ == "__main__":
 
         # 2. Identify and Rename Columns to Anatomical Labels
         # The package requires: acc_pa, acc_ml, acc_is
-
         acc_cols = [c for c in df.columns if 'acc' in c]
-        #print(f"the acc_cols is {acc_cols} ")
         if len(acc_cols) < 3:
             print("Incorrect number of columns")
             print(f"Only {len(acc_cols)} columns found")
@@ -61,12 +59,12 @@ if __name__ == "__main__":
         # 4. Run GSD
         
         # HickeyGSD
-        gsd = HickeyGSD(debug=DEBUG, visual=True)
-        detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
+        # gsd = HickeyGSD(debug=DEBUG, visual=True)
+        # detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
         
         # KheirkhahanGSD
-        #gsd = KheirkhahanGSD(visual=True)
-        #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+        gsd = KheirkhahanGSD(visual=True)
+        detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:
             print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")

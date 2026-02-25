@@ -15,11 +15,12 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
-GSD_n = 2 
+GSD_n = 3
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
+SAVE_RESULTS = True 
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -189,8 +190,9 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
         return None
 
 
-def process_weargait(rw_merged: pd.DataFrame,
-                     lw_merged: pd.DataFrame) -> pd.DataFrame:
+def process_gait(rw_merged: pd.DataFrame,
+                 lw_merged: pd.DataFrame, 
+                 save_results: bool = True) -> pd.DataFrame:
     """
     Run GSD on every (subject, wrist) segment inside the merged DataFrames.
     Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
@@ -338,8 +340,9 @@ def process_weargait(rw_merged: pd.DataFrame,
         ignore_index=True
     )
 
-    csv_df.to_csv(output_name, index=False)
-    print(f"\nSaved → {output_name}")
+    if save_results == True:
+        csv_df.to_csv(output_name, index=False)
+        print(f"\nSaved → {output_name}")
 
     return res_df
 
@@ -372,4 +375,4 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_weargait(rw_merged, lw_merged)
+    process_gait(rw_merged, lw_merged, SAVE_RESULTS)

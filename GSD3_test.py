@@ -3,8 +3,8 @@ import pandas as pd
 import  numpy as np
 import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
-#from ActivityCounts import ActivityCounts
-from multimob.GSD.utils.ActivityCounts import ActivityCounts
+from ActivityCounts import ActivityCounts
+#from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
 
 
@@ -133,7 +133,8 @@ class KheirkhahanGSD:
         if self.visual == True:
             self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, title="norm_acc")
         #AC = ActivityCounts()
-        activity_counts = ActivityCounts().calculate(data=norm_acc.copy(), sampling_rate=self.sampling_rate_hz).activity_counts_
+        activity_counts = ActivityCounts().calculate_debug(data=norm_acc.copy(), sampling_rate=self.sampling_rate_hz,
+                                                           zoom_start=2000, zoom_end=2500).activity_counts_
         if self.visual == True: 
             #self.plot_acceleration_data(tmp, sampling_rate_hz, title="tmp")
             self.plot_acceleration_data(activity_counts, sampling_rate_hz, title="activity counts")
