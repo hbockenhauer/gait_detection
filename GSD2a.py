@@ -51,7 +51,7 @@ class HickeyGSD:
         self.cwb = cwb
 
         thresholdupright = 9.5 # in m/s^2 already
-        thresholdstill = 0.05 * 9.81 # or = 0.1 but 0.05 showed better performance for noth groups
+        thresholdstill = 0.05 * 9.81 # or = 0.1 but 0.05 showed better performance for both groups
 
         self.data = None
         self.gs_list_ = None

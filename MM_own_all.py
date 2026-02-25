@@ -15,12 +15,12 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
-GSD_n = 3
+GSD_n = 2
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
-SAVE_RESULTS = True 
+SAVE_RESULTS = False 
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -367,10 +367,10 @@ if __name__ == "__main__":
     lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
 
     # Save pooled merged files
-    rw_merged.to_csv('merged_RW.csv', index=False)
-    lw_merged.to_csv('merged_LW.csv', index=False)
-    print(f"\n[POOLED RW] {len(rw_merged):,} rows → merged_RW.csv")
-    print(f"[POOLED LW] {len(lw_merged):,} rows → merged_LW.csv")
+    # rw_merged.to_csv('merged_RW.csv', index=False)
+    # lw_merged.to_csv('merged_LW.csv', index=False)
+    # print(f"\n[POOLED RW] {len(rw_merged):,} rows → merged_RW.csv")
+    # print(f"[POOLED LW] {len(lw_merged):,} rows → merged_LW.csv")
 
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
