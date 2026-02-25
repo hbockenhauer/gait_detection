@@ -4,8 +4,8 @@ clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
 dataPaths = {
-   %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-   %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 };
 
@@ -118,6 +118,7 @@ for d = 1:length(dataPaths)
                 plotData.(sideLabel).maxPk = maxPk;
                 plotData.(sideLabel).time = time;
                 plotData.(sideLabel).y_pred = y_pred;
+                plotData.(sideLabel).y_true = y_true;
                 
                 % Calculate Metrics
                 tp = sum(y_true == 1 & y_pred == 1);
@@ -181,12 +182,45 @@ for d = 1:length(dataPaths)
             xlim([0 t_end]);
 
             % Subplot 4: Detection
-            subplot(4,1,4); hold on;
-            if isfield(plotData, 'Right'), stairs(plotData.Right.time, plotData.Right.y_pred, 'Color', colors{1}, 'LineWidth', 2); end
-            if isfield(plotData, 'Left'),  stairs(plotData.Left.time,  plotData.Left.y_pred,  'Color', colors{2}, 'LineWidth', 1.5); end
-            ylabel('Binary Decision'); xlabel('Time (s)'); ylim([-0.1 1.1]); grid on;
-            legend({'Right Wrist', 'Left Wrist'}, 'Location', 'best');
+           subplot(4,1,4); hold on;
+
+            % --- Ground Truth as Transparent Background ---
+            if isfield(plotData, 'Right')
+                area(plotData.Right.time, plotData.Right.y_true, ...
+                    'FaceColor', colors{1}, ...
+                    'FaceAlpha', 0.15, ...
+                    'EdgeColor', 'none');
+            end
+
+            if isfield(plotData, 'Left')
+                area(plotData.Left.time, plotData.Left.y_true, ...
+                    'FaceColor', colors{2}, ...
+                    'FaceAlpha', 0.15, ...
+                    'EdgeColor', 'none');
+            end
+
+            % --- Prediction as Stairs ---
+            if isfield(plotData, 'Right')
+                stairs(plotData.Right.time, plotData.Right.y_pred, ...
+                    'Color', colors{1}, ...
+                    'LineWidth', 2);
+            end
+
+            if isfield(plotData, 'Left')
+                stairs(plotData.Left.time, plotData.Left.y_pred, ...
+                    'Color', colors{2}, ...
+                    'LineWidth', 1.8);
+            end
+
+            ylabel('Binary Decision');
+            xlabel('Time (s)');
+            ylim([-0.1 1.1]);
+            grid on;
             xlim([0 t_end]);
+
+            legend({'Right GT','Left GT','Right Pred','Left Pred'}, ...
+                   'Location', 'best');
+
             title('Final Gait Detection (1=Gait, 0=No Gait)');
 
             % Create a filename

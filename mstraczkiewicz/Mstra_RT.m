@@ -1,0 +1,231 @@
+%% --- Batch Real-Time Performance Evaluator with Debug Plots ---
+clear; clc; close all;
+
+% --- 1. CONFIGURATION ---
+dataPaths = {
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+};
+PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
+
+F_MIN = 0.50; F_MAX = 3.50;
+P_THRESH = 3; A_THRESH = 0.1; 
+fs = 50;
+windowSize = 2 * fs;
+stepSize = 1 * fs;
+
+if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
+
+% --- 2. INITIALIZE SUMMARY ---
+summaryResults = table();
+
+% --- Before the for loop ---
+allExecTimes = [];
+
+for d = 1:length(dataPaths)
+    dataPath = dataPaths{d};
+    if ~exist(dataPath, 'dir'), continue; end
+    
+    subDirs = dir(dataPath);
+    subDirs = subDirs([subDirs.isdir] & ~ismember({subDirs.name}, {'.', '..'}));
+    
+    fprintf('\nProcessing: %s\n', dataPath);
+    fprintf('%-25s | %-8s | %-8s | %-8s | %-8s\n', 'Subject_Wrist', 'Accuracy', 'Precision', 'Recall', 'F1-Score');
+    fprintf('--------------------------------------------------------------------------------\n');
+    
+    for i = 1:length(subDirs)
+        folderName = subDirs(i).name;
+        folderPath = fullfile(dataPath, folderName);
+        targetFiles = {'s1_1RW.txt', 'Right'; 's2_2LW.txt', 'Left'};
+        
+        plotData = struct(); 
+        for f = 1:size(targetFiles, 1)
+            fileName = targetFiles{f, 1};
+            sideLabel = targetFiles{f, 2};
+            fullFilePath = fullfile(folderPath, fileName);
+            if ~isfile(fullFilePath), continue; end
+            
+            try
+                opts = detectImportOptions(fullFilePath);
+                opts.VariableNamingRule = 'preserve';
+                data = readtable(fullFilePath, opts);
+                
+                vm_all = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
+                totalSamples = length(vm_all);
+                time_vec = (0:totalSamples-1)' / fs;
+
+                % Ground Truth Extraction
+                varNames = data.Properties.VariableNames;
+                labelIdx = find(strcmpi(varNames, 'label'), 1);
+                if ~isempty(labelIdx)
+                    y_true = data{:, labelIdx};
+                    if iscell(y_true) || isstring(y_true), y_true = str2double(y_true); end
+                    y_true(isnan(y_true)) = 0;
+                else
+                    y_true = double(contains(lower(folderName), ["walk","stairs"])) * ones(totalSamples, 1);
+                end
+
+                % --- REAL-TIME CAUSAL SIMULATION ---
+                y_pred_rt = zeros(totalSamples, 1);
+                circularBuffer = zeros(windowSize, 1);
+                detectionState = [0, 0];
+                rt_peakF = []; rt_maxPk = []; rt_ampVal = []; rt_T = [];
+
+                for s = 1:totalSamples
+                    circularBuffer = [circularBuffer(2:end); vm_all(s)];
+                    if mod(s, stepSize) == 0 && s >= windowSize
+                        t_iter = tic;
+                        [isGait, newState, m] = run_mstra_fast_rt_with_metrics(...
+                            circularBuffer, fs, F_MIN, F_MAX, P_THRESH, A_THRESH, detectionState);
+                        detectionState = newState;
+                        y_pred_rt(s-stepSize+1 : s) = double(isGait);
+                        rt_T = [rt_T, s/fs];
+                        rt_peakF = [rt_peakF, m.peakF];
+                        rt_maxPk = [rt_maxPk, m.maxPk];
+                        rt_ampVal = [rt_ampVal, m.ampVal];
+                        allExecTimes = [allExecTimes; toc(t_iter)];
+                    end
+                end
+
+                plotData.(sideLabel).T_vec = rt_T;
+                plotData.(sideLabel).peakF = rt_peakF;
+                plotData.(sideLabel).maxPk = rt_maxPk;
+                plotData.(sideLabel).ampVal = rt_ampVal;
+                plotData.(sideLabel).time = time_vec;
+                plotData.(sideLabel).y_pred = y_pred_rt;
+                plotData.(sideLabel).y_true = y_true;
+
+                % Calculate Metrics
+                evalIdx = windowSize:totalSamples;
+                tp = sum(y_true(evalIdx) == 1 & y_pred_rt(evalIdx) == 1);
+                tn = sum(y_true(evalIdx) == 0 & y_pred_rt(evalIdx) == 0);
+                fp = sum(y_true(evalIdx) == 0 & y_pred_rt(evalIdx) == 1);
+                fn = sum(y_true(evalIdx) == 1 & y_pred_rt(evalIdx) == 0);
+                
+                prec = tp/(tp+fp); if isnan(prec), prec=1; end
+                rec = tp/(tp+fn); if isnan(rec), rec=1; end
+                f1 = 2*(prec*rec)/(prec+rec); if isnan(f1), f1=0; end
+                acc = (tp+tn)/(tp+tn+fp+fn);
+                
+                fprintf('%-25s | %-8.2f | %-8.2f | %-8.2f | %-8.2f\n', ...
+                        sprintf('%s_%s', folderName, sideLabel), acc, prec, rec, f1);
+                
+                summaryResults = [summaryResults; table({folderName}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
+                    'VariableNames', {'Subject','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
+            catch ME
+                fprintf('Error in %s: %s\n', folderName, ME.message);
+            end
+        end
+
+        % % --- 4. PAIRED PLOTTING (CORRECTED) ---
+        % if ~isempty(fieldnames(plotData))
+        %     fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
+        %     sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
+        %     colors = {'#0072BD', '#D95319'}; 
+        %     sides = fieldnames(plotData);
+        %     ax = zeros(4,1); 
+        % 
+        %     % Subplot 1: Frequency
+        %     ax(1) = subplot(4,1,1); hold on;
+        %     for s = 1:length(sides)
+        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).peakF, 'Color', colors{s}, 'LineWidth', 1.2);
+        %     end
+        %     yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
+        % 
+        %     % Subplot 2: Power
+        %     ax(2) = subplot(4,1,2); hold on;
+        %     for s = 1:length(sides)
+        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).maxPk, 'Color', colors{s});
+        %     end
+        %     yline(P_THRESH, 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
+        % 
+        %     % Subplot 3: Amplitude
+        %     ax(3) = subplot(4,1,3); hold on;
+        %     for s = 1:length(sides)
+        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).ampVal, 'Color', colors{s});
+        %     end
+        %     yline(A_THRESH, 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
+        % 
+        %     % Subplot 4: Detection
+        %     ax(4) = subplot(4,1,4); hold on;
+        %     h_leg = [];
+        %     for s = 1:length(sides)
+        %         a_h = area(plotData.(sides{s}).time, plotData.(sides{s}).y_true, 'FaceColor', colors{s}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+        %         p_h = stairs(plotData.(sides{s}).time, plotData.(sides{s}).y_pred, 'Color', colors{s}, 'LineWidth', 1.5);
+        %         h_leg = [h_leg, a_h, p_h]; 
+        %     end
+        %     ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
+        % 
+        %     % Fix Legend & Alignment
+        %     if length(sides) == 2
+        %         legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
+        %             'Orientation', 'horizontal', 'Location', 'southoutside');
+        %     else
+        %         legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
+        %     end
+        % 
+        %     linkaxes(ax, 'x'); 
+        %     if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
+        %         xlim(ax(1), [0 max(plotData.(sides{1}).T_vec)]);
+        %     end
+        % 
+        %     saveas(fig, fullfile(PlotPath, [folderName, '_RT_Plot.png']));
+        %     close(fig);
+        % end
+    end
+end
+
+% --- 5. GLOBAL PERFORMANCE SUMMARY ---
+if ~isempty(summaryResults)
+    TP = sum(summaryResults.TP); TN = sum(summaryResults.TN);
+    FP = sum(summaryResults.FP); FN = sum(summaryResults.FN);
+    
+    globalAcc  = (TP + TN) / (TP + TN + FP + FN);
+    globalPrec = TP / (TP + FP); if (TP+FP)==0, globalPrec = 1; end
+    globalRec  = TP / (TP + FN); if (TP+FN)==0, globalRec = 1; end
+    globalF1   = 2 * (globalPrec * globalRec) / (globalPrec + globalRec);
+    
+    fprintf('\n======================================================================\n');
+    fprintf('GLOBAL PERFORMANCE (REAL-TIME CAUSAL LOGIC)\n');
+    fprintf('----------------------------------------------------------------------\n');
+    fprintf('Accuracy:  %.4f\n', globalAcc);
+    fprintf('Precision: %.4f\n', globalPrec);
+    fprintf('Recall:    %.4f\n', globalRec);
+    fprintf('F1-Score:  %.4f\n', globalF1);
+    fprintf('======================================================================\n');
+    
+    writetable(summaryResults, fullfile(PlotPath, 'MStra_RT_Results_Full.csv'));
+end
+
+% % --- After the for loop ---
+% avgTime = mean(allExecTimes);
+% maxTime = max(allExecTimes);
+% % Calculate Load: (Time to process / Time represented by step)
+% cpuLoad = (avgTime / (stepSize/fs)) * 100; 
+% 
+% fprintf('\n--- COMPUTATIONAL LOAD --- \n');
+% fprintf('Average Exec Time: %.4f ms\n', avgTime * 1000);
+% fprintf('Real-Time Load:    %.2f%%\n', cpuLoad);
+
+%% --- RT FUNCTION ---
+function [finalDecision, newState, metrics] = run_mstra_fast_rt_with_metrics(winData, fs, fMin, fMax, pThr, aThr, prevState)
+    metrics.ampVal = std(winData);
+    nfft = 512;
+    w = hann(length(winData));
+    winProc = (winData - mean(winData)) .* w;
+    S = fft(winProc, nfft);
+    P = abs(S(1:nfft/2+1)).^2;
+    [metrics.maxPk, maxIdx] = max(P);
+    freqs = fs*(0:(nfft/2))/nfft;
+    metrics.peakF = freqs(maxIdx);
+    
+    rawDecision = (metrics.peakF >= fMin && metrics.peakF <= fMax && metrics.maxPk > pThr && metrics.ampVal > aThr);
+    finalDecision = all([prevState, rawDecision]); 
+    newState = [prevState(2), rawDecision];
+
+    % --- NEW: Debug Memory ---
+    % m = whos; % Get info on all variables in this function's workspace
+    % totalBytes = sum([m.bytes]);
+    % fprintf('Peak Memory Load: %d bytes (%.2f KB)\n', totalBytes, totalBytes/1024);
+end

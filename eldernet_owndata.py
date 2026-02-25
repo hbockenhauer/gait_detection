@@ -14,9 +14,11 @@ from sklearn.metrics import precision_recall_fscore_support, accuracy_score, con
 from scipy.ndimage import median_filter, uniform_filter1d
 import matplotlib.colors as mcolors
 import colorsys
+import time
+import psutil
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
@@ -25,7 +27,7 @@ SAMPLE_RATE_QSENSE = 50.0 #Hz
 # SMOOTHING_SEC = 10.0
 STEP_SEC = STEP_SIZE / 30.0
 # N_SMOOTH = int(SMOOTHING_SEC / STEP_SEC)
-MIN_BOUT_SEC = 10.0
+MIN_BOUT_SEC = 5.0
 
 CONF_THRESH = 0.1
 MIN_ENERGY = 0.07
@@ -100,8 +102,6 @@ def resample_to_30hz(filepath, original_fs=SAMPLE_RATE_QSENSE):
 def prepare_windows_overlapping(df):
     acc_data = df[['accX', 'accY', 'accZ']].values
     gt_raw = df['gt'].values
-
-    #activities_raw = df['activity'].values
     times = df['time_sec'].values
     windows, energies, freqs, activities, timestamps = [], [], [], [], []
     
@@ -112,19 +112,17 @@ def prepare_windows_overlapping(df):
         fft_vals = np.abs(np.fft.rfft(mag))
         return freqs_fft[np.argmax(fft_vals)]
     
-    for i in range(0, len(acc_data) - WINDOW_SIZE + 1, STEP_SIZE):
-        win = acc_data[i:i + WINDOW_SIZE]
-        #act_win = activities_raw[i:i + WINDOW_SIZE]
-        act_win = gt_raw[i:i + WINDOW_SIZE]
-        #unique, counts = np.unique(act_win, return_counts=True)
+    # Create overlapping windows by looking at previous 10s of data for each timestamp   
+    for i in range(WINDOW_SIZE, len(acc_data), STEP_SIZE):
+        win = acc_data[i - WINDOW_SIZE:i]
+        act_win = gt_raw[i - WINDOW_SIZE:i]
         
         windows.append(win.T)
         energies.append(np.std(np.sqrt(np.sum(win**2, axis=1))))
         freqs.append(get_dominant_freq(win.T))
         activities.append(int(np.mean(act_win) > 0.5))
 
-        #activities.append(unique[np.argmax(counts)])
-        timestamps.append(times[i])
+        timestamps.append(times[i-1])
 
     return torch.FloatTensor(np.array(windows)), np.array(energies), np.array(freqs), activities, np.array(timestamps)
 
@@ -152,7 +150,7 @@ def prepare_windows_overlapping(df):
 #     return y_pred, probs_smoothed
 
 # # --- FILTER PREDICTIONS TO REMOVE SHORT BOUTS ---
-# def apply_bout_filtering(predictions, min_bout_length=MIN_BOUT_SEC):
+# def apply_bout_filtering(predictions, min_bout_length):
 #     """Remove bouts shorter than min_bout_length windows"""
 #     filtered = predictions.copy()
 #     in_bout = False
@@ -171,6 +169,82 @@ def prepare_windows_overlapping(df):
 #         filtered[bout_start:] = 0
     
 #     return filtered
+
+def segment_walking(probs, step_sec=1.0, smoothing_window=8, high_thresh=0.65, low_thresh=0.45, min_bout_sec=5, max_gap_sec=2):
+    """
+    Robust walking segmentation using:
+    - Moving average smoothing
+    - Hysteresis thresholding
+    - Gap merging
+    - Minimum bout filtering
+    """
+
+    import numpy as np
+    from scipy.ndimage import uniform_filter1d
+
+    # --------------------------------------------------
+    # 1) Smooth probabilities
+    # --------------------------------------------------
+    probs_smooth = uniform_filter1d(probs, size=smoothing_window)
+
+    # --------------------------------------------------
+    # 2) Hysteresis thresholding
+    # --------------------------------------------------
+    binary = np.zeros_like(probs_smooth, dtype=int)
+
+    walking = False
+    for i in range(len(probs_smooth)):
+        if not walking and probs_smooth[i] >= high_thresh:
+            walking = True
+        elif walking and probs_smooth[i] < low_thresh:
+            walking = False
+
+        binary[i] = int(walking)
+
+    # --------------------------------------------------
+    # 3) Merge small gaps
+    # --------------------------------------------------
+    max_gap_windows = int(max_gap_sec / step_sec)
+
+    i = 0
+    while i < len(binary):
+        if binary[i] == 0:
+            start = i
+            while i < len(binary) and binary[i] == 0:
+                i += 1
+            gap_length = i - start
+
+            # If surrounded by walking and gap is short → fill it
+            if (
+                start > 0 and
+                i < len(binary) and
+                gap_length <= max_gap_windows and
+                binary[start - 1] == 1 and
+                binary[i] == 1
+            ):
+                binary[start:i] = 1
+        else:
+            i += 1
+
+    # --------------------------------------------------
+    # 4) Remove short bouts
+    # --------------------------------------------------
+    min_bout_windows = int(min_bout_sec / step_sec)
+
+    i = 0
+    while i < len(binary):
+        if binary[i] == 1:
+            start = i
+            while i < len(binary) and binary[i] == 1:
+                i += 1
+            bout_length = i - start
+
+            if bout_length < min_bout_windows:
+                binary[start:i] = 0
+        else:
+            i += 1
+
+    return binary, probs_smooth
 
 # --- PLOTTING FUNCTION ---
 def plot_per_activity(results_list, subjects, metrics):
@@ -376,6 +450,195 @@ def plot_per_activity(results_list, subjects, metrics):
         plt.savefig(save_path, dpi=150, bbox_inches='tight')        
         plt.show()
 
+def viterbi_smooth_gait(probs, energy, freq, 
+                        transition_cost=0.3,
+                        min_gait_prob=0.5,
+                        energy_weight=0.2,
+                        freq_weight=0.1):
+    """
+    Viterbi-like algorithm for gait detection with state persistence.
+    
+    Key insight: Transitions between gait/non-gait states are "expensive"
+    → model prefers to stay in current state unless strong evidence to switch
+    
+    Parameters:
+    -----------
+    probs : array
+        ElderNet probabilities
+    energy, freq : array
+        Additional features
+    transition_cost : float
+        Cost of changing state (higher = more stable/persistent states)
+        0.0 = no persistence (just threshold)
+        0.5 = very sticky states
+    min_gait_prob : float
+        Base threshold for gait
+    energy_weight, freq_weight : float
+        How much to weight these features
+    
+    Returns:
+    --------
+    states : array
+        Binary gait predictions (0/1)
+    """
+    n = len(probs)
+    
+    # Normalize features to [0, 1]
+    energy_norm = np.clip((energy - 0.07) / (0.4 - 0.07), 0, 1)
+    freq_score = np.exp(-0.5 * ((freq - 2.0) / 0.8)**2)  # Gaussian centered at 2 Hz
+    
+    # Combined evidence for "gait-ness"
+    gait_evidence = (
+        probs + 
+        energy_weight * energy_norm + 
+        freq_weight * freq_score
+    ) / (1 + energy_weight + freq_weight)
+    
+    # Viterbi forward pass
+    states = np.zeros(n, dtype=int)
+    current_state = 0  # Start in non-gait
+    
+    for t in range(n):
+        evidence_gait = gait_evidence[t]
+        evidence_nongait = 1 - gait_evidence[t]
+        
+        if current_state == 0:  # Currently non-gait
+            # Cost to stay non-gait
+            cost_stay = evidence_nongait
+            # Cost to switch to gait (pay transition cost)
+            cost_switch = evidence_gait - transition_cost
+            
+            if cost_switch > cost_stay:
+                current_state = 1
+                
+        else:  # Currently gait
+            # Cost to stay gait
+            cost_stay = evidence_gait
+            # Cost to switch to non-gait
+            cost_switch = evidence_nongait - transition_cost
+            
+            if cost_switch > cost_stay:
+                current_state = 0
+        
+        states[t] = current_state
+    
+    return states
+
+# --- APPLY WITH BOUT FILTERING ---
+def apply_bout_constraints(states, min_bout_sec=3.0, max_gap_sec=2.0, step_sec=1.0):
+    """
+    Post-process states:
+    1. Remove bouts shorter than min_bout_sec
+    2. Merge gaps shorter than max_gap_sec
+    """
+    min_bout_windows = int(min_bout_sec / step_sec)
+    max_gap_windows = int(max_gap_sec / step_sec)
+    
+    states = states.copy()
+    
+    # --- MERGE SHORT GAPS ---
+    i = 0
+    while i < len(states):
+        if states[i] == 0:
+            start = i
+            while i < len(states) and states[i] == 0:
+                i += 1
+            gap_length = i - start
+            
+            # Fill short gaps between gait bouts
+            if (start > 0 and i < len(states) and 
+                gap_length <= max_gap_windows and
+                states[start-1] == 1 and states[i] == 1):
+                states[start:i] = 1
+        else:
+            i += 1
+    
+    # --- REMOVE SHORT BOUTS ---
+    i = 0
+    while i < len(states):
+        if states[i] == 1:
+            start = i
+            while i < len(states) and states[i] == 1:
+                i += 1
+            bout_length = i - start
+            
+            if bout_length < min_bout_windows:
+                states[start:i] = 0
+        else:
+            i += 1
+    
+    return states
+
+def ensemble_eldernet_signal_processing(
+    eldernet_prob,
+    sp_predictions,  # From your signal processing method
+    energy,
+    freq,
+    step_sec=1.0
+):
+    """
+    Adaptive ensemble: trust ElderNet when signal is clean/regular,
+    trust signal processing when signal is noisy/irregular.
+    
+    Key insight: ElderNet works best on regular gait.
+    Signal processing works best on irregular/variable gait.
+    """
+    
+    # --- COMPUTE SIGNAL QUALITY METRICS ---
+    
+    # 1. Stability: How consistent is the probability?
+    prob_smooth = uniform_filter1d(eldernet_prob, size=10)
+    prob_std = uniform_filter1d((eldernet_prob - prob_smooth)**2, size=10)**0.5
+    stability = np.exp(-5 * prob_std)  # High when stable (regular gait)
+    
+    # 2. Regularity: Is frequency consistent and in gait range?
+    freq_smooth = uniform_filter1d(freq, size=10)
+    freq_std = uniform_filter1d((freq - freq_smooth)**2, size=10)**0.5
+    freq_in_range = ((freq > 0.8) & (freq < 2.5)).astype(float)
+    freq_regularity = np.exp(-3 * freq_std) * freq_in_range
+    
+    # 3. Energy consistency
+    energy_smooth = uniform_filter1d(energy, size=10)
+    energy_std = uniform_filter1d((energy - energy_smooth)**2, size=10)**0.5
+    energy_stability = np.exp(-10 * energy_std)
+    
+    # Combined signal quality score
+    signal_quality = (
+        0.4 * stability + 
+        0.4 * freq_regularity + 
+        0.2 * energy_stability
+    )
+    
+    # --- ADAPTIVE WEIGHTING ---
+    # When signal quality is HIGH → trust ElderNet (learned features)
+    # When signal quality is LOW → trust signal processing (explicit rules)
+    
+    eldernet_weight = signal_quality
+    sp_weight = 1 - signal_quality
+    
+    # Normalize weights
+    total_weight = eldernet_weight + sp_weight
+    eldernet_weight /= total_weight
+    sp_weight /= total_weight
+    
+    # --- ENSEMBLE DECISION ---
+    # Weighted vote
+    ensemble_score = (
+        eldernet_weight * eldernet_prob + 
+        sp_weight * sp_predictions
+    )
+    
+    # Threshold
+    y_pred = (ensemble_score > 0.5).astype(int)
+    
+    return y_pred, ensemble_score, signal_quality, eldernet_weight
+
+def get_memory_usage():
+    process = psutil.Process(os.getpid())
+    mem_bytes = process.memory_info().rss  # Resident Set Size (actual RAM used)
+    return mem_bytes
+
+
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -407,6 +670,8 @@ def main():
                 df_30hz = resample_to_30hz(file)
                 wins, engs, frqs, acts, tmstps = prepare_windows_overlapping(df_30hz)
 
+                # start_time = time.perf_counter()
+
                 with torch.no_grad():
                     logits = model(wins.to(device))
                     probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
@@ -424,9 +689,124 @@ def main():
 
                 print(f"             Processed {os.path.basename(file)}: {len(probs)} windows")
 
+                # end_time = time.perf_counter()
+                # total_latency = end_time - start_time
+                # avg_per_window = total_latency / len(wins)
+
+                # print(f"Total Inference Time: {total_latency:.4f}s")
+                # print(f"Time per 1s window: {avg_per_window * 1000:.2f}ms")
+
+                # bytes_used = get_memory_usage()
+                # print(f"System RAM: {bytes_used} bytes")
+                # print(f"System RAM: {bytes_used / (1024**2):.2f} MB")
+
+        
                 # Compute predictions
+                # # Apply smoothing and temporal thresholding to get final predictions
+                # _, probs_smoothed = segment_walking(probs, step_sec=STEP_SEC, smoothing_window=8, high_thresh=0.75, low_thresh=0.55, min_bout_sec=5, max_gap_sec=2)
+                # rolling_std = uniform_filter1d((probs - probs_smoothed)**2, size=5)**0.5
+                # high_conf = probs_smoothed > 0.75
+
+                # mid_conf = (
+                #     (probs_smoothed > 0.1) &
+                #     (engs > MIN_ENERGY) &
+                #     (frqs > MIN_FREQ) &
+                #     (frqs < MAX_FREQ)
+                # )
+
+                # stable = rolling_std < 0.1
+
+                # y_pred = ((high_conf & stable) | (mid_conf & stable)).astype(int)
+
+                # y_pred = ((engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
+                #        (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)                                          
+
                 y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
-                         (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                       (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+
+                # probs_smoothed = uniform_filter1d(probs, size=8)
+                # rolling_std = uniform_filter1d((probs - probs_smoothed)**2, size=5)**0.5
+
+                # # ---- Normalize features ----
+                # eng_norm  = (engs - MIN_ENERGY) / (np.percentile(engs, 95) - MIN_ENERGY)
+                # eng_norm  = np.clip(eng_norm, 0, 1)
+
+                # freq_center = 2.0  # typical walking cadence
+                # freq_width  = 0.8
+                # freq_score  = np.exp(-0.5 * ((frqs - freq_center)/freq_width)**2)
+
+                # stability_score = np.exp(-5 * rolling_std)   # penalize instability
+
+                # # ---- Normalize features ----
+                # eng_norm  = (engs - MIN_ENERGY) / (np.percentile(engs, 95) - MIN_ENERGY)
+                # eng_norm  = np.clip(eng_norm, 0, 1)
+
+                # freq_center = 2.0  # typical walking cadence
+                # freq_width  = 0.8
+                # freq_score  = np.exp(-0.5 * ((frqs - freq_center)/freq_width)**2)
+
+                # stability_score = np.exp(-5 * rolling_std)   # penalize instability
+
+                # # ---- Weighted fusion ----
+                # w_prob = 0.6
+                # w_eng  = 0.15
+                # w_freq = 0.15
+                # w_stab = 0.10
+
+                # fused_prob = (
+                #     w_prob * probs_smoothed +
+                #     w_eng  * eng_norm +
+                #     w_freq * freq_score +
+                #     w_stab * stability_score
+                # )
+
+                # y_pred, fused_smooth = segment_walking(
+                #     fused_prob,
+                #     step_sec=STEP_SEC,
+                #     smoothing_window=5,
+                #     high_thresh=0.6,
+                #     low_thresh=0.45,
+                #     min_bout_sec=5,
+                #     max_gap_sec=2
+                # )
+
+                # --- METHOD 1: Viterbi-like smoothing (no training needed) ---
+                # y_pred_raw = viterbi_smooth_gait(
+                #     probs, 
+                #     engs, 
+                #     frqs,
+                #     transition_cost=0.15,     # Tune this: higher = stickier states
+                #     min_gait_prob=0.75,
+                #     energy_weight=0.2,
+                #     freq_weight=0.1
+                # )
+
+                # # Apply bout constraints
+                # y_pred = apply_bout_constraints(
+                #     y_pred_raw,
+                #     min_bout_sec=3.0,   # Minimum 3-second bouts
+                #     max_gap_sec=2.0,    # Merge gaps < 2 seconds
+                #     step_sec=STEP_SEC
+                # )
+
+                # sp_pred = ((engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+
+                # y_pred, ensemble_score, signal_quality, eldernet_weight = ensemble_eldernet_signal_processing(
+                #     eldernet_prob=probs,
+                #     sp_predictions=sp_pred,  # From signal processing
+                #     energy=engs,
+                #     freq=frqs,
+                #     step_sec=STEP_SEC
+                # )
+
+                # Optional: Apply bout filtering on ensemble output
+                y_pred = apply_bout_constraints(
+                    y_pred,
+                    min_bout_sec=3.0,
+                    max_gap_sec=2.0,
+                    step_sec=STEP_SEC
+                )
+
                 
                 y_true_full = df_30hz['gt'].values
 
@@ -517,6 +897,6 @@ def main():
     subjects  = ['Hendrik', 'Tanya']
     metrics   = ['probability', 'energy', 'frequency']
 
-    plot_per_activity(results, subjects, metrics)
+    #plot_per_activity(results, subjects, metrics)
 
 if __name__ == "__main__":main()

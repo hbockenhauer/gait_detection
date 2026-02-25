@@ -14,7 +14,7 @@ from sklearn.metrics import f1_score, precision_recall_fscore_support, accuracy_
 from scipy.ndimage import median_filter
 import matplotlib.colors as mcolors
 import colorsys
-from eldernet_owndata import prepare_windows_overlapping, resample_to_30hz, CONF_THRESH, MIN_ENERGY, MAX_ENERGY, MIN_FREQ, MAX_FREQ
+from eldernet_owndata import prepare_windows_overlapping, resample_to_30hz, CONF_THRESH, MIN_ENERGY, MAX_ENERGY, MIN_FREQ, MAX_FREQ, apply_bout_constraints
 
 # --- CONFIGURATION ---
 DATASET_PATHS = [
@@ -96,7 +96,8 @@ def main():
                     # y_pred = (probs_smoothed > CONF_THRESH).astype(int)
 
                     #probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
-                    y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                    y_pred = ((probs > 0.65)) #& (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                    y_pred = apply_bout_constraints(y_pred, min_bout_sec=5.0, max_gap_sec=2.0, step_sec=1.0)
                     #y_pred = median_filter(y_pred_raw, size=3)
                     #y_pred = apply_bout_filtering(y_pred, min_bout_length=MIN_BOUT_SEC) # Remove bouts shorter than MIN_BOUT_SEC windows           
                     y_true_full = df_30hz['gt'].values
