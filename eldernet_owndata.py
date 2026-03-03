@@ -18,7 +18,7 @@ import time
 import psutil
 
 # --- CONFIGURATION ---
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
@@ -111,7 +111,7 @@ def prepare_windows_overlapping(df):
         freqs_fft = np.fft.rfftfreq(len(mag), d=1/fs)
         fft_vals = np.abs(np.fft.rfft(mag))
         return freqs_fft[np.argmax(fft_vals)]
-    
+
     # Create overlapping windows by looking at previous 10s of data for each timestamp   
     for i in range(WINDOW_SIZE, len(acc_data), STEP_SIZE):
         win = acc_data[i - WINDOW_SIZE:i]
@@ -721,8 +721,10 @@ def main():
                 # y_pred = ((engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
                 #        (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)                                          
 
-                y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
-                       (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                # y_pred = ((probs > CONF_THRESH) & (engs > MIN_ENERGY) & (engs < MAX_ENERGY) & 
+                #        (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+
+                y_pred = (probs > 0.65).astype(int)
 
                 # probs_smoothed = uniform_filter1d(probs, size=8)
                 # rolling_std = uniform_filter1d((probs - probs_smoothed)**2, size=5)**0.5

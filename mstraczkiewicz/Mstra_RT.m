@@ -88,13 +88,13 @@ for d = 1:length(dataPaths)
                     end
                 end
 
-                plotData.(sideLabel).T_vec = rt_T;
-                plotData.(sideLabel).peakF = rt_peakF;
-                plotData.(sideLabel).maxPk = rt_maxPk;
-                plotData.(sideLabel).ampVal = rt_ampVal;
-                plotData.(sideLabel).time = time_vec;
-                plotData.(sideLabel).y_pred = y_pred_rt;
-                plotData.(sideLabel).y_true = y_true;
+                % plotData.(sideLabel).T_vec = rt_T;
+                % plotData.(sideLabel).peakF = rt_peakF;
+                % plotData.(sideLabel).maxPk = rt_maxPk;
+                % plotData.(sideLabel).ampVal = rt_ampVal;
+                % plotData.(sideLabel).time = time_vec;
+                % plotData.(sideLabel).y_pred = y_pred_rt;
+                % plotData.(sideLabel).y_true = y_true;
 
                 % Calculate Metrics
                 evalIdx = windowSize:totalSamples;
@@ -110,9 +110,21 @@ for d = 1:length(dataPaths)
                 
                 fprintf('%-25s | %-8.2f | %-8.2f | %-8.2f | %-8.2f\n', ...
                         sprintf('%s_%s', folderName, sideLabel), acc, prec, rec, f1);
-                
-                summaryResults = [summaryResults; table({folderName}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
-                    'VariableNames', {'Subject','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
+
+                % --- EXTRACTION OF SUBJECT AND ACTIVITY ---
+                nameParts = split(folderName, '_');
+                if length(nameParts) >= 2
+                    activityType = nameParts{1};
+                    subjectName  = nameParts{2};
+                else
+                    activityType = 'Unknown';
+                    subjectName  = 'Unknown';
+                end
+
+                % Update the table creation
+                summaryResults = [summaryResults; table({subjectName}, {activityType}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
+                    'VariableNames', {'Subject','Activity','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
+               
             catch ME
                 fprintf('Error in %s: %s\n', folderName, ME.message);
             end
@@ -176,26 +188,41 @@ for d = 1:length(dataPaths)
     end
 end
 
-% --- 5. GLOBAL PERFORMANCE SUMMARY ---
+% --- 5. DETAILED PERFORMANCE SUMMARIES ---
 if ~isempty(summaryResults)
-    TP = sum(summaryResults.TP); TN = sum(summaryResults.TN);
-    FP = sum(summaryResults.FP); FN = sum(summaryResults.FN);
     
-    globalAcc  = (TP + TN) / (TP + TN + FP + FN);
-    globalPrec = TP / (TP + FP); if (TP+FP)==0, globalPrec = 1; end
-    globalRec  = TP / (TP + FN); if (TP+FN)==0, globalRec = 1; end
-    globalF1   = 2 * (globalPrec * globalRec) / (globalPrec + globalRec);
+    % A. Summary by Wrist
+    wristSummary = groupsummary(summaryResults, 'Wrist', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
     
+    % B. Summary by Activity
+    activitySummary = groupsummary(summaryResults, 'Activity', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
+    
+    % C. Summary by Subject
+    subjectSummary = groupsummary(summaryResults, 'Subject', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
+
     fprintf('\n======================================================================\n');
-    fprintf('GLOBAL PERFORMANCE (REAL-TIME CAUSAL LOGIC)\n');
+    fprintf('DETAILED SUMMARIES (REAL-TIME CAUSAL LOGIC)\n');
     fprintf('----------------------------------------------------------------------\n');
-    fprintf('Accuracy:  %.4f\n', globalAcc);
-    fprintf('Precision: %.4f\n', globalPrec);
-    fprintf('Recall:    %.4f\n', globalRec);
-    fprintf('F1-Score:  %.4f\n', globalF1);
+    
+    disp('BY WRIST:');
+    disp(wristSummary(:, [1, 3:6])); % Displaying name and means
+    
+    fprintf('----------------------------------------------------------------------\n');
+    disp('BY ACTIVITY:');
+    disp(activitySummary(:, [1, 3:6]));
+    
+    fprintf('----------------------------------------------------------------------\n');
+    disp('BY SUBJECT:');
+    disp(subjectSummary(:, [1, 3:6]));
+    
     fprintf('======================================================================\n');
     
-    writetable(summaryResults, fullfile(PlotPath, 'MStra_RT_Results_Full.csv'));
+    % Save the detailed summaries to one Excel file with different sheets
+    resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
+    writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
+    writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
+    writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
+    writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
 end
 
 % % --- After the for loop ---
