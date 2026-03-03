@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test1_Tanya"
-file_name = "s2_2LW.txt"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test4_Hendrik"
+file_name = "s1_1RW.txt"
 SAMPLING_RATE = 50 
-DEBUG = True; 
+DEBUG = False; 
 
 if __name__ == "__main__":
 
@@ -28,8 +28,11 @@ if __name__ == "__main__":
     try:
         # 1. Load Data
         df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
-                        sep=',',  # Use whitespace as separator (adjust if needed)
+                        sep='\t',  # Use whitespace as separator (adjust if needed)
                         low_memory=False)
+        
+        #### CLIPPING THE FIST 10 SECONDS
+        df = df[500:]
 
         # 2. Identify and Rename Columns to Anatomical Labels
         # The package requires: acc_pa, acc_ml, acc_is
@@ -45,14 +48,21 @@ if __name__ == "__main__":
         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
         
         # 3. Ground Truth
-        if False:
-            y_true = np.ones(len(df))
-        else:
+        # if False:
+        #     y_true = np.ones(len(df))
+        if 'test' in DATA_PATH:
             y_true = np.zeros(len(df))
             y_true = df['Label']
+        else:
+            y_true = np.ones(len(df))
+        
+        if DEBUG == True:
             print('y true', y_true)
             print('ones',len(y_true==1))
             print('zeros', len(y_true==0))
+        diffs = np.diff(y_true)
+        diffs_pos = np.where((np.abs(diffs) == 1))
+        #print(diffs_pos)
         #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
         #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
@@ -63,7 +73,7 @@ if __name__ == "__main__":
         # detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
         
         # KheirkhahanGSD
-        gsd = KheirkhahanGSD(visual=True)
+        gsd = KheirkhahanGSD(visual=True, switch=diffs_pos[0])
         detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:

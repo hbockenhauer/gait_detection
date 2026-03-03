@@ -4,7 +4,7 @@ import numpy as np
 import glob
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from multimob.GSD.GSD3 import KheirkhahanGSD
+from GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
@@ -15,12 +15,13 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
-GSD_n = 2
+GSD_n = 3
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
 SAVE_RESULTS = False 
+PRINT_STATS = True 
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -44,6 +45,9 @@ def load_wrist_file(filepath: str) -> pd.DataFrame | None:
     try:
         df = pd.read_csv(filepath, sep=None, engine="python")
         df = df.reset_index(drop=True)
+
+        # clip the first 10 seconds 
+        df = df[500:]
 
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
@@ -71,9 +75,10 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     rw_chunks: list[pd.DataFrame] = []
     lw_chunks: list[pd.DataFrame] = []
 
-    print(f"Scanning: {data_path}\n")
-    print(f"{'Folder':<35} | {'Cond':<10} | {'RW rows':>8} | {'LW rows':>8}")
-    print("-" * 80)
+    if PRINT_STATS == True:
+        print(f"Scanning: {data_path}\n")
+        print(f"{'Folder':<35} | {'Cond':<10} | {'RW rows':>8} | {'LW rows':>8}")
+        print("-" * 80)
 
     for folder in sorted(os.listdir(data_path)):
         folder_path = os.path.join(data_path, folder)
@@ -107,10 +112,11 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                 lw_rows = len(lw_df)
 
         
-        if rw_rows > 0 or lw_rows > 0:
+        if (rw_rows > 0 or lw_rows > 0) and PRINT_STATS:
             print(f"{folder[:35]:<35} | {condition:<10} | {rw_rows:>8} | {lw_rows:>8}")
 
-    print("-" * 80)
+    if PRINT_STATS == True:
+        print("-" * 80)
 
     col_order = ['subject', 'condition', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
 
@@ -144,7 +150,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 output_name ='HickeyGSD_Results.csv'
             case 3:
                 # Run Kheirkhahan GSD
-                gsd = KheirkhahanGSD()
+                gsd = KheirkhahanGSD(visual=False)
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 output_name = 'KheirkhahanGSD_Results.csv'
             case 4: 
@@ -231,11 +237,11 @@ def process_gait(rw_merged: pd.DataFrame,
                 'Condition': condition,
                 **metrics,
             })
-            
 
-            print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
-                  f"{metrics['Accuracy']:.2f}   | {metrics['Precision']:.2f}   | "
-                  f"{metrics['Recall']:.2f}   | {metrics['F1']:.2f}")
+            if PRINT_STATS == True: 
+                print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
+                      f"{metrics['Accuracy']:.2f}   | {metrics['Precision']:.2f}   | "
+                      f"{metrics['Recall']:.2f}   | {metrics['F1']:.2f}")
 
     if not results:
         print("No results to summarise.")
@@ -291,10 +297,10 @@ def process_gait(rw_merged: pd.DataFrame,
         f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
                                                               if (precision_av + recall_av) > 0 else 0.0
         print(f"{label:<35} | {'':5} | {'':10} | "
-              f"{accuracy_av:.2f}   | "
-              f"{precision_av:.2f}   | "
-              f"{recall_av:.2f}   | "
-              f"{f1_av:.2f}")
+              f"{accuracy_av:.5f}   | "
+              f"{precision_av:.5f}   | "
+              f"{recall_av:.5f}   | "
+              f"{f1_av:.5f}")
 
     # Collect average rows for CSV
     avg_rows: list[dict] = []

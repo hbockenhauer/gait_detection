@@ -149,7 +149,7 @@ class ActivityCounts:
         np.ndarray
             The accumulated data.
         """
-        n_samples = 10
+        n_samples = 10  
         padded_data = np.pad(data, (0, n_samples - len(data) % n_samples), 'constant', constant_values=0)
         return padded_data.reshape((len(padded_data) // n_samples, -1)).sum(axis=1)
 
@@ -184,7 +184,7 @@ class ActivityCounts:
         return self
     
     def calculate_debug(self, data: np.ndarray, sampling_rate: Union[int, float],
-                        zoom_start: int = None, zoom_end: int = None) -> 'ActivityCounts':
+                        zoom_start: int = None, zoom_end: int = None, switch: np.ndarray = None) -> 'ActivityCounts':
         self.data = data
         self.sampling_rate = sampling_rate
         tmp = self.data.copy()
@@ -241,6 +241,7 @@ class ActivityCounts:
         fig, axes = plt.subplots(n, 1, figsize=(12, 2.5 * n))
         if n == 1:
             axes = [axes]
+        n_raw = len(steps[0])
 
         for i, (ax, signal_data, label) in enumerate(zip(axes, steps, labels)):
             ax.plot(signal_data, linewidth=0.8, color=plt.cm.viridis(i / n))
@@ -248,20 +249,25 @@ class ActivityCounts:
             ax.set_ylabel("Amplitude")
             ax.set_xlabel("Sample index")
             ax.grid(True, alpha=0.3)
+            if switch is not None:
+                n_samples = len(signal_data)
+                scale = n_samples / n_raw
+                for sw in switch:
+                    scaled_idx = sw * scale
+                    ax.axvline(x=scaled_idx, color='red', linestyle='--', alpha=0.7, linewidth=1)
 
         fig.suptitle("ActivityCounts Pipeline — tmp at each step", fontsize=12, fontweight='bold')
         if zoom_start is not None or zoom_end is not None:
             for i, ax in enumerate(axes):
                 # Scale x-limits to account for downsampling at each step
                 n_samples = len(steps[i])
-                n_raw = len(steps[0])
                 scale = n_samples / n_raw
 
                 x_start = int((zoom_start or 0) * scale)
                 x_end = int((zoom_end or n_raw) * scale)
                 ax.set_xlim(x_start, x_end)
         fig.tight_layout()
-        plt.show()
+        fig.show()
 
         self.activity_counts_ = activity_counts
-        return self, tmp
+        return self

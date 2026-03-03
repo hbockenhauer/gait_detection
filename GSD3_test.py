@@ -40,7 +40,7 @@ class KheirkhahanGSD:
     """
 
 
-    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True, visual: bool=False):
+    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True, visual: bool=False, switch: np.ndarray = None):
         """
         Initialize the class.
 
@@ -61,6 +61,7 @@ class KheirkhahanGSD:
         self.threshold = 0.58
         self.cwb = cwb
         self.visual = visual
+        self.switch = switch
 
     def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration", vertical_lines=None) -> None:
         """
@@ -76,7 +77,7 @@ class KheirkhahanGSD:
         if type(data) is np.ndarray:
             #names = 
             data = pd.DataFrame(data, columns=[title])
-        data = data[600:]
+        data = data
         time = np.arange(len(data)) / sampling_rate_hz
         cols = list(data.columns[:3])
 
@@ -85,15 +86,23 @@ class KheirkhahanGSD:
             ax.plot(time, data[col], label=col)
 
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Acceleration (g)")
+        #ax.set_ylabel("Acceleration (g)")
         ax.set_title(title)
         ax.legend()
+        #print(self.switch)
+        if self.switch is not None:
+            for sw in self.switch: 
+                if 0 <= sw < len(data):
+                    time_of_change = time[sw]
+                    ax.axvline(x=time_of_change, color='red', linestyle='--', alpha=0.7, linewidth=1)
+
         if vertical_lines is not None:
             for idx in vertical_lines:
                 if 0 <= idx < len(data):
                     time_at_idx = time[idx]
-                    ax.axvline(x=time_at_idx, color='red', linestyle='--', alpha=0.7, linewidth=1)
+                    ax.axvline(x=time_at_idx, color='blue', linestyle='--', alpha=0.7, linewidth=1)
 
+        
         fig.tight_layout()
         fig.show()
         return fig
@@ -133,8 +142,13 @@ class KheirkhahanGSD:
         if self.visual == True:
             self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, title="norm_acc")
         #AC = ActivityCounts()
-        activity_counts = ActivityCounts().calculate_debug(data=norm_acc.copy(), sampling_rate=self.sampling_rate_hz,
-                                                           zoom_start=2000, zoom_end=2500).activity_counts_
+        if self.visual == True: 
+            activity_counts = ActivityCounts().calculate_debug(data=norm_acc.copy(), 
+                                                           sampling_rate=self.sampling_rate_hz, 
+                                                           switch=self.switch).activity_counts_
+        else:
+            activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
+                                                         sampling_rate=self.sampling_rate_hz).activity_counts_
         if self.visual == True: 
             #self.plot_acceleration_data(tmp, sampling_rate_hz, title="tmp")
             self.plot_acceleration_data(activity_counts, sampling_rate_hz, title="activity counts")
