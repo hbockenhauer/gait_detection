@@ -12,7 +12,6 @@ FILES = [
 ]
 
 def parse_time(t_str):
-    print('here')
     h, m, s_ms = t_str.strip().split(':')
     s, ms = s_ms.split('.')
     return time(int(h), int(m), int(s), int(ms) * 1000)
