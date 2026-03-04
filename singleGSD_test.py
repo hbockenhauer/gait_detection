@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test4_Hendrik"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test8_Hendrik"
 file_name = "s1_1RW.txt"
 SAMPLING_RATE = 50 
 DEBUG = False; 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         # detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
         
         # KheirkhahanGSD
-        gsd = KheirkhahanGSD(visual=True, switch=diffs_pos[0])
+        gsd = KheirkhahanGSD(cwb=False, visual=True, switch=diffs_pos[0])
         detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
         
         if hasattr(detected_bouts, 'gs_list_') and DEBUG:

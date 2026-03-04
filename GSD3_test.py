@@ -63,7 +63,13 @@ class KheirkhahanGSD:
         self.visual = visual
         self.switch = switch
 
-    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, title: str = "3-Axis Acceleration", vertical_lines=None) -> None:
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
+                               title: str = "3-Axis Acceleration", 
+                               xaxis: str = None,
+                               yaxis: str = None,
+                               vertical_lines=None, 
+                               scale: float = 1.0, 
+                               switch_sampling_rate: float = None) -> None:
         """
         Plot 3-axis acceleration data over time.
 
@@ -85,24 +91,29 @@ class KheirkhahanGSD:
         for col in cols:
             ax.plot(time, data[col], label=col)
 
-        ax.set_xlabel("Time (s)")
-        #ax.set_ylabel("Acceleration (g)")
+        if xaxis is not None:
+            ax.set_xlabel(xaxis) 
+        if yaxis is not None:
+            ax.set_ylabel(yaxis)
         ax.set_title(title)
         ax.legend()
-        #print(self.switch)
         if self.switch is not None:
+            sr = switch_sampling_rate if switch_sampling_rate is not None else sampling_rate_hz
             for sw in self.switch: 
-                if 0 <= sw < len(data):
-                    time_of_change = time[sw]
+                if 0 <= sw < len(data) * (sr / sampling_rate_hz):  # bounds check in original samples
+                    time_of_change = sw / sr  # convert switch index (original samples) → seconds
                     ax.axvline(x=time_of_change, color='red', linestyle='--', alpha=0.7, linewidth=1)
+
 
         if vertical_lines is not None:
             for idx in vertical_lines:
                 if 0 <= idx < len(data):
                     time_at_idx = time[idx]
+                    time_at_idx = scale * time_at_idx
                     ax.axvline(x=time_at_idx, color='blue', linestyle='--', alpha=0.7, linewidth=1)
 
-        
+        #print("ploting ", len(data))
+        #print('plot done')
         fig.tight_layout()
         fig.show()
         return fig
@@ -130,7 +141,7 @@ class KheirkhahanGSD:
         self.data_len = len(data)
 
         if self.visual == True:
-            self.plot_acceleration_data(data, sampling_rate_hz)
+            self.plot_acceleration_data(data, sampling_rate_hz, xaxis='Time(s)', yaxis='Raw accelerations')
 
         # In the current implementation for wrist worn sensors we use the norm
         acc = self.data.iloc[:, 0:3]
@@ -140,7 +151,8 @@ class KheirkhahanGSD:
         # turning acc to g-units for activity counts calculation
         norm_acc = norm_acc / 9.81
         if self.visual == True:
-            self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, title="norm_acc")
+            self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, 
+                                        title="norm_acc", xaxis='Time(s)', yaxis="Normalized Acceleration")
         #AC = ActivityCounts()
         if self.visual == True: 
             activity_counts = ActivityCounts().calculate_debug(data=norm_acc.copy(), 
@@ -151,7 +163,10 @@ class KheirkhahanGSD:
                                                          sampling_rate=self.sampling_rate_hz).activity_counts_
         if self.visual == True: 
             #self.plot_acceleration_data(tmp, sampling_rate_hz, title="tmp")
-            self.plot_acceleration_data(activity_counts, sampling_rate_hz, title="activity counts")
+            scale_AC = len(activity_counts) / self.data_len
+            # print("scale_AC", scale_AC)
+            self.plot_acceleration_data(activity_counts, sampling_rate_hz=1, title="activity counts",
+                                        scale = scale_AC, yaxis="activity", switch_sampling_rate=self.sampling_rate_hz)
         
         # shortcut if all activity counts are 0 no gait can be detected
         if np.all(activity_counts == 0):
@@ -166,6 +181,10 @@ class KheirkhahanGSD:
 
         # Creates overlapping windows of activity counts data (activity counts are expressed in seconds)
         windows = window(activity_counts, self.win_size_s, self.win_shift_s, copy=True)
+        # for 265 1s bin, windows are of size (257, 9) (265-9+1)
+        # print("windows", windows)
+        # print('size', windows.shape)
+        # print(windows[:3, :])
 
         # Outlier removal only when window size is 5 or higher otherwise this method might remove regular values
         if self.win_size_s > 4:
@@ -176,6 +195,10 @@ class KheirkhahanGSD:
 
         # Calculates the ratio of inactive data in each window
         inactivity_parameter = calc_activity_parameter(filtered_activity_counts)
+        # inactivity_parameter has the size of the number of windows 
+        # print("inactivity_parameter", inactivity_parameter)
+        # print('size', inactivity_parameter.shape)
+        # print(inactivity_parameter[:3,])
 
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
@@ -188,6 +211,8 @@ class KheirkhahanGSD:
 
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
+        if self.visual == True: 
+            self.plot_acceleration_data(detected_walking, sampling_rate_hz, title='detected walking')
 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file

@@ -149,8 +149,11 @@ class ActivityCounts:
         np.ndarray
             The accumulated data.
         """
-        n_samples = 10  
-        padded_data = np.pad(data, (0, n_samples - len(data) % n_samples), 'constant', constant_values=0)
+        n_samples = 10  # coming from 10Hz downsampling
+        pad_amount = (n_samples - len(data) % n_samples) % n_samples
+        padded_data = np.pad(data, (0, pad_amount), 'constant', constant_values=0)
+        #print('padded_data',padded_data)
+        #print('size', len(padded_data))
         return padded_data.reshape((len(padded_data) // n_samples, -1)).sum(axis=1)
 
     def calculate(self, data: np.ndarray, sampling_rate: Union[int, float]) -> 'ActivityCounts':
@@ -204,12 +207,12 @@ class ActivityCounts:
         # Step 2: Aliasing filter (bandpass 0.01–7 Hz)
         tmp = self._aliasing_filter(tmp, 30)
         steps.append(tmp.copy())
-        labels.append(f"2. Aliasing filter\n(bandpass 0.01–7 Hz)")
+        labels.append(f"2. Aliasing filter\n(bandpass 0.01–7 Hz) , n={len(tmp)})")
 
         # Step 3: ActiGraph filter
         tmp = self._actigraph_filter(tmp)
         steps.append(tmp.copy())
-        labels.append(f"3. ActiGraph filter")
+        labels.append(f"3. ActiGraph filter, n={len(tmp)})")
 
         # Step 4: Downsample to 10 Hz
         tmp = self._downsample(tmp, 30, 10)
@@ -219,22 +222,22 @@ class ActivityCounts:
         # Step 5: Absolute value
         tmp = np.abs(tmp)
         steps.append(tmp.copy())
-        labels.append(f"5. Absolute value")
+        labels.append(f"5. Absolute value, n={len(tmp)})")
 
         # Step 6: Truncate (clip to [0.068, 2.13] g)
         tmp = self._truncate(tmp)
         steps.append(tmp.copy())
-        labels.append(f"6. Truncate\n([0.068, 2.13] g)")
+        labels.append(f"6. Truncate\n([0.068, 2.13] g), n={len(tmp)})")
 
         # Step 7: Digitize to 8-bit
         tmp = self._digitize_8bit(tmp)
         steps.append(tmp.copy())
-        labels.append(f"7. Digitize 8-bit")
+        labels.append(f"7. Digitize 8-bit, n={len(tmp)})")
 
         # Step 8: Accumulate into 1s bins
         activity_counts = self._accumulate_second_bins(tmp)
         steps.append(activity_counts.copy())
-        labels.append(f"8. Accumulate 1s bins\n(activity counts, n={len(activity_counts)})")
+        labels.append(f"8. Accumulate 1s bins\n(activity counts, n={len(activity_counts)}), n={len(tmp)})")
 
         # --- Plot all steps ---
         n = len(steps)
