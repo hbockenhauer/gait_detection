@@ -83,7 +83,7 @@ class KheirkhahanGSD:
         if type(data) is np.ndarray:
             #names = 
             data = pd.DataFrame(data, columns=[title])
-        data = data
+
         time = np.arange(len(data)) / sampling_rate_hz
         cols = list(data.columns[:3])
 
@@ -204,7 +204,8 @@ class KheirkhahanGSD:
         walking_windows = np.zeros(len(windows))
         walking_windows[inactivity_parameter < self.threshold] = 1
         if self.visual == True: 
-            self.plot_acceleration_data(walking_windows, sampling_rate_hz, title='walking windows')
+            self.plot_acceleration_data(walking_windows, sampling_rate_hz=1, title="walking windows",
+                                        scale = scale_AC, yaxis="walking", switch_sampling_rate=self.sampling_rate_hz)
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
