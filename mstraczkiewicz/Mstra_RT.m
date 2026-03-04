@@ -4,8 +4,8 @@ clear; clc; close all;
 % --- 1. CONFIGURATION ---
 dataPaths = {
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
 
@@ -49,23 +49,76 @@ for d = 1:length(dataPaths)
             try
                 opts = detectImportOptions(fullFilePath);
                 opts.VariableNamingRule = 'preserve';
+                % Force the first two columns to be read as string to avoid auto-conversion conflicts
+                opts = setvartype(opts, [1, 2], 'string'); 
                 data = readtable(fullFilePath, opts);
                 
-                vm_all = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
-                totalSamples = length(vm_all);
-                time_vec = (0:totalSamples-1)' / fs;
+                % --- ROBUST CLEANING FOR Q_SENSE FORMAT ---
+                
+                % 1. Combine Date and Time safely
+                % We use 'f' which is flexible for 1 to 9 fractional second digits
+                % --- ROBUST CLEANING FOR Q_SENSE FORMAT ---
+                
+                % 1. Combine Date and Time safely
+                datePart = string(data{:,1});
+                timePart = string(data{:,2});
+                dateTimeStr = datePart + " " + timePart;
+                
+                % Use auto-parsing (no 'InputFormat') - it's much more flexible 
+                % for varying fractional second lengths in older MATLAB versions.
+                try
+                    fullDateTime = datetime(dateTimeStr);
+                catch
+                    % Fallback: If auto-parsing fails, try the standard SSS format
+                    fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
+                end
+                
+                % Verify conversion worked
+                if any(isnat(fullDateTime))
+                    % If some rows failed, remove them
+                    validTime = ~isnat(fullDateTime);
+                    fullDateTime = fullDateTime(validTime);
+                    data = data(validTime, :);
+                end
+                
+                % 2. Remove Duplicates: Keep only the first instance
+                [~, uniqueIdx] = unique(fullDateTime, 'stable');
+                data = data(uniqueIdx, :);
+                fullDateTime = fullDateTime(uniqueIdx);
+                
+                % 3. Sort Chronologically
+                [fullDateTime, sortIdx] = sort(fullDateTime);
+                data = data(sortIdx, :);
 
-                % Ground Truth Extraction
-                varNames = data.Properties.VariableNames;
-                labelIdx = find(strcmpi(varNames, 'label'), 1);
+                % 4. Interpolate Gaps to maintain 50Hz
+                % Convert to relative seconds
+                actualTimeSeconds = seconds(fullDateTime - fullDateTime(1));
+                % Remove any non-unique relative seconds that might have survived
+                [actualTimeSeconds, cleanIdx] = unique(actualTimeSeconds, 'stable');
+                data = data(cleanIdx, :);
+                
+                uniformTime = (0:1/fs:actualTimeSeconds(end))';
+                
+                % Extract acceleration (Columns 6, 7, 8)
+                rawAcc = data{:, 6:8};
+                
+                % Interpolate to fix the "jumps" and "gaps"
+                cleanAcc = interp1(actualTimeSeconds, rawAcc, uniformTime, 'linear', 'extrap');
+                
+                % 5. Finalize variables for the RT Loop
+                vm_all = sqrt(sum(cleanAcc.^2, 2));
+                totalSamples = length(vm_all);
+                time_vec = uniformTime;
+                
+                % Sync Ground Truth
+                labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
                 if ~isempty(labelIdx)
-                    y_true = data{:, labelIdx};
-                    if iscell(y_true) || isstring(y_true), y_true = str2double(y_true); end
-                    y_true(isnan(y_true)) = 0;
+                    y_true_raw = data{:, labelIdx};
+                    if iscell(y_true_raw) || isstring(y_true_raw), y_true_raw = str2double(y_true_raw); end
+                    y_true = interp1(actualTimeSeconds, y_true_raw, uniformTime, 'nearest', 0);
                 else
                     y_true = double(contains(lower(folderName), ["walk","stairs"])) * ones(totalSamples, 1);
                 end
-
                 % --- REAL-TIME CAUSAL SIMULATION ---
                 y_pred_rt = zeros(totalSamples, 1);
                 circularBuffer = zeros(windowSize, 1);
@@ -88,13 +141,13 @@ for d = 1:length(dataPaths)
                     end
                 end
 
-                % plotData.(sideLabel).T_vec = rt_T;
-                % plotData.(sideLabel).peakF = rt_peakF;
-                % plotData.(sideLabel).maxPk = rt_maxPk;
-                % plotData.(sideLabel).ampVal = rt_ampVal;
-                % plotData.(sideLabel).time = time_vec;
-                % plotData.(sideLabel).y_pred = y_pred_rt;
-                % plotData.(sideLabel).y_true = y_true;
+                plotData.(sideLabel).T_vec = rt_T;
+                plotData.(sideLabel).peakF = rt_peakF;
+                plotData.(sideLabel).maxPk = rt_maxPk;
+                plotData.(sideLabel).ampVal = rt_ampVal;
+                plotData.(sideLabel).time = time_vec;
+                plotData.(sideLabel).y_pred = y_pred_rt;
+                plotData.(sideLabel).y_true = y_true;
 
                 % Calculate Metrics
                 evalIdx = windowSize:totalSamples;
@@ -130,61 +183,61 @@ for d = 1:length(dataPaths)
             end
         end
 
-        % % --- 4. PAIRED PLOTTING (CORRECTED) ---
-        % if ~isempty(fieldnames(plotData))
-        %     fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
-        %     sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
-        %     colors = {'#0072BD', '#D95319'}; 
-        %     sides = fieldnames(plotData);
-        %     ax = zeros(4,1); 
-        % 
-        %     % Subplot 1: Frequency
-        %     ax(1) = subplot(4,1,1); hold on;
-        %     for s = 1:length(sides)
-        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).peakF, 'Color', colors{s}, 'LineWidth', 1.2);
-        %     end
-        %     yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
-        % 
-        %     % Subplot 2: Power
-        %     ax(2) = subplot(4,1,2); hold on;
-        %     for s = 1:length(sides)
-        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).maxPk, 'Color', colors{s});
-        %     end
-        %     yline(P_THRESH, 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
-        % 
-        %     % Subplot 3: Amplitude
-        %     ax(3) = subplot(4,1,3); hold on;
-        %     for s = 1:length(sides)
-        %         plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).ampVal, 'Color', colors{s});
-        %     end
-        %     yline(A_THRESH, 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
-        % 
-        %     % Subplot 4: Detection
-        %     ax(4) = subplot(4,1,4); hold on;
-        %     h_leg = [];
-        %     for s = 1:length(sides)
-        %         a_h = area(plotData.(sides{s}).time, plotData.(sides{s}).y_true, 'FaceColor', colors{s}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
-        %         p_h = stairs(plotData.(sides{s}).time, plotData.(sides{s}).y_pred, 'Color', colors{s}, 'LineWidth', 1.5);
-        %         h_leg = [h_leg, a_h, p_h]; 
-        %     end
-        %     ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
-        % 
-        %     % Fix Legend & Alignment
-        %     if length(sides) == 2
-        %         legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
-        %             'Orientation', 'horizontal', 'Location', 'southoutside');
-        %     else
-        %         legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
-        %     end
-        % 
-        %     linkaxes(ax, 'x'); 
-        %     if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
-        %         xlim(ax(1), [0 max(plotData.(sides{1}).T_vec)]);
-        %     end
-        % 
-        %     saveas(fig, fullfile(PlotPath, [folderName, '_RT_Plot.png']));
-        %     close(fig);
-        % end
+        % --- 4. PAIRED PLOTTING ---
+        if ~isempty(fieldnames(plotData))
+            fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
+            sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
+            colors = {'#0072BD', '#D95319'}; 
+            sides = fieldnames(plotData);
+            ax = zeros(4,1); 
+
+            % Subplot 1: Frequency
+            ax(1) = subplot(4,1,1); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).peakF, 'Color', colors{s}, 'LineWidth', 1.2);
+            end
+            yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
+
+            % Subplot 2: Power
+            ax(2) = subplot(4,1,2); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).maxPk, 'Color', colors{s});
+            end
+            yline(P_THRESH, 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
+
+            % Subplot 3: Amplitude
+            ax(3) = subplot(4,1,3); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).ampVal, 'Color', colors{s});
+            end
+            yline(A_THRESH, 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
+
+            % Subplot 4: Detection
+            ax(4) = subplot(4,1,4); hold on;
+            h_leg = [];
+            for s = 1:length(sides)
+                a_h = area(plotData.(sides{s}).time, plotData.(sides{s}).y_true, 'FaceColor', colors{s}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+                p_h = stairs(plotData.(sides{s}).time, plotData.(sides{s}).y_pred, 'Color', colors{s}, 'LineWidth', 1.5);
+                h_leg = [h_leg, a_h, p_h]; 
+            end
+            ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
+
+            % Fix Legend & Alignment
+            if length(sides) == 2
+                legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
+                    'Orientation', 'horizontal', 'Location', 'southoutside');
+            else
+                legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
+            end
+
+            linkaxes(ax, 'x'); 
+            if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
+                xlim(ax(1), [0 max(plotData.(sides{1}).T_vec)]);
+            end
+
+            saveas(fig, fullfile(PlotPath, [folderName, '_RT_Plot.png']));
+            close(fig);
+        end
     end
 end
 

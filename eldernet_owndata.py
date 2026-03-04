@@ -52,9 +52,27 @@ def load_data(filepath):
     df = pd.read_csv(filepath, sep=None, engine="python")
     df = df.reset_index(drop=True)
 
-    time_seconds = np.arange(len(df)) / SAMPLE_RATE_QSENSE
-
     parent_folder = os.path.basename(os.path.dirname(filepath))
+
+    # --- CREATE DATETIME COLUMN ---
+    df['datetime'] = pd.to_datetime(
+        df.iloc[:, 0].astype(str) + ' ' + df.iloc[:, 1].astype(str),
+        errors='coerce'
+    )
+
+    # Remove rows with invalid timestamps
+    df = df.dropna(subset=['datetime'])
+
+    # Sort chronologically (fix jump-backs)
+    df = df.sort_values('datetime')
+
+    # Remove duplicate timestamps (keep first instance only)
+    df = df.drop_duplicates(subset='datetime', keep='first')
+
+    df = df.reset_index(drop=True)
+
+    # Convert to seconds relative to start
+    time_seconds = (df['datetime'] - df['datetime'].iloc[0]).dt.total_seconds().values  
 
     # -------- CASE 1: Sample-level label exists --------
     if 'label' in df.columns or 'Label' in df.columns:
@@ -74,7 +92,8 @@ def load_data(filepath):
         'gt': sample_gt
     })
 
-    data = data[data['time_sec'] >= 10.0].reset_index(drop=True)
+    # Remove first 10s of data to avoid initial noise/artifacts
+    #data = data[data['time_sec'] >= 10.0].reset_index(drop=True)
 
     return data
 
@@ -374,7 +393,8 @@ def plot_per_activity(results_list, subjects, metrics):
 
             for result in subject_results:
                 timestamps = result['timestamps']
-                y_true = result['y_true']
+                timestamps_raw = result['raw_timestamps']
+                y_true_raw = result['raw_gt']
                 y_pred = result['y_pred']
                 wrist = result['wrist']
 
@@ -386,9 +406,9 @@ def plot_per_activity(results_list, subjects, metrics):
 
                 # --- Ground Truth (thick solid band) ---
                 ax_gt_pred.fill_between(
-                    timestamps,
+                    timestamps_raw,
                     0,
-                    y_true,
+                    y_true_raw,
                     step='post',
                     alpha=0.25,
                     color=base_color,
@@ -802,26 +822,35 @@ def main():
                 # )
 
                 # Optional: Apply bout filtering on ensemble output
-                y_pred = apply_bout_constraints(
-                    y_pred,
-                    min_bout_sec=3.0,
-                    max_gap_sec=2.0,
-                    step_sec=STEP_SEC
-                )
+                # y_pred = apply_bout_constraints(
+                #     y_pred,
+                #     min_bout_sec=3.0,
+                #     max_gap_sec=2.0,
+                #     step_sec=STEP_SEC
+                # )
 
                 
+                # --- Robust computation of window-level GT to match number of windows ---
+                n_windows = len(probs)  # number of predicted windows
                 y_true_full = df_30hz['gt'].values
 
-                # Convert sample-level GT to window-level GT
-                y_true = []
-                timestamps = []
-                for i in range(0, len(y_true_full) - WINDOW_SIZE + 1, STEP_SIZE):
-                    segment = y_true_full[i:i + WINDOW_SIZE]
-                    y_true.append(int(np.mean(segment) > 0.5))
-                    timestamps.append(df_30hz['time_sec'].values[i])
+                # Compute start indices of each window
+                start_idxs = np.arange(0, n_windows * STEP_SIZE, STEP_SIZE)
+                # Ensure we don't go beyond the signal
+                start_idxs = start_idxs[start_idxs + WINDOW_SIZE <= len(y_true_full)]
 
-                y_true = np.array(y_true)
-                timestamps = np.array(timestamps)
+                y_true = np.array([
+                    int(np.mean(y_true_full[i:i + WINDOW_SIZE]) > 0.5)
+                    for i in start_idxs
+                ])
+                timestamps = df_30hz['time_sec'].values[start_idxs]
+
+                # If y_true ends up shorter than y_pred due to truncation at end, pad last value
+                if len(y_true) < len(y_pred):
+                    n_pad = len(y_pred) - len(y_true)
+                    y_true = np.pad(y_true, (0, n_pad), mode='edge')
+                    timestamps = np.pad(timestamps, (0, n_pad), mode='edge')
+
 
                 # Compute metrics
                 if np.sum(y_true) == 0:
@@ -849,6 +878,8 @@ def main():
                     'wrist': wrist,
                     'file_path': file,
                     # Raw data for plotting
+                    'raw_timestamps': df_30hz['time_sec'].values,
+                    'raw_gt': df_30hz['gt'].values,
                     'timestamps': timestamps,
                     'y_true': y_true,
                     'y_pred': y_pred,
@@ -899,6 +930,6 @@ def main():
     subjects  = ['Hendrik', 'Tanya']
     metrics   = ['probability', 'energy', 'frequency']
 
-    #plot_per_activity(results, subjects, metrics)
+    plot_per_activity(results, subjects, metrics)
 
 if __name__ == "__main__":main()
