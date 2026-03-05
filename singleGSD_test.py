@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test8_Hendrik"
-file_name = "s1_1RW.txt"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik"
+file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = False; 
 

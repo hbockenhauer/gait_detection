@@ -10,7 +10,9 @@ from GSD2a import HickeyGSD
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
+    #r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    #r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed", 
 ]
 GSD_n = 3
 SAMPLING_RATE = 50 
@@ -41,7 +43,10 @@ def load_file(filepath: str) -> pd.DataFrame | None:
         df = df.reset_index(drop=True)
 
         # clip the first 10 seconds 
-        df = df[500:]
+        if "s3_3RL.txt" in filepath:
+            df = df
+        else:
+            df = df[500:]
 
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
@@ -370,8 +375,8 @@ def process_leg(rl_merged: pd.DataFrame):
             
     results = []
 
-    print(f"\n{'Subject':<35} | {'Cond':<10} | "
-          f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+    print(f"\n{'Subject':<35} | "
+          f"{'Acc':<8} | {'Prec':<8} | {'Rec':<8} | {'F1':<8}")
     print("-" * 90)
 
     if rl_merged.empty:
@@ -407,7 +412,7 @@ def process_leg(rl_merged: pd.DataFrame):
         f1   = f1_score(y_true, y_pred, zero_division=0)
 
         if PRINT_STATS:
-            print(f"{label[:35]:<35} | {condition:<10} | "
+            print(f"{label[:35]:<35} | "
                   f"{acc:.4f}   | {prec:.4f}   | "
                   f"{rec:.4f}   | {f1:.4f}")
 
@@ -435,9 +440,9 @@ def process_leg(rl_merged: pd.DataFrame):
         f1_av   = 2 * prec_av * rec_av / (prec_av + rec_av) if (prec_av + rec_av) > 0 else 0.0
 
         print("-" * 90)
-        print(f"{'AVERAGE (Leg Overall)':<35} | {'':10} | "
-              f"{acc_av:.2f}   | {prec_av:.2f}   | "
-              f"{rec_av:.2f}   | {f1_av:.2f}")
+        print(f"{'AVERAGE (Leg Overall)':<35} | "
+              f"{acc_av:.4f}   | {prec_av:.4f}   | "
+              f"{rec_av:.4f}   | {f1_av:.4f}")
         
     return pd.DataFrame(results)
 
