@@ -10,16 +10,17 @@ from GSD2a import HickeyGSD
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 dataset = "WearGait"
 group = "healthy"
+
 match dataset:
     case "WearGait":
         if group == "healthy":
-            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-Ctrl'
+            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\Datasets\WearGait-Ctrl'
         else:
-            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\WearGait-PD'
+            DATA_PATH = r'C:\Users\orlov\intern\gait_detection\Datasets\WearGait-PD'
     case "HAR":
-        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HAR_data_acc"
+        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Datasets\HAR_data_acc"
     case "HMP":
-        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\HMP_Dataset\Walk"
+        DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Datasets\HMP_Dataset\Walk"
     case "QSense":
         DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data"
 
