@@ -4,9 +4,10 @@ from datetime import time
 
 
 FILES = [
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik\s2_2LW.txt",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik\s1_1RW.txt",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik\s3_3RL.txt",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\Walking_crutches_Tanya\s1_1RW.txt",
+    
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\Walking_crutches_Tanya\s2_2LW.txt",
+    #r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test6_Tanya\s3_3RL.txt",
 ]
 
 
