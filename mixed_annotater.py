@@ -6,53 +6,35 @@ from datetime import time
 
 # EDIT THIS BEFORE RUNNING
 #DATA_PATH = r"C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed\Test2"
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test11_Hendrik"
 #THRESHOLD = time(14, 57, 0)
-## test 3
-# TIMESTAMPS = [time(10, 36, 26), 
-#               time(10, 39, 18), 
-#               time(10, 40,  5),
-#               time(10, 44, 20), 
-#               time(10, 45, 54),
-#               time(10, 48, 30)]
-# LABELS = np.array([1, 0, 1, 0, 1, 0, 1])
 
-## test4 
-# TIMESTAMPS = [time(11,  4, 10), 
-#               time(11,  4, 52), 
-#               time(11,  5, 53), 
-#               time(11,  6, 47), 
-#               time(11,  8, 15), 
-#               time(11,  9, 00),
-#               time(11, 10, 00), 
-#               time(11, 10, 44), 
-#               time(11, 11, 37), 
-#               time(11, 12, 48)]
-LABELS = np.array([0, # stand still
-                   1, # walk natural
-                   0, # kitchen
-                   1, # walk, slow
-                   0, # sit and eat smth
-                   1, # walk slow, stroke 
-                   0, # pretend to vacuum - right hand 
-                   1, # walk with various speeds 
-                   0, # stand with conve
-                   1, # walk up and down
-                   0, 
-                   1]) 
-TIMESTAMPS = [time(13, 42,  5), 
-              time(13, 42,  8), 
-              time(13, 42, 35), 
-              time(13, 42, 40), 
-              time(13, 43,  0), 
-              time(13, 43, 10),
-              time(13, 43, 35), 
-              time(13, 43, 50), 
-              time(13, 44, 20),
-              time(13, 44, 40), 
-              time(13, 45,  0)]
+
+LABELS = np.array([1, 0])
+# np.array([0, # stand still
+#                    1, # walk natural
+#                    0, # kitchen
+#                    1, # walk, slow
+#                    0, # sit and eat smth
+#                    1, # walk slow, stroke 
+#                    0, # pretend to vacuum - right hand 
+#                    1, # walk with various speeds 
+#                    0, # stand with conve
+#                    1, # walk up and down
+#                    0]) 
+TIMESTAMPS = [time(15, 27, 56)]
+# [time(14, 54, 59), 
+#               time(14, 55, 39), 
+#               time(14, 56, 20), 
+#               time(14, 57,  6), 
+#               time(14, 57, 52), 
+#               time(14, 58, 35),
+#               time(14, 59, 18), 
+#               time(15, 00, 10), 
+#               time(15, 00, 54),
+#               time(15,  1, 57)]
               
-TIME_RANGE = (time(13, 41, 50), time(13, 45, 30))
+TIME_RANGE = (time(15, 14, 25), time(15, 39, 00))
 
 def get_label(row_time, timestamps, labels):
     """
