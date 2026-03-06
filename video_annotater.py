@@ -3,42 +3,33 @@ import csv
 import argparse
 from datetime import time, datetime, timedelta
 
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Free_living\Device2_sub9.csv"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Free_living\Device2_sub6.csv"
 
 # The timestamp in the recording that corresponds to t=0 seconds
 # Format: "HH:MM:SS.fff"  (e.g. "13:41:50.000")
-START_TIME_STR = "11:05:15.400" 
+START_TIME_STR = "16:14:53.500" 
 
 # Seconds after START_TIME at which the label switches.
 # Labels alternate starting from INITIAL_LABEL.
 # Example: offsets [18, 45, 50] with INITIAL_LABEL=0 produces:
 #   [0, 18s) → 0   [18s, 45s) → 1   [45s, 50s) → 0   [50s, end) → 1
-SWITCH_OFFSETS_SEC = [25.0, 27.3, 
-                      31.0, 33.8, 
-                      81.7, 84.3, 
-                      87.1, 88.7, 
-                      108.3, 112.0, 
-                      137.5, 140.7, 
-                      152.8, 156.1, 
-                      157.8, 160.0, 
-                      189.0, 191.0]
-
-# 0:25.0 - 0:27.3 
-# 0:31.0 - 0:33.8 
-# 1:21.7 - 1:24.3 
-# 1:27.1 - 1:28.7 
-# 1:48.3 - 1:52.0 
-# 2:17.5 - 2:20.7 
-# 2:32.8 - 2:36.1 
-# 2:37.8 - 2:40.0 
-# 3:09.0 - 3:11.0   
+SWITCH_OFFSETS_SEC = [29.7, 31.0,
+                      33.9, 38.5, 
+                      52.5, 56.5,
+                      114.3, 118.2,
+                      121.4, 125.3,
+                      153.4, 157.7,
+                      172.5, 174.9,
+                      206.2, 210.0                       
+                      ]
+   
 
 # Label assigned to the very first segment (before the first switch)
 INITIAL_LABEL = 0
 
 # Only annotate rows within this many seconds of START_TIME.
 # Set to None to annotate the entire file.
-DURATION_SEC = None  # e.g. 220
+DURATION_SEC = 270.4  # e.g. 220
 
 # =============================================================================
 def parse_time_str(t_str: str) -> datetime:
@@ -158,6 +149,10 @@ def annotate(
             except (ValueError, IndexError):
                 rows_skipped += 1
                 # print(">:(")
+                continue
+
+            if row_dt < start_dt:
+                rows_skipped += 1
                 continue
 
             # Apply time range filter
