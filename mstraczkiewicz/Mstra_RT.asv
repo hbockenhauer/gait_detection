@@ -4,12 +4,12 @@ clear; clc; close all;
 % --- 1. CONFIGURATION ---
 dataPaths = {
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
 
-F_MIN = 0.5; F_MAX = 3.50;
+F_MIN = 0.50; F_MAX = 3.50;
 P_THRESH = 3; A_THRESH = 0.1; 
 fs = 50;
 windowSize = 2 * fs;
@@ -80,8 +80,7 @@ for d = 1:length(dataPaths)
                 totalSamples = length(vm_all);
                 y_pred_rt = zeros(totalSamples, 1);
                 circularBuffer = zeros(windowSize, 1);
-                % detectionState = [0, 0];  % For >3s of walking
-                detectionState = 0;
+                detectionState = [0, 0];
                 
                 % INITIALIZE HERE (Once per file/wrist side)
                 rt_T = []; 
@@ -98,10 +97,12 @@ for d = 1:length(dataPaths)
                     
                     if dt > maxGap
                         circularBuffer(:) = 0;
-                        %detectionState = [0, 0];  % 
-                        continue;
+                        detectionState = [0, 0];
+                        continue; 
                     end
-                                        
+                    
+             
+                    
                     % 2. Update Buffer
                     circularBuffer = [circularBuffer(2:end); vm_all(s)];
                     
@@ -121,16 +122,13 @@ for d = 1:length(dataPaths)
                     end
                 end
 
-                % plotData.(sideLabel).T_vec = rt_T;
-                % plotData.(sideLabel).peakF = rt_peakF;
-                % plotData.(sideLabel).maxPk = rt_maxPk;
-                % plotData.(sideLabel).ampVal = rt_ampVal;
-                % plotData.(sideLabel).time = time_vec;
-                % plotData.(sideLabel).y_pred = y_pred_rt;
-                % plotData.(sideLabel).y_true = y_true;
-                % % After the RT simulation loop, add to plotData:
-                % plotData.(sideLabel).time_diffs = diff(time_vec);
-                % plotData.(sideLabel).time_for_diffs = time_vec(2:end);
+                plotData.(sideLabel).T_vec = rt_T;
+                plotData.(sideLabel).peakF = rt_peakF;
+                plotData.(sideLabel).maxPk = rt_maxPk;
+                plotData.(sideLabel).ampVal = rt_ampVal;
+                plotData.(sideLabel).time = time_vec;
+                plotData.(sideLabel).y_pred = y_pred_rt;
+                plotData.(sideLabel).y_true = y_true;
 
                 % Calculate Metrics
                 evalIdx = windowSize:totalSamples;
@@ -168,79 +166,58 @@ for d = 1:length(dataPaths)
 
         % --- 4. PAIRED PLOTTING ---
         if ~isempty(fieldnames(plotData))
-            try
-                fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
-                sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
-                colors = {'#0072BD', '#D95319'}; 
-                sides = fieldnames(plotData);
-                ax = zeros(5,1); 
+            fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
+            sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
+            colors = {'#0072BD', '#D95319'}; 
+            sides = fieldnames(plotData);
+            ax = zeros(4,1); 
 
-                % Add this as Subplot 1 (shift others down by 1):
-                ax(1) = subplot(5,1,1); hold on;
-                for si = 1:length(sides)
-                    stem(plotData.(sides{si}).time_for_diffs, ...
-                         plotData.(sides{si}).time_diffs, ...
-                         'Color', colors{si}, 'MarkerSize', 1);
-                end
-                yline(maxGap, 'r--', 'Gap threshold');
-                ylabel('\Delta t (s)'); grid on; title('Timestamp Gaps (red = reset)');
-
-                % Subplot 1: Frequency
-                ax(2) = subplot(5,1,2); hold on;
-                for si = 1:length(sides)
-                    plot(plotData.(sides{si}).T_vec, plotData.(sides{si}).peakF, 'Color', colors{si}, 'LineWidth', 1.2);
-                end
-                yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
-
-                % Subplot 2: Power
-                ax(3) = subplot(5,1,3); hold on;
-                for si = 1:length(sides)
-                    plot(plotData.(sides{si}).T_vec, plotData.(sides{si}).maxPk, 'Color', colors{si});
-                end
-                yline(P_THRESH, 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
-
-                % Subplot 3: Amplitude
-                ax(4) = subplot(5,1,4); hold on;
-                for si = 1:length(sides)
-                    plot(plotData.(sides{si}).T_vec, plotData.(sides{si}).ampVal, 'Color', colors{si});
-                end
-                yline(A_THRESH, 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
-
-                % Subplot 4: Detection
-                ax(5) = subplot(5,1,5); hold on;
-                h_leg = [];
-                for si = 1:length(sides)
-                    a_h = area(plotData.(sides{si}).time, plotData.(sides{si}).y_true, 'FaceColor', colors{si}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
-                    p_h = stairs(plotData.(sides{si}).time, plotData.(sides{si}).y_pred, 'Color', colors{si}, 'LineWidth', 1.5);
-                    h_leg = [h_leg, a_h, p_h];
-                end
-                ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
-
-                if length(sides) == 2
-                    legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
-                        'Orientation', 'horizontal', 'Location', 'southoutside');
-                else
-                    legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
-                end
-
-                linkaxes(ax, 'x'); 
-                if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
-                    xlim(ax(1), [0 max(plotData.(sides{1}).T_vec)]);
-                end
-
-                drawnow;
-                savePath = fullfile(PlotPath, [folderName, '_RT_Plot.png']);
-                saveas(fig, savePath);
-                fprintf('  --> Plot saved: %s\n', savePath);  % CONFIRMATION LINE
-                close(fig);
-
-            catch ME_plot
-                fprintf('  !! PLOT ERROR for %s: %s\n', folderName, ME_plot.message);
-                fprintf('     Line: %d\n', ME_plot.stack(1).line);
-                if exist('fig','var') && ishandle(fig), close(fig); end
+            % Subplot 1: Frequency
+            ax(1) = subplot(4,1,1); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).peakF, 'Color', colors{s}, 'LineWidth', 1.2);
             end
-        % else
-            % fprintf('  --> No plotData for %s, skipping plot.\n', folderName);
+            yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
+
+            % Subplot 2: Power
+            ax(2) = subplot(4,1,2); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).maxPk, 'Color', colors{s});
+            end
+            yline(P_THRESH, 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
+
+            % Subplot 3: Amplitude
+            ax(3) = subplot(4,1,3); hold on;
+            for s = 1:length(sides)
+                plot(plotData.(sides{s}).T_vec, plotData.(sides{s}).ampVal, 'Color', colors{s});
+            end
+            yline(A_THRESH, 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
+
+            % Subplot 4: Detection
+            ax(4) = subplot(4,1,4); hold on;
+            h_leg = [];
+            for s = 1:length(sides)
+                a_h = area(plotData.(sides{s}).time, plotData.(sides{s}).y_true, 'FaceColor', colors{s}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+                p_h = stairs(plotData.(sides{s}).time, plotData.(sides{s}).y_pred, 'Color', colors{s}, 'LineWidth', 1.5);
+                h_leg = [h_leg, a_h, p_h]; 
+            end
+            ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
+
+            % Fix Legend & Alignment
+            if length(sides) == 2
+                legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
+                    'Orientation', 'horizontal', 'Location', 'southoutside');
+            else
+                legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
+            end
+
+            linkaxes(ax, 'x'); 
+            if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
+                xlim(ax(1), [0 max(plotData.(sides{1}).T_vec)]);
+            end
+
+            saveas(fig, fullfile(PlotPath, [folderName, '_RT_Plot.png']));
+            close(fig);
         end
     end
 end
@@ -275,11 +252,11 @@ if ~isempty(summaryResults)
     fprintf('======================================================================\n');
     
     % Save the detailed summaries to one Excel file with different sheets
-    % resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
-    % writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
-    % writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
-    % writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
-    % writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
+    resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
+    writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
+    writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
+    writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
+    writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
 end
 
 % % --- After the for loop ---
@@ -305,18 +282,8 @@ function [finalDecision, newState, metrics] = run_mstra_fast_rt_with_metrics(win
     metrics.peakF = freqs(maxIdx);
     
     rawDecision = (metrics.peakF >= fMin && metrics.peakF <= fMax && metrics.maxPk > pThr && metrics.ampVal > aThr);
-    
-    % % Requires at least 3s of walking to detect walking
-    % finalDecision = all([prevState, rawDecision]); 
-    % newState = [prevState(2), rawDecision];
-
-    % % Reduce to 1 consecutive seconds (0 history element)
-    % newState = rawDecision;
-    % finalDecision = rawDecision;
-
-    % Reduce to 2 consecutive seconds (1 history element)
-    newState = rawDecision;               % scalar, not array
-    finalDecision = prevState & rawDecision;
+    finalDecision = all([prevState, rawDecision]); 
+    newState = [prevState(2), rawDecision];
 
     % --- NEW: Debug Memory ---
     % m = whos; % Get info on all variables in this function's workspace
