@@ -4,8 +4,8 @@ clear; clc; close all;
 % --- 1. CONFIGURATION ---
 dataPaths = {
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
 
@@ -121,16 +121,16 @@ for d = 1:length(dataPaths)
                     end
                 end
 
-                % plotData.(sideLabel).T_vec = rt_T;
-                % plotData.(sideLabel).peakF = rt_peakF;
-                % plotData.(sideLabel).maxPk = rt_maxPk;
-                % plotData.(sideLabel).ampVal = rt_ampVal;
-                % plotData.(sideLabel).time = time_vec;
-                % plotData.(sideLabel).y_pred = y_pred_rt;
-                % plotData.(sideLabel).y_true = y_true;
-                % % After the RT simulation loop, add to plotData:
-                % plotData.(sideLabel).time_diffs = diff(time_vec);
-                % plotData.(sideLabel).time_for_diffs = time_vec(2:end);
+                plotData.(sideLabel).T_vec = rt_T;
+                plotData.(sideLabel).peakF = rt_peakF;
+                plotData.(sideLabel).maxPk = rt_maxPk;
+                plotData.(sideLabel).ampVal = rt_ampVal;
+                plotData.(sideLabel).time = time_vec;
+                plotData.(sideLabel).y_pred = y_pred_rt;
+                plotData.(sideLabel).y_true = y_true;
+                % After the RT simulation loop, add to plotData:
+                plotData.(sideLabel).time_diffs = diff(time_vec);
+                plotData.(sideLabel).time_for_diffs = time_vec(2:end);
 
                 % Calculate Metrics
                 evalIdx = windowSize:totalSamples;
@@ -275,11 +275,11 @@ if ~isempty(summaryResults)
     fprintf('======================================================================\n');
     
     % Save the detailed summaries to one Excel file with different sheets
-    % resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
-    % writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
-    % writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
-    % writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
-    % writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
+    resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
+    writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
+    writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
+    writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
+    writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
 end
 
 % % --- After the for loop ---

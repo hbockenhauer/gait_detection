@@ -29,7 +29,7 @@ STEP_SIZE = 30
 REPO_NAME = 'yonbrand/ElderNet'
 
 # Thresholds
-CONF_THRESH = 0.5
+CONF_THRESH = 0.65
 ENERGY_THRESH = 0.7
 MIN_FREQ = 1.0
 MAX_FREQ = 2.5
@@ -160,7 +160,7 @@ def main():
                     probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
                 
                 probs_sm = np.convolve(probs, np.ones(3)/3, mode='same')
-                y_pred_raw = ((probs_sm > CONF_THRESH) & (engs > ENERGY_THRESH) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
+                y_pred_raw = ((probs_sm > CONF_THRESH)).astype(int) #& (engs > ENERGY_THRESH) & (frqs > MIN_FREQ) & (frqs < MAX_FREQ)).astype(int)
                 y_pred = median_filter(y_pred_raw, size=3)
                 y_true = create_ground_truth(acts)
                 

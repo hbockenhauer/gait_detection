@@ -84,13 +84,13 @@ try:
                 probs = torch.softmax(model(windows.to(device)), dim=1)[:, 1].cpu().numpy()
 
             # Logic Gates
-            CONF_THRESH = 0.4
+            CONF_THRESH = 0.65
             ENERGY_THRESH_MIN = 0.18
             ENERGY_THRESH_MAX = 0.65
             min_freq = 0.5
             max_freq = 3.0
             probs_smoothed = np.convolve(probs, np.ones(3)/3, mode='same')
-            y_pred_raw = ((probs_smoothed > CONF_THRESH) & (energies > ENERGY_THRESH_MIN) & (energies < ENERGY_THRESH_MAX) & (freqs > min_freq) & (freqs < max_freq)).astype(int)
+            y_pred_raw = ((probs_smoothed > CONF_THRESH)).astype(int) #& (energies > ENERGY_THRESH_MIN) & (energies < ENERGY_THRESH_MAX) & (freqs > min_freq) & (freqs < max_freq)).astype(int)
             y_pred = median_filter(y_pred_raw, size=3)
 
             # Break down by activity
