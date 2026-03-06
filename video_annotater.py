@@ -3,43 +3,35 @@ import csv
 import argparse
 from datetime import time, datetime, timedelta
 
-# =============================================================================
-# CONFIGURATION — edit these before running (or use CLI arguments)
-# =============================================================================
-
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Free_living\Device 2_sub1.csv"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Free_living\Device2_sub9.csv"
 
 # The timestamp in the recording that corresponds to t=0 seconds
 # Format: "HH:MM:SS.fff"  (e.g. "13:41:50.000")
-START_TIME_STR = "11:24:13.500" 
+START_TIME_STR = "11:05:15.400" 
 
 # Seconds after START_TIME at which the label switches.
 # Labels alternate starting from INITIAL_LABEL.
 # Example: offsets [18, 45, 50] with INITIAL_LABEL=0 produces:
 #   [0, 18s) → 0   [18s, 45s) → 1   [45s, 50s) → 0   [50s, end) → 1
-SWITCH_OFFSETS_SEC = [34.5, 37.6, 
-                      41.4, 47.9, 
-                      54.8, 60.5, 
-                      66.8, 75.4, 
-                      97.6, 102.8,
-                      123.2, 128.0, 
-                      142.6, 151.0, 
-                      185.4, 189.3, 
-                      194.0, 200.1, 
-                      203.4, 209.6, 
-                      228.9, 232.5]
+SWITCH_OFFSETS_SEC = [25.0, 27.3, 
+                      31.0, 33.8, 
+                      81.7, 84.3, 
+                      87.1, 88.7, 
+                      108.3, 112.0, 
+                      137.5, 140.7, 
+                      152.8, 156.1, 
+                      157.8, 160.0, 
+                      189.0, 191.0]
 
-# 0:34.5 - 0:37.6 
-# 0:41.4 - 0:47.9 
-# 0:54.8 – 1:00.5 
-# 1:06.8 – 1:15.4 
-# 1:37.6 – 1:42.8 
-# 2:03.2 – 2:08.0 
-# 2:22.6 – 2:31.0 
-# 3:05.4 – 3:09.3 
-# 3:14.0 – 3:20.1 
-# 3:23.4 - 3:29.6 
-# 3:48.9 - 3:52.5 
+# 0:25.0 - 0:27.3 
+# 0:31.0 - 0:33.8 
+# 1:21.7 - 1:24.3 
+# 1:27.1 - 1:28.7 
+# 1:48.3 - 1:52.0 
+# 2:17.5 - 2:20.7 
+# 2:32.8 - 2:36.1 
+# 2:37.8 - 2:40.0 
+# 3:09.0 - 3:11.0   
 
 # Label assigned to the very first segment (before the first switch)
 INITIAL_LABEL = 0
@@ -57,10 +49,11 @@ def parse_time_str(t_str: str) -> datetime:
       - 'HH:MM:SS.fff'             (format used in config)
     """
     t_str = t_str.strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S.%f", "%d/%m/%Y %H:%M:%S",
+    for fmt in ("%d/%m/%Y %H:%M:%S.%f", "%m/%d/%Y %H:%M:%S.%f", "%d/%m/%Y %H:%M:%S",
                 "%H:%M:%S.%f", "%H:%M:%S"):
         try:
             dt = datetime.strptime(t_str, fmt)
+            
             return dt.replace(year=1900, month=1, day=1)
         except ValueError:
             continue
@@ -164,6 +157,7 @@ def annotate(
                 row_dt = parse_time_str(row[0])
             except (ValueError, IndexError):
                 rows_skipped += 1
+                # print(">:(")
                 continue
 
             # Apply time range filter
@@ -173,8 +167,8 @@ def annotate(
 
             label = get_label(row_dt, boundaries, initial_label)
             # if rows_written < 30:
-                # print(label)
-                # print(row_dt)
+            #     print(label)
+            #     print(row_dt)
             writer.writerow(row + [label])
             rows_written += 1
 
