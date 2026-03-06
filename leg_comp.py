@@ -7,6 +7,7 @@ from GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
@@ -426,6 +427,38 @@ def process_leg(rl_merged: pd.DataFrame):
             'TP': int(tp), 'FP': int(fp), 'FN': int(fn), 'TN': int(tn),
         })
 
+        # # plot 
+        time = np.arange(len(y_pred)) / SAMPLING_RATE
+        # fig, ax = plt.subplots(figsize=(10, 4))
+        # ax.plot(time, y_pred, label='Predicted')
+        # ax.plot(time, y_true, label='True')
+        # ax.set_xlabel('Time(s)')
+        # ax.set_xlabel('Walking detected')
+        # ax.legend()
+        # ax.set_title(label)
+        #Here's the best approach for comparing overlap with binary walking signals:
+        fig, ax = plt.subplots(figsize=(12, 4))
+
+        # Fill between for clear overlap visualization
+        ax.fill_between(time, y_true, alpha=0.5, color='steelblue', label='False Negative', step='post')
+        ax.fill_between(time, y_pred, alpha=0.5, color='tomato',    label='False Positive', step='post')
+
+        # Highlight agreement region
+        agreement = (np.array(y_true) == 1) & (np.array(y_pred) == 1)
+        ax.fill_between(time, agreement, color='mediumseagreen', alpha=0.6, step='post', label='True Positive')
+
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Walking detected')
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(['No', 'Yes'])
+        ax.set_ylim(-0.05, 1.3)
+        ax.legend(loc='upper right')
+        ax.set_title(label)
+        plt.tight_layout()
+
+
+
+
     if results:
         res_df = pd.DataFrame(results)
         tp = res_df['TP'].sum()
@@ -458,20 +491,21 @@ if __name__ == "__main__":
         print(f"{'=' * 80}")
         rw, lw, rl = merge_all(data_path)
         # Tag each row with its source dataset for traceability
-        rw['dataset'] = dataset_name
-        lw['dataset'] = dataset_name
+        # rw['dataset'] = dataset_name
+        # lw['dataset'] = dataset_name
         rl['dataset'] = dataset_name
-        all_rw.append(rw)
-        all_lw.append(lw)
+        # all_rw.append(rw)
+        # all_lw.append(lw)
         all_rg.append(rl)
 
     # Pool across all datasets
-    rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
-    lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
+    # rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
+    # lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
     rl_merged = pd.concat(all_rg, ignore_index=True) if all_rg else pd.DataFrame()
 
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait(rw_merged, lw_merged, SAVE_RESULTS)
+    # process_gait(rw_merged, lw_merged, SAVE_RESULTS)
     process_leg(rl_merged)
+    plt.show()
