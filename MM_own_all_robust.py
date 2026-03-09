@@ -7,6 +7,8 @@ from GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
+import csv
+from datetime import time
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
@@ -36,15 +38,74 @@ def is_gait(folder_name: str, df:pd.DataFrame = None) -> int:
         activity = folder_name.split('_')[0].lower()
         return 1 if activity in GAIT_CLASSES else 0
 
+def parse_time(t_str):
+    h, m, s_ms = t_str.strip().split(':')
+    s, ms = s_ms.split('.')
+    return time(int(h), int(m), int(s), int(ms) * 1000)
 
 def load_wrist_file(filepath: str) -> pd.DataFrame | None:
     """Read one sensor file, scale acc to m/s², rename columns. Returns None on failure."""
     try:
-        df = pd.read_csv(filepath, sep=None, engine="python")
-        df = df.reset_index(drop=True)
+        with open(filepath, newline='') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+        # clip the first 10 seconds if mixed is not in the name of the file path
+        rows = rows if "mixed" in filepath else rows[500:] 
+        
+        # Drop rewound timestamps + detect forward jumps for segmentation
+        clean_rows = []
+        segments   = []
+        max_time   = None
+        prev_time  = None
+        #intervals  = []
+        segment_id = 0
 
-        # clip the first 10 seconds for files with no 'test' in the name
-        df = df if 'test' in filepath else df = df[:500]
+        # First pass: collect intervals to compute median
+        times = []
+        for row in rows:
+            try:
+                times.append(parse_time(row['HH:mm:ss.fff']))
+            except Exception:
+                continue
+        valid_times = []
+        mt = None
+        for t in times:
+            if mt is None or t > mt:
+                mt = t
+                valid_times.append(t)
+        # if len(valid_times) > 1:
+        #     ivs = [(valid_times[i].second * 1000 + valid_times[i].microsecond // 1000) -
+        #            (valid_times[i-1].second * 1000 + valid_times[i-1].microsecond // 1000)
+        #            for i in range(1, len(valid_times))]
+        #     ivs = [iv for iv in ivs if iv > 0]
+        #     ivs_sorted   = sorted(ivs)
+        #     median_ms    = ivs_sorted[len(ivs_sorted) // 2] if ivs_sorted else 20
+        # else:
+        #     median_ms = 20
+        #jump_threshold_ms = jump_factor * median_ms
+
+        # Second pass: filter + assign segments
+        for row in rows:
+            try:
+                t = parse_time(row['HH:mm:ss.fff'])
+            except Exception:
+                continue
+            if max_time is None or t > max_time:
+                if prev_time is not None:
+                    # compute gap in ms (handles minute/hour rollover simply)
+                    gap_ms = (t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
+                              - prev_time.hour * 3600 - prev_time.minute * 60 - prev_time.second - prev_time.microsecond / 1e6) * 1000
+                    if gap_ms > (1000/SAMPLING_RATE):
+                        segment_id += 1
+                max_time  = t
+                prev_time = t
+                clean_rows.append(row)
+                segments.append(segment_id)
+
+        df = pd.DataFrame(clean_rows)
+        df = df.reset_index(drop=True)
+        df['segment'] = segments
+
 
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:

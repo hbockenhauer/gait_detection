@@ -436,7 +436,6 @@ def process_leg(rl_merged: pd.DataFrame):
         # ax.set_xlabel('Walking detected')
         # ax.legend()
         # ax.set_title(label)
-        #Here's the best approach for comparing overlap with binary walking signals:
         fig, ax = plt.subplots(figsize=(12, 4))
 
         # Fill between for clear overlap visualization

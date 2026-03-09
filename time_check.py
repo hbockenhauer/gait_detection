@@ -5,9 +5,9 @@ from datetime import time
 
 
 #DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
-DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
+DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
 
-SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\edge"
+SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\mixed"
 
 FILES = [
     "s1_1RW.txt",
@@ -57,7 +57,7 @@ def plot_folder(folder_path, txt_files, out_folder):
     plt.suptitle(folder_name, fontsize=13)
     plt.tight_layout()
 
-    out_path = os.path.join(out_folder, f"{folder_name}_new_timecheck.png")
+    out_path = os.path.join(out_folder, f"{folder_name}_timecheck.png")
     plt.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"Saved -> {out_path}")

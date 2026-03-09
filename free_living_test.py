@@ -1,0 +1,315 @@
+import os
+import pandas as pd
+import numpy as np
+import warnings
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from GSD3_test import KheirkhahanGSD
+from multimob.GSD.GSD4 import MacLeanGSD
+from multimob.GSD.GSD5 import KerenGSD
+from GSD2a import HickeyGSD
+
+warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
+
+DATA_PATHS = [
+    r"C:\Users\orlov\intern\gait_detection\Free_living"
+]
+GSD_n = 3
+SAMPLING_RATE = 50
+DEBUG = False
+GAIT_CLASSES = {'walking', 'stairs'}
+SAVE_RESULTS = True
+PRINT_STATS = True
+
+
+def is_gait(df: pd.DataFrame) -> pd.Series:
+    return df['Label']
+
+
+def load_wrist_file(filepath: str):
+    """
+    Read one sensor file, scale acc to m/s², rename columns.
+    Returns (imu_df, df_full) on success, or None on failure.
+    
+    FIX: was returning None on failure but callers tried to unpack as a tuple.
+    FIX: acc_cols filter was 'a' in col — too broad, matched Label/gz/etc.
+    """
+    try:
+        df = pd.read_csv(filepath, sep=None, engine="python")
+        df = df.reset_index(drop=True)
+
+        # FIX: use startswith('a') instead of 'a' in col.lower() to avoid
+        # matching unrelated columns like 'Label', 'gz', 'mag_x', etc.
+        acc_cols = [c for c in df.columns if c.lower().startswith('a')]
+        if len(acc_cols) < 3:
+            print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
+            return None
+
+        imu_df = df[acc_cols[:3]].copy()
+        imu_df = imu_df * 9.81          # convert g → m/s²
+        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
+
+        return imu_df, df
+
+    except Exception as e:
+        print(f"  [ERROR] Failed to load {filepath}: {e}")
+        return None
+
+
+def merge_all_wrists(data_path: str) -> pd.DataFrame:
+    """
+    Walk data_path, load every *_annotated.csv file, attach metadata,
+    and return a single merged DataFrame.
+
+    Columns: subject | y_true | acc_pa | acc_ml | acc_is
+
+    FIX: rw_rows was potentially undefined if no files loaded → NameError.
+    FIX: load_wrist_file returns None on failure; must check before unpacking.
+    """
+    imu_merged_chunks: list[pd.DataFrame] = []
+
+    if PRINT_STATS:
+        print(f"Scanning: {data_path}\n")
+        print(f"{'File':<35} | {'Rows':>8}")
+        print("-" * 50)
+
+    files = [f for f in os.listdir(data_path) if f.endswith('_annotated.csv')]
+
+    for file in files:
+        print(file)
+        filepath = os.path.join(data_path, file)
+
+        # FIX: wrap unpacking in a None check instead of unpacking directly
+        result = load_wrist_file(filepath)
+        if result is None:
+            continue
+
+        imu_df, df_full = result
+        imu_df['y_true'] = is_gait(df_full)
+        imu_df['subject'] = file
+        imu_merged_chunks.append(imu_df)
+
+        if PRINT_STATS:
+            print(f"{file[:35]:<35} | {len(imu_df):>8}")
+
+    if PRINT_STATS:
+        print("-" * 50)
+
+    col_order = ['subject', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
+
+    imu_merged = (
+        pd.concat(imu_merged_chunks, ignore_index=True)[col_order]
+        if imu_merged_chunks
+        else pd.DataFrame(columns=col_order)
+    )
+
+    return imu_merged
+
+
+def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
+                      label: str):
+    """
+    Run GSD on a single contiguous imu_df block, evaluate against y_true,
+    and return (metrics_dict, output_name) or None on error.
+    """
+    try:
+        match GSD_n:
+            case 2:
+                gsd = HickeyGSD(debug=DEBUG)
+                detected_bouts = (
+                    gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE,
+                                   target_sampling_rate_hz=SAMPLING_RATE)
+                    .detect_wrist()
+                )
+                output_name = 'HickeyGSD_Results.csv'
+            case 3:
+                gsd = KheirkhahanGSD(visual=False)
+                detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                output_name = 'KheirkhahanGSD_Results.csv'
+            case 4:
+                gsd = MacLeanGSD()
+                detected_bouts = gsd.detect(imu_df)
+                output_name = 'MacLeanGSD_Results.csv'
+            case 5:
+                gsd = KerenGSD()
+                detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                output_name = 'KerenGSD_Results.csv'
+            case _:
+                print(f"  [ERROR] Unknown GSD_n={GSD_n}")
+                return None
+
+        # Convert bout list → binary mask
+        y_pred = np.zeros(len(imu_df), dtype=int)
+        if hasattr(detected_bouts, 'gs_list_') and not detected_bouts.gs_list_.empty:
+            for _, row in detected_bouts.gs_list_.iterrows():
+                start = int(max(0, row['start']))
+                end   = int(min(len(imu_df), row['end']))
+                y_pred[start:end] = 1
+
+        tp = np.sum((y_pred == 1) & (y_true == 1))
+        fp = np.sum((y_pred == 1) & (y_true == 0))
+        fn = np.sum((y_pred == 0) & (y_true == 1))
+        tn = np.sum((y_pred == 0) & (y_true == 0))
+
+        if DEBUG:
+            print(f"\n[{label}] pred walking: {y_pred.sum()} / {len(y_pred)} samples")
+            print(f"  TP={tp}  FP={fp}  FN={fn}  TN={tn}")
+
+        return {
+            'Accuracy':  accuracy_score(y_true, y_pred),
+            'Precision': precision_score(y_true, y_pred, zero_division=0),
+            'Recall':    recall_score(y_true, y_pred, zero_division=0),
+            'F1':        f1_score(y_true, y_pred, zero_division=0),
+            'TP': tp,
+            'FP': fp,
+            'FN': fn,
+            'TN': tn,
+        }, output_name
+
+    except Exception as e:
+        print(f"  [ERROR] GSD failed on {label}: {e}")
+        return None
+
+
+def process_gait(imu_merged: pd.DataFrame,
+                 save_results: bool = True) -> pd.DataFrame:
+    """
+    Run GSD on every subject segment inside imu_merged.
+    Prints a per-file table and overall averages; optionally saves results CSV.
+
+    FIX: previously accepted (rw_merged, lw_merged) — simplified to one DataFrame
+         since merge_all_wrists only returns one.
+    FIX: _avg_row was called with an extra positional '' argument that didn't
+         match its signature — removed the stray argument.
+    """
+    results = []
+
+    print(f"\n{'Subject':<40} | {'Acc':<8} | {'Prec':<8} | {'Rec':<8} | {'F1':<8}")
+    print("-" * 80)
+
+    if imu_merged.empty:
+        print("No data — skipping.")
+        return pd.DataFrame()
+
+    imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
+
+    for subject, grp in imu_merged.groupby('subject', sort=True):
+        imu_df = grp[imu_cols].reset_index(drop=True)
+        y_true = grp['y_true'].to_numpy()
+        label  = str(subject)
+
+        result = _run_gsd_on_group(imu_df, y_true, label)
+        if result is None:
+            continue
+
+        metrics, output_name = result
+        output_name = 'Free_living_Results.csv'  
+
+        results.append({
+            'Subject': label,
+            'Folder':  subject,
+            **metrics,
+        })
+
+        if PRINT_STATS:
+            print(f"{label[:40]:<40} | {metrics['Accuracy']:.4f}   | "
+                  f"{metrics['Precision']:.4f}   | {metrics['Recall']:.4f}   | "
+                  f"{metrics['F1']:.4f}")
+
+    if not results:
+        print("No results to summarise.")
+        return pd.DataFrame()
+
+    res_df = pd.DataFrame(results)
+    VARIABLES = ['TP', 'FP', 'FN', 'TN']
+
+    def _avg_row(row_type: str, label: str, subset: pd.DataFrame) -> dict:
+        """
+        Build a summary row from a subset of res_df using macro-averaged metrics.
+
+        FIX: previously called with an extra positional '' argument (for a removed
+             'condition' parameter) — signature now matches all call sites.
+        """
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                    if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                       if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                       if (tp + fn) > 0         else 0.0
+        f1_av        = (2 * precision_av * recall_av /
+                        (precision_av + recall_av))         if (precision_av + recall_av) > 0 else 0.0
+
+        return {
+            'row_type':  row_type,
+            'Subject':   label,
+            'Folder':    '',
+            'Accuracy':  accuracy_av,
+            'Precision': precision_av,
+            'Recall':    recall_av,
+            'F1':        f1_av,
+            **{p: round(subset[p].sum(), 4) for p in VARIABLES},
+        }
+
+    def _print_avg(label: str, subset: pd.DataFrame):
+        if subset.empty:
+            return
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                    if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                       if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                       if (tp + fn) > 0         else 0.0
+        f1_av        = (2 * precision_av * recall_av /
+                        (precision_av + recall_av))         if (precision_av + recall_av) > 0 else 0.0
+
+        print(f"{label:<40} | {accuracy_av:.5f}  | {precision_av:.5f}  | "
+              f"{recall_av:.5f}  | {f1_av:.5f}")
+
+    # FIX: _avg_row called without the stale extra '' positional argument
+    avg_rows = [_avg_row('avg_overall', 'AVERAGE (Overall)', res_df)]
+
+    print("-" * 80)
+    _print_avg("AVERAGE (Overall)", res_df)
+
+    # Build CSV
+    res_df.insert(0, 'row_type', 'result')
+    avg_df    = pd.DataFrame(avg_rows)
+    blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
+
+    csv_df = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
+
+    if save_results:
+        csv_df.to_csv(output_name, index=False)
+        print(f"\nSaved → {output_name}")
+
+    return res_df
+
+
+if __name__ == "__main__":
+    all_imu: list[pd.DataFrame] = []
+
+    for data_path in DATA_PATHS:
+        dataset_name = os.path.basename(data_path.rstrip('/\\'))
+        print(f"\n{'=' * 80}")
+        print(f"  Merging: {dataset_name}")
+        print(f"{'=' * 80}")
+
+        imu = merge_all_wrists(data_path)
+        imu['dataset'] = dataset_name
+        all_imu.append(imu)
+
+    # Pool across all datasets
+    imu_merged = pd.concat(all_imu, ignore_index=True) if all_imu else pd.DataFrame()
+
+    print(f"\n{'=' * 80}")
+    print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
+    print(f"{'=' * 80}")
+
+    # FIX: process_gait now takes one DataFrame + save_results flag,
+    #      matching the updated function signature.
+    process_gait(imu_merged, SAVE_RESULTS)
