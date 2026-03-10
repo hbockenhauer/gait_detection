@@ -1,0 +1,178 @@
+%% --- MStra Bayesian Hyperparameter Optimizer (QSense Data) ---
+clear; clc; close all;
+warning('off', 'MATLAB:table:ModifiedAndSavedVariableNames');
+
+% --- 1. CONFIGURATION ---
+% Point this to the root directory containing subject folders
+dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed';
+fs = 50;
+
+% --- 2. DATA SPLITTING & PRE-LOADING ---
+% QSense data is nested in subject folders. We find all valid txt files first.
+subDirs = dir(dataPath);
+subDirs = subDirs([subDirs.isdir] & ~ismember({subDirs.name}, {'.', '..'}));
+
+allFilesInfo = [];
+for i = 1:length(subDirs)
+    folderPath = fullfile(dataPath, subDirs(i).name);
+    % We target both left and right wrist files as separate training samples
+    targets = {'s1_1RW.txt'; 's2_2LW.txt'};
+    for t = 1:length(targets)
+        fullFilePath = fullfile(folderPath, targets{t});
+        if isfile(fullFilePath)
+            allFilesInfo = [allFilesInfo; struct('path', fullFilePath, 'name', targets{t})];
+        end
+    end
+end
+
+if isempty(allFilesInfo), error('No QSense files found!'); end
+
+% Shuffle and Split (70% Train, 30% Test)
+rng(42); 
+idx = randperm(length(allFilesInfo));
+trainIdx = idx(1:round(0.7 * length(allFilesInfo)));
+testIdx  = idx(round(0.7 * length(allFilesInfo))+1 : end);
+
+fprintf('Pre-loading %d QSense training files...\n', length(trainIdx));
+trainingSet = pre_load_qsense_data(allFilesInfo(trainIdx));
+
+% --- 3. DEFINE SEARCH SPACE ---
+% P_THRESH and A_THRESH are set wide because QSense Energy units can be large
+vars = [
+    optimizableVariable('F_MIN',    [0.2, 0.9]),
+    optimizableVariable('F_MAX',    [2.8, 5.0]),
+    optimizableVariable('P_THRESH', [0.1, 10.0], 'Transform', 'log'), 
+    optimizableVariable('A_THRESH', [0.1, 1000.0], 'Transform', 'log') 
+];
+
+% --- 4. RUN OPTIMIZATION ---
+fprintf('Starting Bayesian Optimization...\n');
+objFunc = @(p) 1 - run_eval_iteration(p, trainingSet, fs);
+
+results = bayesopt(objFunc, vars, ...
+    'MaxObjectiveEvaluations', 50, ...
+    'IsObjectiveDeterministic', true, ...
+    'PlotFcn', {@plotMinObjective, @plotObjectiveEvaluation});
+
+% --- 5. RESULTS & TEST ---
+bestParams = results.XAtMinObjective;
+fprintf('\nEvaluating Best Parameters on Test Set...\n');
+testSet = pre_load_qsense_data(allFilesInfo(testIdx));
+testF1  = run_eval_iteration(bestParams, testSet, fs);
+
+fprintf('\nFinal Test Mean F1-Score: %.4f\n', testF1);
+disp('Best Thresholds Found:');
+disp(bestParams);
+
+%% --- QSense Data Pre-Loader ---
+function dataset = pre_load_qsense_data(filesInfo)
+    dataset = cell(length(filesInfo), 1);
+    for i = 1:length(filesInfo)
+        opts = detectImportOptions(filesInfo(i).path);
+        opts.VariableNamingRule = 'preserve';
+        opts = setvartype(opts, [1, 2], 'string'); 
+        data = readtable(filesInfo(i).path, opts);
+        
+        % QSense Timestamp Logic: Col 1 (Date) + Col 2 (Time)
+        dateTimeStr = string(data{:,1}) + " " + string(data{:,2});
+        fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
+        
+        % Clean Duplicates/Sort
+        [~, uIdx] = unique(fullDateTime, 'stable');
+        data = data(uIdx, :);
+        fullDateTime = fullDateTime(uIdx);
+        [fullDateTime, sIdx] = sort(fullDateTime);
+        data = data(sIdx, :);
+        
+        % Extract required signals
+        s.time_vec = seconds(fullDateTime - fullDateTime(1));
+        s.vm = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2); % Accel cols
+        s.energy = data{:,13}; % Energy col
+        
+        % Label Logic
+        labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
+        if ~isempty(labelIdx)
+            y = data{:, labelIdx};
+            if iscell(y) || isstring(y), y = str2double(y); end
+            s.y_true = y;
+        else
+            s.y_true = zeros(height(data), 1);
+        end
+        dataset{i} = s;
+    end
+end
+
+function avgF1 = run_eval_iteration(p, dataset, fs)
+    allF1 = zeros(length(dataset), 1);
+    winSize = 2 * fs;
+    step = 1 * fs;
+    maxGap = 1.5 / fs;
+
+    for i = 1:length(dataset)
+        d = dataset{i};
+        y_pred = zeros(length(d.vm), 1);
+        buffer = zeros(winSize, 1);
+        state = 0;
+
+        for s = 2:length(d.vm)
+            % 1. Gap Handling
+            if (d.time_vec(s) - d.time_vec(s-1)) > maxGap
+                buffer(:) = 0; state = 0; continue;
+            end
+            
+            % 2. Update Circular Buffer
+            buffer = [buffer(2:end); d.vm(s)];
+            
+            % 3. Periodic Detection
+            if mod(s, step) == 0 && s >= winSize
+                ampVal = d.energy(s); 
+                nfft = 512;
+                w = hann(winSize);
+                winProc = (buffer - mean(buffer)) .* w;
+                
+                % --- FIXED INDEXING ERROR HERE ---
+                S = fft(winProc, nfft);
+                P = abs(S(1:nfft/2+1)).^2; 
+                % ---------------------------------
+                
+                [maxPk, maxIdx] = max(P);
+                peakF = (fs * (maxIdx-1)) / nfft;
+                
+                rawDec = (peakF >= p.F_MIN && peakF <= p.F_MAX && ...
+                          maxPk > p.P_THRESH && ampVal > p.A_THRESH);
+                
+                % Causal (2-consecutive) logic
+                isGait = (state & rawDec);
+                state = rawDec;
+                
+                % Assign prediction to the window
+                idxRange = max(1, s-step+1) : s;
+                y_pred(idxRange) = double(isGait);
+            end
+        end
+        
+        % Calculate Metrics (Ignore the very first window)
+        evalIdx = winSize:length(d.vm);
+        if isempty(evalIdx), continue; end
+        
+        y_true_eval = d.y_true(evalIdx);
+        y_pred_eval = y_pred(evalIdx);
+        
+        tp = sum(y_true_eval == 1 & y_pred_eval == 1);
+        fp = sum(y_true_eval == 0 & y_pred_eval == 1);
+        fn = sum(y_true_eval == 1 & y_pred_eval == 0);
+        
+        prec = tp / (tp + fp); 
+        rec  = tp / (tp + fn);
+        
+        if (prec + rec) == 0
+            f1 = 0;
+        else
+            f1 = 2 * (prec * rec) / (prec + rec);
+        end
+        
+        if isnan(f1), f1 = 0; end
+        allF1(i) = f1;
+    end
+    avgF1 = mean(allF1);
+end

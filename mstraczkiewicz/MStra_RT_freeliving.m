@@ -161,7 +161,7 @@ for i = 1:length(allFiles)
             ylabel('Gait (0/1)'); grid on;
             title(sprintf('Detection vs GT  |  Prec=%.2f  Rec=%.2f  F1=%.2f  Acc=%.2f', ...
                 prec, rec, f1, acc));
-            legend({'GT', 'Prediction'}, 'Location', 'northeastoutside');
+            % legend({'GT', 'Prediction'}, 'Location', 'northeastoutside');
             xlabel('Time (s)');
 
             linkaxes(ax_h, 'x');
@@ -185,26 +185,63 @@ for i = 1:length(allFiles)
     end
 end
 
-% --- 4. SUMMARY ---
+% --- 4. SUMMARY (AGGREGATED BY RAW COUNTS) ---
 if ~isempty(summaryResults)
     fprintf('\n%s\n', repmat('=', 1, 60));
-    fprintf('SUMMARY BY SUBJECT\n');
+    fprintf('DETAILED SUMMARIES (GLOBAL AGGREGATION)\n');
     fprintf('%s\n', repmat('=', 1, 60));
-    subjectSummary = groupsummary(summaryResults, 'Subject', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
-    disp(subjectSummary(:, [1, 3:6]));
 
-    fprintf('\nOVERALL MEAN\n');
-    fprintf('Accuracy:  %.3f\n', mean(summaryResults.Accuracy));
-    fprintf('Precision: %.3f\n', mean(summaryResults.Precision));
-    fprintf('Recall:    %.3f\n', mean(summaryResults.Recall));
-    fprintf('F1:        %.3f\n', mean(summaryResults.F1));
+    % 1. Sum the raw counts for each subject
+    statsToSum = {'TP', 'FP', 'TN', 'FN'};
+    subjectSum = groupsummary(summaryResults, 'Subject', 'sum', statsToSum);
+    
+    % 2. Calculate metrics from the sums (prevents NaN/Mean distortion)
+    subjectSummary = addvars(subjectSum, ...
+        subjectSum.sum_TP ./ (subjectSum.sum_TP + subjectSum.sum_FP), ... % Precision
+        subjectSum.sum_TP ./ (subjectSum.sum_TP + subjectSum.sum_FN), ... % Recall
+        (subjectSum.sum_TP + subjectSum.sum_TN) ./ (subjectSum.sum_TP + subjectSum.sum_TN + subjectSum.sum_FP + subjectSum.sum_FN), ... % Accuracy
+        'NewVariableNames', {'Precision', 'Recall', 'Accuracy'});
 
-    % Save results
-    writetable(summaryResults, fullfile(plotPath, 'FreeLiving_MStra_Results.xlsx'), 'Sheet', 'All');
-    writetable(subjectSummary, fullfile(plotPath, 'FreeLiving_MStra_Results.xlsx'), 'Sheet', 'By_Subject');
-    fprintf('\nResults saved to FreeLiving_MStra_Results.xlsx\n');
+    % 3. Calculate F1
+    subjectSummary.F1 = 2 * (subjectSummary.Precision .* subjectSummary.Recall) ./ ...
+                            (subjectSummary.Precision + subjectSummary.Recall);
+    
+    % 4. Cleanup NaNs (where no gait was detected or present)
+    subjectSummary.Precision(isnan(subjectSummary.Precision)) = 0;
+    subjectSummary.Recall(isnan(subjectSummary.Recall)) = 0;
+    subjectSummary.F1(isnan(subjectSummary.F1)) = 0;
+
+    % Display Subject Table
+    disp(subjectSummary(:, {'Subject', 'Accuracy', 'Precision', 'Recall', 'F1'}));
+
+    % 5. Calculate Global Dataset Performance
+    total_tp = sum(summaryResults.TP);
+    total_fp = sum(summaryResults.FP);
+    total_fn = sum(summaryResults.FN);
+    total_tn = sum(summaryResults.TN);
+    
+    g_prec = total_tp / (total_tp + total_fp);
+    g_rec  = total_tp / (total_tp + total_fn);
+    g_f1   = 2 * (g_prec * g_rec) / (g_prec + g_rec);
+    g_acc  = (total_tp + total_tn) / (total_tp + total_tn + total_fp + total_fn);
+
+    fprintf('\nOVERALL DATASET TOTALS\n');
+    fprintf('Accuracy:  %.3f\n', g_acc);
+    fprintf('Precision: %.3f\n', g_prec);
+    fprintf('Recall:    %.3f\n', g_rec);
+    fprintf('F1:        %.3f\n', g_f1);
+
+    % --- SAFE SAVE TO EXCEL ---
+    resFile = fullfile(plotPath, 'FreeLiving_MStra_Results.xlsx');
+    try
+        writetable(summaryResults, resFile, 'Sheet', 'All_Files');
+        writetable(subjectSummary, resFile, 'Sheet', 'By_Subject');
+        fprintf('\nResults successfully saved to Excel.\n');
+    catch
+        warning('Excel file is open! Saving to Emergency_Backup.mat instead.');
+        save(fullfile(plotPath, 'Emergency_Backup.mat'), 'summaryResults', 'subjectSummary');
+    end
 end
-
 
 %% --- RT DETECTION FUNCTION ---
 function [finalDecision, newState, metrics] = run_mstra_rt(winData, fs, fMin, fMax, pThr, aThr, prevState)

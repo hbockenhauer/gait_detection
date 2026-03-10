@@ -4,13 +4,13 @@ clear; clc; close all;
 % --- 1. CONFIGURATION ---
 dataPaths = {
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    %'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
-
-F_MIN = 0.5; F_MAX = 3.50;
-P_THRESH = 3; A_THRESH = 0.1; 
+  % 0.044467    6.2058     2.647       103.4
+F_MIN = 0.044467; F_MAX = 6.2058;
+P_THRESH = 2.647; A_THRESH = 103.4; 
 fs = 50;
 windowSize = 2 * fs;
 stepSize = 1 * fs;
@@ -47,7 +47,7 @@ for d = 1:length(dataPaths)
             if ~isfile(fullFilePath), continue; end
             
             try
-                % --- A. LOAD & CLEAN (NO INTERPOLATION) ---
+            % --- A. LOAD & CLEAN (Stitching Version) ---
                 opts = detectImportOptions(fullFilePath);
                 opts.VariableNamingRule = 'preserve';
                 opts = setvartype(opts, [1, 2], 'string'); 
@@ -56,24 +56,48 @@ for d = 1:length(dataPaths)
                 dateTimeStr = string(data{:,1}) + " " + string(data{:,2});
                 fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
                 
-                % Remove Duplicates & Sort
-                [~, uniqueIdx] = unique(fullDateTime, 'stable');
-                data = data(uniqueIdx, :);
-                fullDateTime = fullDateTime(uniqueIdx);
+                % 1. Sort and Deduplicate
                 [fullDateTime, sortIdx] = sort(fullDateTime);
                 data = data(sortIdx, :);
-
-                % Get Time in Seconds
-                time_vec = seconds(fullDateTime - fullDateTime(1));
-                vm_all = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
+                [fullDateTime, uniqueIdx] = unique(fullDateTime);
+                data = data(uniqueIdx, :);
                 
-                % Extract Labels
-                labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
+                % 2. CREATE SYNTHETIC TIME (Fixes the 2034 jump)
+                % Instead of using (T - T1), we calculate time based on index/fs
+                % This assumes a constant 50Hz (0.02s) between samples
+                numSamples = height(data);
+                time_vec = (0:numSamples-1)' * (1/fs); 
+                
+                % 3. Extract rest of data
+                vm_all = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
+                energy = data{:,13};
+                
+                % --- B. GROUND TRUTH EXTRACTION (COLUMN OR FOLDER) ---
+                varNames = data.Properties.VariableNames;
+                labelIdx = find(strcmpi(varNames, 'Label'), 1);
+                
                 if ~isempty(labelIdx)
-                    y_true = data{:, labelIdx};
-                    if iscell(y_true) || isstring(y_true), y_true = str2double(y_true); end
+                    % CASE 1: Sample-level label column exists (Annotated files)
+                    raw_gt = data{:, labelIdx};
+                    
+                    % Convert to numeric if it's a string/cell
+                    if iscell(raw_gt) || isstring(raw_gt)
+                        raw_gt = str2double(raw_gt);
+                    end
+                    
+                    % Clean up NaNs and ensure double
+                    raw_gt(isnan(raw_gt)) = 0;
+                    y_true = double(raw_gt);
                 else
-                    y_true = zeros(height(data), 1);
+                    % CASE 2: Folder-level activity (Unannotated files)
+                    % If "walk" or "stairs" is in the folder name, assume 100% gait
+                    isGaitActivity = contains(lower(folderName), ["walk", "stairs"]);
+                    y_true = double(isGaitActivity) * ones(height(data), 1);
+                end
+
+                % Verify size consistency
+                if length(y_true) ~= length(vm_all)
+                     y_true = y_true(1:length(vm_all)); 
                 end
 
                 % --- B. REAL-TIME SIMULATION WITH GAP RESET ---
@@ -108,7 +132,7 @@ for d = 1:length(dataPaths)
                     % 3. Run Detection
                     if mod(s, stepSize) == 0 && s >= windowSize
                         [isGait, newState, m] = run_mstra_fast_rt_with_metrics(...
-                            circularBuffer, fs, F_MIN, F_MAX, P_THRESH, A_THRESH, detectionState);
+                            circularBuffer, fs, F_MIN, F_MAX, P_THRESH, A_THRESH, detectionState, energy(s));
                         
                         detectionState = newState;
                         y_pred_rt(s-stepSize+1 : s) = double(isGait);
@@ -245,41 +269,75 @@ for d = 1:length(dataPaths)
     end
 end
 
-% --- 5. DETAILED PERFORMANCE SUMMARIES ---
+% --- 5. AGGREGATED PERFORMANCE SUMMARIES (GLOBAL SUMS) ---
 if ~isempty(summaryResults)
+    % A. Define the aggregation function (Summing the counts)
+    statsToSum = {'TP', 'FP', 'TN', 'FN'};
     
-    % A. Summary by Wrist
-    wristSummary = groupsummary(summaryResults, 'Wrist', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
+    % B. Summarize by Wrist, Activity, and Subject
+    wristSum    = groupsummary(summaryResults, 'Wrist', 'sum', statsToSum);
+    activitySum = groupsummary(summaryResults, 'Activity', 'sum', statsToSum);
+    subjectSum  = groupsummary(summaryResults, 'Subject', 'sum', statsToSum);
     
-    % B. Summary by Activity
-    activitySummary = groupsummary(summaryResults, 'Activity', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
-    
-    % C. Summary by Subject
-    subjectSummary = groupsummary(summaryResults, 'Subject', 'mean', {'Accuracy', 'Precision', 'Recall', 'F1'});
+    % C. Define a helper to calculate final metrics from sums
+    calcMetrics = @(t) addvars(t, ...
+        t.sum_TP ./ (t.sum_TP + t.sum_FP), ... % Precision
+        t.sum_TP ./ (t.sum_TP + t.sum_FN), ... % Recall
+        (t.sum_TP + t.sum_TN) ./ (t.sum_TP + t.sum_TN + t.sum_FP + t.sum_FN), ... % Accuracy
+        'NewVariableNames', {'Precision', 'Recall', 'Accuracy'});
 
+    % D. Apply calculation and derive F1
+    wristFinal    = calcMetrics(wristSum);
+    activityFinal = calcMetrics(activitySum);
+    subjectFinal  = calcMetrics(subjectSum);
+    
+    % Calculate F1 Score: 2 * (P * R) / (P + R)
+    f1Func = @(p, r) 2 .* (p .* r) ./ (p + r);
+    wristFinal.F1    = f1Func(wristFinal.Precision, wristFinal.Recall);
+    activityFinal.F1 = f1Func(activityFinal.Precision, activityFinal.Recall);
+    subjectFinal.F1  = f1Func(subjectFinal.Precision, subjectFinal.Recall);
+
+    % Cleanup: Handle NaNs (where TP+FP=0 or TP+FN=0)
+    finalTables = {wristFinal, activityFinal, subjectFinal};
+    for j = 1:3
+        t = finalTables{j};
+        t.Precision(isnan(t.Precision)) = 0;
+        t.Recall(isnan(t.Recall)) = 0;
+        t.F1(isnan(t.F1)) = 0;
+        finalTables{j} = t;
+    end
+    [wristFinal, activityFinal, subjectFinal] = deal(finalTables{:});
+
+    % --- DISPLAY ---
     fprintf('\n======================================================================\n');
-    fprintf('DETAILED SUMMARIES (REAL-TIME CAUSAL LOGIC)\n');
+    fprintf('GLOBAL AGGREGATED METRICS (Total TP / Total Counts)\n');
     fprintf('----------------------------------------------------------------------\n');
-    
-    disp('BY WRIST:');
-    disp(wristSummary(:, [1, 3:6])); % Displaying name and means
-    
+    disp('BY WRIST:'); disp(wristFinal(:, [1, 6:9]));
     fprintf('----------------------------------------------------------------------\n');
-    disp('BY ACTIVITY:');
-    disp(activitySummary(:, [1, 3:6]));
-    
+    disp('BY ACTIVITY:'); disp(activityFinal(:, [1, 6:9]));
     fprintf('----------------------------------------------------------------------\n');
-    disp('BY SUBJECT:');
-    disp(subjectSummary(:, [1, 3:6]));
-    
+    disp('BY SUBJECT:'); disp(subjectFinal(:, [1, 6:9]));
     fprintf('======================================================================\n');
+
+    % --- GLOBAL TOTALS (Ignores NaN issues) ---
+    total_tp = sum(summaryResults.TP);
+    total_fp = sum(summaryResults.FP);
+    total_fn = sum(summaryResults.FN);
     
+    global_precision = total_tp / (total_tp + total_fp);
+    global_recall    = total_tp / (total_tp + total_fn);
+    global_f1 = 2 * (global_precision * global_recall) / (global_precision + global_recall);
+    
+    fprintf('\nGLOBAL DATASET PERFORMANCE:\n');
+    fprintf('Precision: %.4f | Recall: %.4f | F1: %.4f\n', ...
+            global_precision, global_recall, global_f1);
+        
     % Save the detailed summaries to one Excel file with different sheets
     resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
     writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
-    writetable(wristSummary, resultsFile, 'Sheet', 'By_Wrist');
-    writetable(activitySummary, resultsFile, 'Sheet', 'By_Activity');
-    writetable(subjectSummary, resultsFile, 'Sheet', 'By_Subject');
+    writetable(wristFinal, resultsFile, 'Sheet', 'By_Wrist');
+    writetable(activityFinal, resultsFile, 'Sheet', 'By_Activity');
+    writetable(subjectFinal, resultsFile, 'Sheet', 'By_Subject');
 end
 
 % % --- After the for loop ---
@@ -293,8 +351,9 @@ end
 % fprintf('Real-Time Load:    %.2f%%\n', cpuLoad);
 
 %% --- RT FUNCTION ---
-function [finalDecision, newState, metrics] = run_mstra_fast_rt_with_metrics(winData, fs, fMin, fMax, pThr, aThr, prevState)
-    metrics.ampVal = std(winData);
+function [finalDecision, newState, metrics] = run_mstra_fast_rt_with_metrics(winData, fs, fMin, fMax, pThr, aThr, prevState, energy)
+    %metrics.ampVal = std(winData);
+    metrics.ampVal = energy;
     nfft = 512;
     w = hann(length(winData));
     winProc = (winData - mean(winData)) .* w;

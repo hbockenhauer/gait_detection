@@ -115,36 +115,62 @@ def resample_to_30hz(filepath, original_fs=SAMPLE_RATE_QSENSE):
     return resampled
     
 # --- PREPARE WINDOWS FOR ELDERNET ---
-def prepare_windows_overlapping(df):
+def prepare_windows_overlapping(df, window_size, step_size, nfft=512):
     acc_data = df[['accX', 'accY', 'accZ']].values
     gt_raw = df['gt'].values
     times = df['time_sec'].values
     q_energies = df['energy'].values
-    windows, energies, freqs, activities, timestamps, Q_energies = [], [], [], [], [], []
     
-    def get_dominant_freq(win, fs=30):
+    windows, energies, freqs, activities, timestamps, Q_energies = [], [], [], [], [], []
+
+    def get_dominant_freq(win, fs=30, nfft_size=512):
+        # 1. Calculate 3D magnitude (orientation-invariant)
         mag = np.sqrt(np.sum(win**2, axis=0))
-        mag = mag - np.mean(mag)
-        freqs_fft = np.fft.rfftfreq(len(mag), d=1/fs)
-        fft_vals = np.abs(np.fft.rfft(mag))
-        return freqs_fft[np.argmax(fft_vals)]
-
-    # Create overlapping windows by looking at previous 10s of data for each timestamp   
-    for i in range(WINDOW_SIZE, len(acc_data), STEP_SIZE):
-        win = acc_data[i - WINDOW_SIZE:i]
-        act_win = gt_raw[i - WINDOW_SIZE:i]
         
+        # 2. Remove DC offset (gravity)
+        mag = mag - np.mean(mag)
+        
+        # 3. Apply Hann window to reduce spectral leakage
+        # np.hanning applies the windowing function to smoothly taper the edges
+        hann_win = np.hanning(len(mag))
+        mag_windowed = mag * hann_win
+        
+        
+        # 4. Calculate FFT with zero-padding
+        # Passing 'n=nfft_size' to rfft automatically pads the signal with zeros up to 512
+        freqs_fft = np.fft.rfftfreq(nfft_size, d=1/fs)
+        
+        # 5. Calculate Power Spectrum (magnitude squared)
+        power_spectrum = np.abs(np.fft.rfft(mag_windowed, n=nfft_size))**2
+        
+        
+        # 6. Return the frequency bin with the maximum power
+        return freqs_fft[np.argmax(power_spectrum)]
+
+    for i in range(window_size, len(acc_data), step_size):
+        win = acc_data[i - window_size:i]
+        act_win = gt_raw[i - window_size:i]
+
         windows.append(win.T)
-        energies.append(np.std(np.sqrt(np.sum(win**2, axis=1))))
-        freqs.append(get_dominant_freq(win.T))
+        
+        # Energy: Standard deviation of the 3D magnitude
+        energies.append(np.std(np.sqrt(np.sum((win)**2, axis=1)))*9.81**3)
+        
+        # Pass nfft to the frequency calculation
+        freqs.append(get_dominant_freq(win.T, fs=30, nfft_size=nfft))
+        
         activities.append(int(np.mean(act_win) > 0.5))
-
         timestamps.append(times[i-1])
-        # Better — mean over the window, comparable to your energy metric
-        Q_energies.append(np.mean(q_energies[i - WINDOW_SIZE:i]))
+        Q_energies.append(np.mean(q_energies[i - window_size:i]))
 
-    return torch.FloatTensor(np.array(windows)), np.array(energies), np.array(freqs), activities, np.array(timestamps), np.array(Q_energies)
-
+    return (
+        torch.FloatTensor(np.array(windows)),
+        np.array(energies),
+        np.array(freqs),
+        activities,
+        np.array(timestamps),
+        np.array(Q_energies)
+    )
 
 # --- PLOTTING FUNCTION ---
 def plot_per_activity(results_list, subjects, metrics):
@@ -427,7 +453,7 @@ def main():
             try:
                 df_30hz = resample_to_30hz(file)
                 Q_energy = df_30hz['energy'].values
-                wins, engs, frqs, acts, tmstps, Q_energies = prepare_windows_overlapping(df_30hz)
+                wins, engs, frqs, acts, tmstps, Q_energies = prepare_windows_overlapping(df_30hz, window_size=WINDOW_SIZE, step_size=STEP_SIZE)
 
                 with torch.no_grad():
                     logits = model(wins.to(device))
