@@ -226,4 +226,4 @@ class KheirkhahanGSD:
 
         self.gs_list_ = gs
 
-        return self, detected_walking, activity_counts
+        return self, activity_counts

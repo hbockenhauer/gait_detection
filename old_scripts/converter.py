@@ -1,6 +1,6 @@
 import csv
 
-file_path = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test1_Tanya\s1_1RW.txt"
+file_path = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test3_Tanya\s2_2LW.txt"
 
 with open(file_path, newline='') as infile:
     reader = csv.reader(infile, delimiter=',')
