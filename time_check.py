@@ -5,11 +5,12 @@ from datetime import time
 
 
 #DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
-DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
+DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_data"
 
-SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\mixed"
+SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\data"
 
 FILES = [
+    "s0_Hub.txt",
     "s1_1RW.txt",
     "s2_2LW.txt",
     "s3_3RL.txt",
@@ -32,7 +33,7 @@ def read_timestamps(file_path):
 
 def plot_folder(folder_path, txt_files, out_folder):
     n = len(txt_files)
-    fig, axes = plt.subplots(n, 1, figsize=(12, 4 * n), sharex=False)
+    fig, axes = plt.subplots(n, 1, figsize=(10, 3 * n), sharex=False)
 
     if n == 1:
         axes = [axes]
@@ -64,29 +65,6 @@ def plot_folder(folder_path, txt_files, out_folder):
 
 
 if __name__ == '__main__':
-    '''
-    print(len(FILES))
-    if len(FILES) == 2:
-        fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=False)
-    elif len(FILES) == 3: 
-        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=False)
-
-    for ax, file_name in zip(axes, FILES):
-        file_path = os.path.join(DATA_PATH, file_name)
-        timestamps = read_timestamps(file_path)
-        ts_seconds = [t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
-                      for t in timestamps]
-        ax.plot(range(len(ts_seconds)), ts_seconds, linewidth=0.8)
-        ax.set_title(file_name)
-        #ax.set_xlabel('Row index')
-        ax.set_ylabel('Seconds since midnight')
-
-    plt.suptitle(f"{os.path.basename(DATA_PATH)}", fontsize=13)
-    plt.tight_layout()
-    out_path = os.path.join(DATA_PATH, f"{os.path.basename(DATA_PATH)}_timecheck.png")
-    plt.savefig(out_path, dpi=150)
-    print(f"Saved -> {out_path}")
-    plt.show()'''
     subfolders = sorted([
         entry.path
         for entry in os.scandir(DATA_ROOT)
