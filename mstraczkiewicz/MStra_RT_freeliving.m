@@ -1,12 +1,16 @@
 %% --- MStra Real-Time Gait Detection on Free-Living Stroke Patient Data ---
 clear; clc; close all;
+warning('off', 'MATLAB:datetime:AmbiguousInputFormat'); % Silence the format warnings
 
 % --- 1. CONFIGURATION ---
 dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\Free_living';
 plotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_FreeLiving';
 
-F_MIN    = 0.5;  F_MAX  = 3.50;
-P_THRESH = 1.0;    A_THRESH = 0.08;
+
+    % 0.96248    5.4359    0.78589    260.11    0.035257    0.12653
+F_MIN    = 0.96248;  F_MAX  = 5.4359;
+P_MIN = 0.78589;    P_MAX = 260.11;
+A_MIN = 0.035257;    A_MAX = 0.12653;
 fs          = 50;
 windowSize  = 2 * fs;   % 2s window
 stepSize    = 1 * fs;   % 1s step
@@ -42,14 +46,52 @@ for i = 1:length(allFiles)
         if iscell(timeRaw), timeRaw = string(timeRaw); end
         fullDateTime = datetime(timeRaw, 'InputFormat', 'MM/dd/yyyy HH:mm:ss.SSS', 'Locale', 'en_US');
 
-        % Remove duplicates and sort
-        [~, uniqueIdx] = unique(fullDateTime, 'stable');
-        data         = data(uniqueIdx, :);
-        fullDateTime = fullDateTime(uniqueIdx);
-        [fullDateTime, sortIdx] = sort(fullDateTime);
-        data         = data(sortIdx, :);
+        % --- STEP 0: REMOVE BACKWARDS-JUMP BLOCKS ---
+        % The device re-dumps its circular buffer, creating blocks that go
+        % backwards in time by seconds. Drop any sample whose timestamp is
+        % earlier than the running maximum seen so far.
+        runningMax = fullDateTime(1);
+        keepMask   = true(length(fullDateTime), 1);
+        for k = 1:length(fullDateTime)
+            if fullDateTime(k) < runningMax
+                keepMask(k) = false;
+            else
+                runningMax = fullDateTime(k);
+            end
+        end
+        fullDateTime = fullDateTime(keepMask);
+        data         = data(keepMask, :);
 
-        % Time vector in seconds
+        % --- 1. FIX TIME TRAVELERS FIRST ---
+        % Calculate time differences based on raw file order
+        time_diffs = diff(fullDateTime);
+        
+        % Find indices where the jump is absurdly large (e.g., > 100 days)
+        jumpIdx = find(abs(time_diffs) > days(100)); 
+        
+        for j = 1:length(jumpIdx)
+            idx = jumpIdx(j);
+            % Calculate the "false" gap, leaving a standard 0.02s step
+            false_gap = time_diffs(idx) - seconds(1/fs); 
+            
+            % Shift all subsequent timestamps back (or forward) to reality
+            fullDateTime(idx+1:end) = fullDateTime(idx+1:end) - false_gap;
+            
+            % Update diffs for the next loop in case there are multiple jumps
+            time_diffs = diff(fullDateTime); 
+        end
+        
+        % --- 2. GLOBAL SORT ---
+        % Now safe to sort, which fixes the millisecond out-of-order blocks
+        [fullDateTime, sortIdx] = sort(fullDateTime);
+        data = data(sortIdx, :);
+        
+        % --- 3. REMOVE REPEATS ---
+        % Drops identical timestamps (buffer overwrites)
+        [fullDateTime, uniqueIdx] = unique(fullDateTime);
+        data = data(uniqueIdx, :);
+        
+        % --- 4. CREATE LITERAL TIME VECTOR ---
         time_vec = seconds(fullDateTime - fullDateTime(1));
 
         % --- C. EXTRACT ACCELEROMETER DATA ---
@@ -95,7 +137,7 @@ for i = 1:length(allFiles)
             % Run detection every stepSize samples
             if mod(s, stepSize) == 0 && s >= windowSize
                 [isGait, newState, m] = run_mstra_rt(...
-                    circularBuffer, fs, F_MIN, F_MAX, P_THRESH, A_THRESH, detectionState);
+                    circularBuffer, fs, F_MIN, F_MAX, P_MIN, P_MAX, A_MIN, A_MAX, detectionState);
 
                 detectionState = newState;
                 y_pred_rt(s - stepSize + 1 : s) = double(isGait);
@@ -143,14 +185,14 @@ for i = 1:length(allFiles)
             % Subplot 2: Power
             ax_h(2) = subplot(4, 1, 2); hold on;
             plot(rt_T, rt_maxPk, 'Color', color, 'LineWidth', 1.2);
-            yline(P_THRESH, 'r--');
+            yline([P_MIN, P_MAX], 'r--');
             ylabel('Power'); grid on;
             title('Criterion 2: Spectral Power');
 
             % Subplot 3: Amplitude
             ax_h(3) = subplot(4, 1, 3); hold on;
             plot(rt_T, rt_ampVal, 'Color', color, 'LineWidth', 1.2);
-            yline(A_THRESH, 'r--');
+            yline([A_MIN, A_MAX], 'r--');
             ylabel('Std Dev'); grid on;
             title('Criterion 3: Amplitude');
 
@@ -244,7 +286,7 @@ if ~isempty(summaryResults)
 end
 
 %% --- RT DETECTION FUNCTION ---
-function [finalDecision, newState, metrics] = run_mstra_rt(winData, fs, fMin, fMax, pThr, aThr, prevState)
+function [finalDecision, newState, metrics] = run_mstra_rt(winData, fs, fMin, fMax, pMin, pMax, aMin, aMax, prevState)
     metrics.ampVal = std(winData);
 
     nfft    = 512;
@@ -258,7 +300,8 @@ function [finalDecision, newState, metrics] = run_mstra_rt(winData, fs, fMin, fM
     metrics.peakF  = freqs(maxIdx);
 
     rawDecision   = (metrics.peakF >= fMin && metrics.peakF <= fMax && ...
-                     metrics.maxPk > pThr && metrics.ampVal > aThr);
+                     metrics.maxPk > pMin && metrics.maxPk < pMax && ...
+                     metrics.ampVal > aMin && metrics.ampVal < aMax);
 
     % Require 2 consecutive detections (1 history element)
     newState      = rawDecision;

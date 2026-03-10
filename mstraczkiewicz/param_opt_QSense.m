@@ -72,121 +72,171 @@ disp(bestParams);
 %% --- QSense Data Pre-Loader ---
 function dataset = pre_load_qsense_data(filesInfo)
     dataset = cell(length(filesInfo), 1);
+    fs = 50; % Define locally to keep function self-contained
+    
     for i = 1:length(filesInfo)
-        opts = detectImportOptions(filesInfo(i).path);
-        opts.VariableNamingRule = 'preserve';
-        opts = setvartype(opts, [1, 2], 'string'); 
-        data = readtable(filesInfo(i).path, opts);
-        
-        % QSense Timestamp Logic: Col 1 (Date) + Col 2 (Time)
-        dateTimeStr = string(data{:,1}) + " " + string(data{:,2});
-        fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
-        
-        % Clean Duplicates/Sort
-        [~, uIdx] = unique(fullDateTime, 'stable');
-        data = data(uIdx, :);
-        fullDateTime = fullDateTime(uIdx);
-        [fullDateTime, sIdx] = sort(fullDateTime);
-        data = data(sIdx, :);
-        
-        % Extract required signals
-        s.time_vec = seconds(fullDateTime - fullDateTime(1));
-        s.vm = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2); % Accel cols
-        s.energy = data{:,13}; % Energy col
-        
-        % Label Logic
-        labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
-        if ~isempty(labelIdx)
-            y = data{:, labelIdx};
-            if iscell(y) || isstring(y), y = str2double(y); end
-            s.y_true = y;
-        else
-            s.y_true = zeros(height(data), 1);
+        try
+            opts = detectImportOptions(filesInfo(i).path);
+            opts.VariableNamingRule = 'preserve';
+            opts = setvartype(opts, [1, 2], 'string');
+            data = readtable(filesInfo(i).path, opts);
+
+            % --- STEP 1: PARSE TIMESTAMPS ---
+            dateTimeStr = string(data{:,1}) + " " + string(data{:,2});
+            fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
+
+            % --- STEP 0.5: REMOVE BACKWARDS-JUMP BLOCKS ---
+            % The device re-dumps its circular buffer, creating blocks that go
+            % backwards in time by seconds. Drop any sample whose timestamp is
+            % earlier than the running maximum seen so far.
+            runningMax = fullDateTime(1);
+            keepMask   = true(length(fullDateTime), 1);
+            for k = 1:length(fullDateTime)
+                if fullDateTime(k) < runningMax
+                    keepMask(k) = false;
+                else
+                    runningMax = fullDateTime(k);
+                end
+            end
+            fullDateTime = fullDateTime(keepMask);
+            data         = data(keepMask, :);
+
+            % --- STEP 2: FIX TIME TRAVELERS (1970 / 2034 jumps) FIRST ---
+            time_diffs = diff(fullDateTime);
+            jumpIdx = find(abs(time_diffs) > days(100));
+            for j = 1:length(jumpIdx)
+                idx = jumpIdx(j);
+                false_gap = time_diffs(idx) - seconds(1/fs);
+                fullDateTime(idx+1:end) = fullDateTime(idx+1:end) - false_gap;
+                time_diffs = diff(fullDateTime); % Recompute for next iteration
+            end
+
+            % --- STEP 3: GLOBAL SORT ---
+            [fullDateTime, sIdx] = sort(fullDateTime);
+            data = data(sIdx, :);
+
+            % --- STEP 4: REMOVE DUPLICATE TIMESTAMPS ---
+            [fullDateTime, uIdx] = unique(fullDateTime);
+            data = data(uIdx, :);
+
+            % --- STEP 5: BUILD TIME VECTOR ---
+            s.time_vec = seconds(fullDateTime - fullDateTime(1));
+
+            % --- STEP 6: EXTRACT SIGNALS ---
+            s.vm     = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
+            s.energy = data{:,13};
+
+            % --- STEP 7: EXTRACT LABELS ---
+            labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
+            if ~isempty(labelIdx)
+                y = data{:, labelIdx};
+                if iscell(y) || isstring(y)
+                    y = str2double(y);
+                end
+                y(isnan(y)) = 0;
+                s.y_true = double(y);
+            else
+                % Folder-level label: infer from filename path
+                isGait = contains(lower(filesInfo(i).path), ["walk", "stairs"]);
+                s.y_true = double(isGait) * ones(height(data), 1);
+            end
+
+            % --- STEP 8: SANITY CHECK ---
+            % Ensure all signals are the same length after cleaning
+            minLen = min([length(s.vm), length(s.energy), length(s.y_true)]);
+            s.vm     = s.vm(1:minLen);
+            s.energy = s.energy(1:minLen);
+            s.y_true = s.y_true(1:minLen);
+            s.time_vec = s.time_vec(1:minLen);
+
+            dataset{i} = s;
+
+        catch ME
+            fprintf('  WARNING: Skipping file %s\n  Reason: %s\n', ...
+                    filesInfo(i).path, ME.message);
+            dataset{i} = []; % Leave empty; run_eval_iteration should skip []
         end
-        dataset{i} = s;
     end
 end
 
-function avgF1 = run_eval_iteration(p, dataset, fs)
-    % --- SPEED OPTIMIZATION (SHORT-CIRCUIT) ---
-    % If the optimizer picks a MIN that is >= MAX, it's impossible to detect anything.
-    % Return 0 immediately to save time!
+function globalF1 = run_eval_iteration(p, dataset, fs)
+    % Short-circuit impossible parameter combinations
     if (p.F_MIN >= p.F_MAX) || (p.P_MIN >= p.P_MAX) || (p.A_MIN >= p.A_MAX)
-        avgF1 = 0;
+        globalF1 = 0;
         return;
     end
 
-    allF1 = zeros(length(dataset), 1);
+    % Accumulate counts globally across all files
+    total_tp = 0;
+    total_fp = 0;
+    total_fn = 0;
+
     winSize = 2 * fs;
-    step = 1 * fs;
-    maxGap = 1.5 / fs;
+    step    = 1 * fs;
+    maxGap  = 1.5 / fs;
 
     for i = 1:length(dataset)
         d = dataset{i};
+        if isempty(d), continue; end  % Guard for files that failed to load
+
         y_pred = zeros(length(d.vm), 1);
         buffer = zeros(winSize, 1);
-        state = 0;
+        state  = 0;
 
         for s = 2:length(d.vm)
-            % 1. Gap Handling
             if (d.time_vec(s) - d.time_vec(s-1)) > maxGap
                 buffer(:) = 0; state = 0; continue;
             end
-            
-            % 2. Update Circular Buffer
+
             buffer = [buffer(2:end); d.vm(s)];
-            
-            % 3. Periodic Detection
+
             if mod(s, step) == 0 && s >= winSize
-                ampVal = d.energy(s); 
-                nfft = 512;
-                w = hann(winSize);
+                ampVal = d.energy(s);
+                nfft   = 512;
+                w      = hann(winSize);
                 winProc = (buffer - mean(buffer)) .* w;
-                
+
                 S = fft(winProc, nfft);
-                P = abs(S(1:nfft/2+1)).^2; 
-                
+                P = abs(S(1:nfft/2+1)).^2;
+
                 [maxPk, maxIdx] = max(P);
                 peakF = (fs * (maxIdx-1)) / nfft;
-                
-                % --- UPDATED DECISION LOGIC HERE ---
+
                 rawDec = (peakF >= p.F_MIN && peakF <= p.F_MAX && ...
-                          maxPk > p.P_MIN  && maxPk <= p.P_MAX && ...
-                          ampVal > p.A_MIN && ampVal <= p.A_MAX);
-                % -----------------------------------
-                
-                % Causal (2-consecutive) logic
+                          maxPk >  p.P_MIN  && maxPk  <= p.P_MAX && ...
+                          ampVal > p.A_MIN  && ampVal <= p.A_MAX);
+
                 isGait = (state & rawDec);
-                state = rawDec;
-                
-                % Assign prediction to the window
+                state  = rawDec;
+
                 idxRange = max(1, s-step+1) : s;
                 y_pred(idxRange) = double(isGait);
             end
         end
-        
-        % Calculate Metrics
-        evalIdx = winSize:length(d.vm);
+
+        % Accumulate raw counts (skip burn-in window)
+        evalIdx     = winSize:length(d.vm);
         if isempty(evalIdx), continue; end
-        
+
         y_true_eval = d.y_true(evalIdx);
         y_pred_eval = y_pred(evalIdx);
-        
-        tp = sum(y_true_eval == 1 & y_pred_eval == 1);
-        fp = sum(y_true_eval == 0 & y_pred_eval == 1);
-        fn = sum(y_true_eval == 1 & y_pred_eval == 0);
-        
-        prec = tp / (tp + fp); 
-        rec  = tp / (tp + fn);
-        
-        if (prec + rec) == 0
-            f1 = 0;
-        else
-            f1 = 2 * (prec * rec) / (prec + rec);
-        end
-        
-        if isnan(f1), f1 = 0; end
-        allF1(i) = f1;
+
+        total_tp = total_tp + sum(y_true_eval == 1 & y_pred_eval == 1);
+        total_fp = total_fp + sum(y_true_eval == 0 & y_pred_eval == 1);
+        total_fn = total_fn + sum(y_true_eval == 1 & y_pred_eval == 0);
     end
-    avgF1 = mean(allF1);
+
+    % Compute global F1 from pooled counts
+    precision = total_tp / (total_tp + total_fp);
+    recall    = total_tp / (total_tp + total_fn);
+
+    if (precision + recall) == 0
+        globalF1 = 0;
+    else
+        globalF1 = 2 * (precision * recall) / (precision + recall);
+    end
+
+    % Safeguard: if all predictions are zero (no gait detected at all),
+    % precision would be NaN (0/0). Treat as 0.
+    if isnan(globalF1), globalF1 = 0; end
 end
