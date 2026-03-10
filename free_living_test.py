@@ -202,7 +202,7 @@ def process_gait(imu_merged: pd.DataFrame,
             continue
 
         metrics, output_name = result
-        output_name = 'Free_living_Results.csv'  
+        output_name = 'Results/Free_living_Results.csv'  
 
         results.append({
             'Subject': label,

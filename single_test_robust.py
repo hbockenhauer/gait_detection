@@ -12,11 +12,11 @@ from datetime import time
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik"
-file_name = "s3_3RL.txt"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test8_Hendrik"
+file_name = "s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
-MIN_SEGMENT_SAMPLES = 34  # requirement for the band pass filter
+MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for the band pass filter
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
         rows = rows if "mixed" in DATA_PATH else rows[500:]
         print("data is full") if "mixed" in DATA_PATH else print("10s clipped")
+
         clean_rows = []
         segments   = []
         max_time   = None
@@ -60,6 +61,7 @@ if __name__ == "__main__":
                 t = parse_time(row['HH:mm:ss.fff'])
             except Exception:
                 continue
+
             if max_time is None or t > max_time:
                 if prev_time is not None:
                     # compute gap in ms (handles minute/hour rollover simply)
@@ -68,21 +70,23 @@ if __name__ == "__main__":
                     if gap_ms > ((1001/SAMPLING_RATE)):
                         segment_id += 1
                 max_time  = t
-                prev_time = t
+                prev_time = t           
                 clean_rows.append(row)
                 segments.append(segment_id)
             else:
                 dropped_rows += 1
-
-        # print("maxtime was", max_time)
+        
         if DEBUG:
             print(f"Dropped {dropped_rows} rows.")
             print(f"Found {segment_id+1} segments. ")
+            print(f"Kept {len(clean_rows)} rows. \n")
         df = pd.DataFrame(clean_rows)
         df = df.reset_index(drop=True)
         df['segment'] = segments
-        print("DF SIZE:", df.size)
-        print(df.columns.tolist())
+        # df.columns are now :
+        # ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
+        # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
+        # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
         
 
         # 2. Identify and Rename Columns to Anatomical Labels
@@ -93,18 +97,11 @@ if __name__ == "__main__":
             print(f"{len(acc_cols)} columns found instead.")
             
             
-        imu_df = df[acc_cols[:3]].copy()
-        imu_df = imu_df.astype(float) * 9.81
-        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
-        #imu_df['segment'] = segments
-
-        # print("IMU DF IS", imu_df)
-        # print(imu_df.size)
-        # print(imu_df.columns)
+        # imu_df = df[acc_cols[:3]].copy()
+        # imu_df = imu_df.astype(float) * 9.81
+        # imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
 
         # 3. Ground Truth
-        # if False:
-        #     y_true = np.ones(len(df))
         if 'test' in DATA_PATH:
             y_true = df['Label'].astype(int).to_numpy()
         else:
@@ -113,25 +110,17 @@ if __name__ == "__main__":
 
         if DEBUG == True:
             print('y true is ', y_true)
-            print(f'There are {len(y_true==1)} ones')
-            print(f'There are {len(y_true==0)} zeros')
         diffs = np.diff(y_true)
         diffs_pos = np.where((np.abs(diffs) == 1))
-        #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
-        #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
+        # correct so far 
 
-        # 4. Run GSD
-        
-        # HickeyGSD
-        # gsd = HickeyGSD(debug=DEBUG, visual=True)
-        # detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE).detect_wrist()
-        
-        # KheirkhahanGSD
-        # gsd = KheirkhahanGSD(cwb=False, visual=True, switch=diffs_pos[0])
-        # detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-        
-        imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
+        # 4. Run GSD        
+        # imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
         detected_bouts = []
+        skipped_segments = 0
+        y_pred = np.zeros(len(df))
+        detected_walking_all = []
+        activity_counts_timeline = {}
         for segment, grp in df.groupby('segment', sort=True):
             global_start_idx = grp.index[0]  # offset into the full df
 
@@ -141,11 +130,25 @@ if __name__ == "__main__":
                 skipped_segments += 1
                 continue
             # FIX: use a local variable, do NOT overwrite imu_df
-            segment_imu = grp[imu_cols].reset_index(drop=True)
-            segment_y_true = grp['y_true'].to_numpy()
-
+            seg_imu = grp[acc_cols[:3]].copy().astype(float) * 9.81
+            seg_imu.columns = ['acc_pa', 'acc_ml', 'acc_is']
+            seg_imu.reset_index(drop=True)
+            
             gsd = KheirkhahanGSD(cwb=False, visual=True, switch=diffs_pos[0])
-            bout_result = gsd.detect(segment_imu, sampling_rate_hz=SAMPLING_RATE)
+            bout_result, detected_walking, activity_counts = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+            print('detected_walking', detected_walking)
+            print('detected_walking size', len(detected_walking))
+            print()
+            print('activity_counts', activity_counts)
+            print('activity_counts size', len(activity_counts))
+            print()
+            print()
+            # dw_arr = np.asarray(detected_walking, dtype=float)
+            # g_end = global_start_idx + len(dw_arr)
+            # detected_walking_all[global_start_idx:g_end] = dw_arr
+            global_start_sec = global_start_idx // SAMPLING_RATE
+            for i, val in enumerate(activity_counts):
+                activity_counts_timeline[global_start_sec + i] = val
 
             if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
                 for _, bout_row in bout_result.gs_list_.iterrows():
@@ -153,30 +156,65 @@ if __name__ == "__main__":
                     global_bout_start = int(bout_row['start']) + global_start_idx
                     global_bout_end = int(bout_row['end']) + global_start_idx
                     detected_bouts.append((global_bout_start, global_bout_end))
+                    y_pred[global_bout_start:global_bout_end] = 1
             # if result is None:
             #     continue
             # metrics, output_name = result
         if DEBUG: 
             print(f"Total detected bouts across all segments: {len(detected_bouts)}")
         
-        if hasattr(detected_bouts, 'gs_list_') and DEBUG:
-            print(f"gs_list_ type: {type(detected_bouts.gs_list_)}")
-            print(f"gs_list_ empty: {detected_bouts.gs_list_.empty}")
-            if not detected_bouts.gs_list_.empty:
-                print(f"Detected bouts:\n{detected_bouts.gs_list_}")
+        if hasattr(bout_result, 'gs_list_') and DEBUG:
+            print(f"detected_bouts type: {type(detected_bouts)}")
+            # print(f"detected_bouts empty: {detected_bouts.empty}")
+            if detected_bouts != []:
+                print(f"Detected bouts:\n{detected_bouts}")
+                print(f'True switch times:\n{diffs_pos}')
             else:
                 print("No walking bouts detected!")
         
-        # 5. Convert Bout List to Binary Mask
-        y_pred = np.zeros(len(df))
-        if hasattr(detected_bouts, 'gs_list_') and not detected_bouts.gs_list_.empty:
-            for idx, row in detected_bouts.gs_list_.iterrows():
-                # Ensure indices are within bounds
-                start = int(max(0, row['start']))
-                end = int(min(len(df), row['end']))
-                #print(f"Bout {idx}: start={start}, end={end}, duration={end-start} samples")
-                y_pred[start:end] = 1
-        # prints
+        # Plot
+        # fig, ax = plt.subplots(figsize=(14, 4))
+        # x = np.arange(len(df))
+
+        # # ax.plot(x, y_true,               label='Ground truth',      alpha=0.6, linewidth=1)
+        # # ax.plot(x, detected_walking_all, label='Detected walking',  alpha=0.8, linewidth=1)
+        # ax.plot(x, y_pred,               label='GSD bout mask',     alpha=0.6, linewidth=1, linestyle='--')
+
+        # for sw in diffs_pos[0]:
+        #     ax.axvline(x=sw, color='red', linewidth=0.8, linestyle=':', alpha=0.7)
+        # ax.axvline(x=sw, color='red', linewidth=0.8, linestyle=':', alpha=0.7, label='Switch points')  # label once
+
+        # ax.set_xlabel('Sample index')
+        # ax.set_ylabel('Walking (1) / Not walking (0)')
+        # ax.set_title(f'{file_name}')
+        # ax.legend(loc='upper right')
+        # ax.set_ylim(-0.1, 1.4)
+        # plt.tight_layout()
+
+        # 8. Plot activity counts with gaps
+        # total_seconds = len(df) // SAMPLING_RATE
+        # time_axis = np.arange(total_seconds)
+        # ac_plot = np.full(total_seconds, np.nan)  # nan = gap, won't be plotted
+
+        # for sec_idx, val in activity_counts_timeline.items():
+        #     if sec_idx < total_seconds:
+        #         ac_plot[sec_idx] = val
+
+        # fig2, ax2 = plt.subplots(figsize=(14, 4))
+        # ax2.plot(time_axis, ac_plot, label='Activity count', linewidth=1)
+
+        # for sw in diffs_pos[0]:
+        #     ax2.axvline(x=sw / SAMPLING_RATE, color='red', linewidth=0.8, 
+        #                 linestyle=':', alpha=0.7)
+        # ax2.axvline(x=diffs_pos[0][-1] / SAMPLING_RATE, color='red', linewidth=0.8,
+        #             linestyle=':', alpha=0.7, label='Switch points')
+
+        # ax2.set_xlabel('Time (s)')
+        # ax2.set_ylabel('Activity count')
+        # ax2.set_title(f'Activity counts – {file_name}')
+        # ax2.legend(loc='upper right')
+        # plt.tight_layout()
+
         if DEBUG == True:
             print(f"\nPrediction shape: {y_pred.shape}")
             print(f"Prediction sum (detected walking samples): {y_pred.sum()}")
