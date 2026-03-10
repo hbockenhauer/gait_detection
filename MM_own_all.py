@@ -44,7 +44,7 @@ def load_wrist_file(filepath: str) -> pd.DataFrame | None:
         df = df.reset_index(drop=True)
 
         # clip the first 10 seconds for files with no 'test' in the name
-        df = df if 'test' in filepath else df = df[:500]
+        df = df #if 'test' in filepath else df = df[:500]
 
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
@@ -144,22 +144,22 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 gsd = HickeyGSD(debug=DEBUG)
                 detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
                           .detect_wrist())
-                output_name ='HickeyGSD_Results.csv'
+                output_name ='Reselts/HickeyGSD_Results.csv'
             case 3:
                 # Run Kheirkhahan GSD
                 gsd = KheirkhahanGSD(visual=False)
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'KheirkhahanGSD_Results.csv'
+                output_name = 'Reselts/KheirkhahanGSD_Results.csv'
             case 4: 
                 # Run MacLean GSD
                 gsd = MacLeanGSD()
                 detected_bouts = gsd.detect(imu_df)
-                output_name = 'MacLeanGSD_Results.csv'
+                output_name = 'Reselts/MacLeanGSD_Results.csv'
             case 5:
                 # Run Keren GSD
                 gsd = KerenGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'KerenGSD_Results.csv'
+                output_name = 'Reselts/KerenGSD_Results.csv'
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)

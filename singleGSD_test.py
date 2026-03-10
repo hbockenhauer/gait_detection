@@ -32,7 +32,7 @@ if __name__ == "__main__":
                         low_memory=False)
         
         #### CLIPPING THE FIST 10 SECONDS
-        df = df[500:]
+        # df = df[500:]
 
         # 2. Identify and Rename Columns to Anatomical Labels
         # The package requires: acc_pa, acc_ml, acc_is
