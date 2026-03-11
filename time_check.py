@@ -5,9 +5,9 @@ from datetime import time
 
 
 #DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
-DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
+DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_tests"
 
-SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\mixed"
+SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\faulty_data_plots\tests"
 
 FILES = [
     "s0_Hub.txt",
