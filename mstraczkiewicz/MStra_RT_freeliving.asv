@@ -39,10 +39,7 @@ for i = 1:length(allFiles)
 
     try
         % --- A. LOAD DATA ---
-        opts = detectImportOptions(filePath, 'Delimiter', ',');
-        opts.VariableNamingRule = 'preserve';
-        opts = setvaropts(opts, 'time', 'InputFormat', 'MM/dd/yyyy HH:mm:ss.SSS');
-        data = readtable(filePath, opts);
+        data = readtable(filePath, 'Delimiter', ',', 'VariableNamingRule', 'preserve');
 
         % --- B. PARSE TIMESTAMPS ---
         timeRaw = data{:, 'time'};
@@ -330,7 +327,6 @@ if ~isempty(summaryResults)
     fprintf('======================================================================\n');
     
     % Save to Excel
-    resFile = fullfile(plotPath, 'FreeLiving_MStra_Results.xlsx');
     writetable(dataQuality, resFile, 'Sheet', 'Data_Quality');
 end
 

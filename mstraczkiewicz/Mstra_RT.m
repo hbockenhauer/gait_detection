@@ -6,6 +6,7 @@ dataPaths = {
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_tests'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
 % 0.044467    6.2058     2.647       103.4
@@ -60,6 +61,7 @@ for d = 1:length(dataPaths)
                 
                 dateTimeStr = string(data{:,1}) + " " + string(data{:,2});
                 fullDateTime = datetime(dateTimeStr, 'InputFormat', 'yyyy-MM-dd HH:mm:ss.SSS');
+                rowsBefore = height(data);
 
                 % --- STEP 0: REMOVE BACKWARDS-JUMP BLOCKS ---
                 % The device re-dumps its circular buffer, creating blocks that go
@@ -74,10 +76,9 @@ for d = 1:length(dataPaths)
                         runningMax = fullDateTime(k);
                     end
                 end
-                fprintf('  [%s %s] Removed %d samples (%.1fs) via backwards-block filter\n', ...
-                    folderName, sideLabel, sum(~keepMask), sum(~keepMask)/fs);
                 fullDateTime = fullDateTime(keepMask);
                 data         = data(keepMask, :);
+                rowsAfterBackwards = height(data);
                 
                 % --- 1. FIX TIME TRAVELERS (1960, 2034) ---
                 % Calculate time differences based on raw file order
@@ -107,6 +108,11 @@ for d = 1:length(dataPaths)
                 % Drops identical timestamps (buffer overwrites)
                 [fullDateTime, uniqueIdx] = unique(fullDateTime);
                 data = data(uniqueIdx, :);
+                rowsAfterUnique = height(data); 
+
+                fprintf('  [%s %s] Faulty rows removed: %d total \n', ...
+                    folderName, sideLabel, ...
+                    rowsBefore - rowsAfterUnique)
                 
                 % --- 4. CREATE LITERAL TIME VECTOR ---
                 time_vec = seconds(fullDateTime - fullDateTime(1));
@@ -244,16 +250,17 @@ for d = 1:length(dataPaths)
                 summaryResults = [summaryResults; table({subjectName}, {activityType}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
                     'VariableNames', {'Subject','Activity','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
 
-                % --- DATA QUALITY SUMMARY ---
-                totalSec      = time_vec(end);
-                validSec      = sum(sampleValid) / fs;
-                removedSec    = totalSec - validSec;
-                removedPct    = 100 * removedSec / totalSec;
+                % --- UPDATED DATA QUALITY CALCULATIONS ---
+                totalRawRows = rowsBefore;
+                faultyRowsRemoved = rowsBefore - rowsAfterUnique;
+                pctFaultyRows = 100 * (faultyRowsRemoved / totalRawRows);
+                
+                totalCleanedSec = rowsAfterUnique / fs; % The amount of "good" data we have
+                evaluableSec    = sum(sampleValid) / fs; % The amount of data the algorithm actually processed
                 
                 dataQuality = [dataQuality; table({subjectName}, {activityType}, {sideLabel}, ...
-                    totalSec, validSec, removedSec, removedPct, ...
-                    'VariableNames', {'Subject','Activity','Wrist','TotalSec','ValidSec','RemovedSec','RemovedPct'})];
-                               
+                    totalRawRows, faultyRowsRemoved, pctFaultyRows, totalCleanedSec, evaluableSec, ...
+                    'VariableNames', {'Subject','Activity','Wrist','TotalRawRows','FaultyRowsRemoved','PctFaultyRows','TotalCleanedSec','EvaluableSec'})];
             catch ME
                 fprintf('Error in %s: %s\n', folderName, ME.message);
             end
@@ -438,15 +445,27 @@ if ~isempty(summaryResults)
     % Per-file summary
     disp(dataQuality);
     
-    % Aggregated totals
-    totalRecSec   = sum(dataQuality.TotalSec);
-    totalValidSec = sum(dataQuality.ValidSec);
-    totalRemSec   = sum(dataQuality.RemovedSec);
-    totalRemPct   = 100 * totalRemSec / totalRecSec;
+    % --- 1. Aggregated Hardware/Buffer Data Loss ---
+    globalTotalRawRows = sum(dataQuality.TotalRawRows);
+    globalFaultyRows   = sum(dataQuality.FaultyRowsRemoved);
+    globalFaultyPct    = 100 * (globalFaultyRows / globalTotalRawRows);
     
-    fprintf('TOTAL recording:  %.1f s\n', totalRecSec);
-    fprintf('TOTAL valid:      %.1f s (%.1f%%)\n', totalValidSec, 100 * totalValidSec / totalRecSec);
-    fprintf('TOTAL removed:    %.1f s (%.1f%%)\n', totalRemSec, totalRemPct);
+    % --- 2. Aggregated Algorithmic Uptime ---
+    globalCleanedSec   = sum(dataQuality.TotalCleanedSec);
+    globalEvaluableSec = sum(dataQuality.EvaluableSec);
+    
+    % Time lost to filling the buffer after startup or gaps
+    globalBufferLostSec = globalCleanedSec - globalEvaluableSec; 
+    globalEvaluablePct  = 100 * (globalEvaluableSec / globalCleanedSec);
+
+    fprintf('--- 1. DATA CLEANING (Hardware & Buffer Drops) ---\n');
+    fprintf('Total Raw Rows Read:   %d\n', globalTotalRawRows);
+    fprintf('Faulty Rows Removed:   %d (%.2f%% of raw data)\n', globalFaultyRows, globalFaultyPct);
+    
+    fprintf('\n--- 2. ALGORITHM UPTIME (Post-Cleaning) ---\n');
+    fprintf('Total Cleaned Time:    %.1f s\n', globalCleanedSec);
+    fprintf('Evaluable Time:        %.1f s (%.1f%% of cleaned data)\n', globalEvaluableSec, globalEvaluablePct);
+    fprintf('Time lost to gaps:     %.1f s (waiting for window to fill)\n', globalBufferLostSec);
     fprintf('======================================================================\n');
     
     % Save to Excel
