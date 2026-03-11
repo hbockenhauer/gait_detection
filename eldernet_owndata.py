@@ -577,6 +577,6 @@ def main():
     subjects  = ['Hendrik', 'Tanya']
     metrics   = ['probability', 'energy', 'Q_energies', 'frequency']
 
-    plot_per_activity(results, subjects, metrics)
+    #plot_per_activity(results, subjects, metrics)
 
 if __name__ == "__main__":main()

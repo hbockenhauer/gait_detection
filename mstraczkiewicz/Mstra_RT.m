@@ -11,9 +11,10 @@ PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship 
 % 0.044467    6.2058     2.647       103.4
 % 0.0345    9.5063    2.6053    489.33    111.02    536.61
 % 0.1169    6.8252    2.666    491.22    116.67    1059.8
-F_MIN = 0.0345; F_MAX = 9.5063;
-P_MIN = 2.605; P_MAX = 489.33;
-A_MIN = 111.02; A_MAX = 536.1;
+% 0.097033    7.1325    2.3599    496.76    120.77    1105.1
+F_MIN = 0.097033; F_MAX = 7.1325;
+P_MIN = 2.3599; P_MAX = 496.76;
+A_MIN = 120.77; A_MAX = 1105.1;
 fs = 50;
 windowSize = 2 * fs;
 stepSize = 1 * fs;

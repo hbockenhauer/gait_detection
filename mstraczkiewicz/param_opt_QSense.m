@@ -180,12 +180,12 @@ function globalF1 = run_eval_iteration(p, dataset, fs)
         if isempty(d), continue; end  % Guard for files that failed to load
 
         y_pred = zeros(length(d.vm), 1);
-        buffer = zeros(winSize, 1);
+        buffer = ones(winSize, 1) * d.vm(1);  % initialisation
         state  = 0;
 
         for s = 2:length(d.vm)
             if (d.time_vec(s) - d.time_vec(s-1)) > maxGap
-                buffer(:) = 0; state = 0; continue;
+                buffer(:) = d.vm(s); state = 0; continue; % gap reset
             end
 
             buffer = [buffer(2:end); d.vm(s)];
@@ -215,7 +215,17 @@ function globalF1 = run_eval_iteration(p, dataset, fs)
         end
 
         % Accumulate raw counts (skip burn-in window)
-        evalIdx     = winSize:length(d.vm);
+        sCount      = 0;
+        sampleValid = false(length(d.vm), 1);
+        for k = 2:length(d.vm)
+            if (d.time_vec(k) - d.time_vec(k-1)) > maxGap
+                sCount = 0;
+            else
+                sCount = sCount + 1;
+            end
+            sampleValid(k) = sCount >= winSize;  % windowSize in free-living optimizer
+        end
+        evalIdx = find(sampleValid)';
         if isempty(evalIdx), continue; end
 
         y_true_eval = d.y_true(evalIdx);

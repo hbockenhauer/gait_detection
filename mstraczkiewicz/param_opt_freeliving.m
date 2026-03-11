@@ -84,12 +84,12 @@ function globalF1 = run_eval_iteration(p, dataset, fs)
         time_vec = data.time_vec;
 
         y_pred         = zeros(length(vm), 1);
-        circularBuffer = zeros(windowSize, 1);
+        circularBuffer = ones(windowSize, 1) * vm(1);
         detectionState = 0;
 
         for s = 2:length(vm)
             if (time_vec(s) - time_vec(s-1)) > maxGap
-                circularBuffer(:) = 0; detectionState = 0; continue;
+                circularBuffer(:) = vm(s); detectionState = 0; continue;
             end
 
             circularBuffer = [circularBuffer(2:end); vm(s)];
@@ -119,7 +119,17 @@ function globalF1 = run_eval_iteration(p, dataset, fs)
         end
 
         % Accumulate raw counts (skip burn-in window)
-        evalIdx = windowSize:length(vm);
+        sCount      = 0;
+        sampleValid = false(length(vm), 1);
+        for k = 2:length(vm)
+            if (time_vec(k) - time_vec(k-1)) > maxGap
+                sCount = 0;
+            else
+                sCount = sCount + 1;
+            end
+            sampleValid(k) = sCount >= windowSize;  % windowSize in free-living optimizer
+        end
+        evalIdx = find(sampleValid)';
         if isempty(evalIdx), continue; end
 
         y_true_eval = y_true(evalIdx);
