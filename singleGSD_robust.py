@@ -18,7 +18,7 @@ file_name = "s2_2LW.txt" #"s1_1RW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for 9s window 
-PLOT = False
+PLOT = True
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -94,7 +94,8 @@ def run_gsd_on_segment(grp) :
     seg_imu.reset_index(drop=True)
     
     gsd = KheirkhahanGSD(cwb=False)
-    bout_result, activity_counts = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
     return bout_result, activity_counts, global_start_idx
 

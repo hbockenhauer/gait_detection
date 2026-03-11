@@ -4,22 +4,23 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from GSD3_test import KheirkhahanGSD
+# from multimob.GSD.GSD3 import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed"
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data"
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
 GSD_n = 3
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
-SAVE_RESULTS = False 
+SAVE_RESULTS = True 
 PRINT_STATS = True 
 
 def extract_condition(folder_name: str) -> str:
@@ -144,22 +145,22 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 gsd = HickeyGSD(debug=DEBUG)
                 detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
                           .detect_wrist())
-                output_name ='Reselts/HickeyGSD_Results.csv'
+                output_name ='Results/HickeyGSD_Results.csv'
             case 3:
                 # Run Kheirkhahan GSD
-                gsd = KheirkhahanGSD(visual=False)
+                gsd = KheirkhahanGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'Reselts/KheirkhahanGSD_Results.csv'
+                output_name = 'Results/KheirkhahanGSD_Results.csv'
             case 4: 
                 # Run MacLean GSD
                 gsd = MacLeanGSD()
                 detected_bouts = gsd.detect(imu_df)
-                output_name = 'Reselts/MacLeanGSD_Results.csv'
+                output_name = 'Results/MacLeanGSD_Results.csv'
             case 5:
                 # Run Keren GSD
                 gsd = KerenGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'Reselts/KerenGSD_Results.csv'
+                output_name = 'Results/KerenGSD_Results.csv'
 
         # Convert bout list → binary mask
         y_pred = np.zeros(len(imu_df), dtype=int)

@@ -4,7 +4,7 @@ import  numpy as np
 import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
 from ActivityCounts import ActivityCounts
-#from multimob.GSD.utils.ActivityCounts import ActivityCounts
+# from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
 
 
@@ -40,7 +40,7 @@ class KheirkhahanGSD:
     """
 
 
-    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True, visual: bool=False, switch: np.ndarray = None):
+    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True):
         """
         Initialize the class.
 
@@ -60,10 +60,9 @@ class KheirkhahanGSD:
         self.win_shift_s = 1
         self.threshold = 0.58
         self.cwb = cwb
-        self.visual = visual
-        self.switch = switch
+        # self.visual = visual
 
-    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
+    '''def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
                                title: str = "3-Axis Acceleration", 
                                xaxis: str = None,
                                yaxis: str = None,
@@ -116,7 +115,7 @@ class KheirkhahanGSD:
         #print('plot done')
         fig.tight_layout()
         fig.show()
-        return fig
+        return fig'''
 
     def detect(self, data, *, sampling_rate_hz: float = 100) -> Self:
         """
@@ -226,4 +225,21 @@ class KheirkhahanGSD:
 
         self.gs_list_ = gs
 
-        return self, activity_counts
+        return self
+    
+    def get_activity(self, data, *, sampling_rate_hz: float = 100):
+        self.sampling_rate_hz = sampling_rate_hz
+        self.data = data
+        self.data_len = len(data)
+
+        # In the current implementation for wrist worn sensors we use the norm
+        acc = self.data.iloc[:, 0:3]
+        norm_acc = np.linalg.norm(acc, axis=1)
+
+        # Finds the activity counts per second
+        # turning acc to g-units for activity counts calculation
+        norm_acc = norm_acc / 9.81
+
+        activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
+                                                     sampling_rate=self.sampling_rate_hz).activity_counts_
+        return activity_counts

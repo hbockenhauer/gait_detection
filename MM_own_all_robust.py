@@ -4,26 +4,31 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from GSD3_test import KheirkhahanGSD
-from multimob.GSD.GSD4 import MacLeanGSD
-from multimob.GSD.GSD5 import KerenGSD
-from GSD2a import HickeyGSD
+# from multimob.GSD.GSD4 import MacLeanGSD
+# from multimob.GSD.GSD5 import KerenGSD
+# from GSD2a import HickeyGSD
 import csv
 from datetime import time
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data"
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data"
 ]
-GSD_n = 3
+# GSD_n = 3
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
-SAVE_RESULTS = False 
+SAVE_RESULTS = True 
 PRINT_STATS = True 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
+
+PLOT = True
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -43,75 +48,6 @@ def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
     s, ms = s_ms.split('.')
     return time(int(h), int(m), int(s), int(ms) * 1000)
-
-# def load_wrist_file(filepath: str) -> pd.DataFrame | None:
-#     """Read one sensor file, scale acc to m/s², rename columns. Returns None on failure."""
-#     try:
-#         with open(filepath, newline='') as f:
-#             reader = csv.DictReader(f, delimiter='\t')
-#             rows = list(reader)
-#         # clip the first 10 seconds if mixed is not in the name of the file path
-#         rows = rows if "mixed" in filepath else rows[500:] 
-        
-#         # Drop rewound timestamps + detect forward jumps for segmentation
-#         clean_rows = []
-#         segments   = []
-#         max_time   = None
-#         prev_time  = None
-#         #intervals  = []
-#         segment_id = 0
-
-#         # First pass: collect intervals to compute median
-#         times = []
-#         for row in rows:
-#             try:
-#                 times.append(parse_time(row['HH:mm:ss.fff']))
-#             except Exception:
-#                 continue
-#         valid_times = []
-#         mt = None
-#         for t in times:
-#             if mt is None or t > mt:
-#                 mt = t
-#                 valid_times.append(t)
-
-
-#         # Second pass: filter + assign segments
-#         for row in rows:
-#             try:
-#                 t = parse_time(row['HH:mm:ss.fff'])
-#             except Exception:
-#                 continue
-#             if max_time is None or t > max_time:
-#                 if prev_time is not None:
-#                     # compute gap in ms (handles minute/hour rollover simply)
-#                     gap_ms = (t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
-#                               - prev_time.hour * 3600 - prev_time.minute * 60 - prev_time.second - prev_time.microsecond / 1e6) * 1000
-#                     if gap_ms > (1000/SAMPLING_RATE):
-#                         segment_id += 1
-#                 max_time  = t
-#                 prev_time = t
-#                 clean_rows.append(row)
-#                 segments.append(segment_id)
-
-#         df = pd.DataFrame(clean_rows)
-#         df = df.reset_index(drop=True)
-#         df['segment'] = segments
-
-
-#         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
-#         if len(acc_cols) < 3:
-#             print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
-#             return None
-        
-#         imu_df = df[acc_cols[:3]].copy()
-#         imu_df = imu_df * 9.81          # convert g → m/s²
-#         imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
-
-#         return imu_df, df
-#     except Exception as e:
-#         print(f"  [ERROR] Failed to load {filepath}: {e}")
-#         return None
 
 def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
     try:
@@ -216,11 +152,14 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         if os.path.exists(lw_path):
             lw_df = load_segmented(folder_path, 's2_2LW.txt')
             if lw_df is not None:
+                # print(" in folder:", folder)
                 if 'test' in folder.lower():
                     lw_df['y_true']    = lw_df['Label'].astype(int).to_numpy()
                 else: 
                     activity = folder.split('_')[0].lower()
+                    # print("activity is", activity)
                     lw_df['y_true'] =  np.ones(len(lw_df)) if activity in GAIT_CLASSES else np.zeros(len(lw_df))
+                    # print(lw_df['y_true'])
                 lw_df['condition'] = condition
                 lw_df['subject']   = subject
                 lw_chunks.append(lw_df)
@@ -243,74 +182,6 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return rw_merged, lw_merged
 
-# def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
-#                       label: str) -> dict | None:
-#     """
-#     Run GSD on a single contiguous imu_df block, evaluate against y_true,
-#     and return a result dict (or None on error).
-#     Input: 
-#      - data
-#      - true labels 
-#      - label (for finding the error)
-#     Output: 
-#      - metrics 
-#      - name of the algo for the file 
-#     """
-#     try:
-#         match GSD_n:
-#             case 2:
-#                 # Run the Hickey GSD method
-#                 gsd = HickeyGSD(debug=DEBUG)
-#                 detected_bouts = (gsd.preprocess(imu_df, sampling_rate_hz=SAMPLING_RATE, target_sampling_rate_hz=SAMPLING_RATE)
-#                           .detect_wrist())
-#                 output_name ='HickeyGSD_Results.csv'
-#             case 3:
-#                 # Run Kheirkhahan GSD
-#                 gsd = KheirkhahanGSD(visual=False)
-#                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-#                 output_name = 'KheirkhahanGSD_Results.csv'
-#             case 4: 
-#                 # Run MacLean GSD
-#                 gsd = MacLeanGSD()
-#                 detected_bouts = gsd.detect(imu_df)
-#                 output_name = 'MacLeanGSD_Results.csv'
-#             case 5:
-#                 # Run Keren GSD
-#                 gsd = KerenGSD()
-#                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-#                 output_name = 'KerenGSD_Results.csv'
-
-#         # Convert bout list → binary mask
-#         y_pred = np.zeros(len(imu_df), dtype=int)
-#         if hasattr(detected_bouts, 'gs_list_') and not detected_bouts.gs_list_.empty:
-#             for _, row in detected_bouts.gs_list_.iterrows():
-#                 start = int(max(0, row['start']))
-#                 end   = int(min(len(imu_df), row['end']))
-#                 y_pred[start:end] = 1
-
-#         tp = np.sum((y_pred == 1) & (y_true == 1))
-#         fp = np.sum((y_pred == 1) & (y_true == 0))
-#         fn = np.sum((y_pred == 0) & (y_true == 1))
-#         tn = np.sum((y_pred == 0) & (y_true == 0))
-#         if DEBUG:
-#             print(f"\n[{label}] pred walking: {y_pred.sum()} / {len(y_pred)} samples")
-#             print(f"  TP={tp}  FP={fp}  FN={fn}  TN={tn}")
-
-#         return {
-#             'Accuracy':  accuracy_score(y_true, y_pred),
-#             'Precision': precision_score(y_true, y_pred, zero_division=0),
-#             'Recall':    recall_score(y_true, y_pred, zero_division=0),
-#             'F1':        f1_score(y_true, y_pred, zero_division=0),
-#             'TP': tp, 
-#             'FP': fp, 
-#             'FN': fn,
-#             'TN': tn,
-#         }, output_name
-
-#     except Exception as e:
-#         print(f"  [ERROR] GSD failed on {label}: {e}")
-#         return None
-
 def run_gsd_on_segment(grp) : 
     global_start_idx = grp.index[0]  # offset into the full df
     # fing the acceleration columns 
@@ -324,9 +195,73 @@ def run_gsd_on_segment(grp) :
     seg_imu.reset_index(drop=True)
     
     gsd = KheirkhahanGSD(cwb=False)
-    bout_result, activity_counts = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
     return bout_result, activity_counts, global_start_idx
+
+def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true, file_name, folder):
+    time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
+    # Convert to total seconds (float) for plotting
+    time_per_second_sec = time_series.iloc[::SAMPLING_RATE].reset_index(drop=True).dt.total_seconds()
+
+    total_seconds = len(time_per_second_sec)
+    ac_plot = np.full(total_seconds, np.nan)
+    for sec_idx, val in activity_counts_timeline.items():
+        if sec_idx < total_seconds:
+            ac_plot[sec_idx] = val
+
+    all_segment_first_rows = df.groupby('segment').nth(0).index
+    jump_row_indices = all_segment_first_rows[1:]
+    jump_times_sec = [time_series.iloc[idx].total_seconds() for idx in jump_row_indices]
+
+
+    time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+
+    # ── Top: y_pred and y_true ────────────────────────────────────────────────
+    ax1.fill_between(time_all_sec, 0, 1, where=(y_true == 1),
+                    alpha=0.3, color='green', label='Ground truth (walking)')
+    ax1.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax1.set_ylabel('Walking (1) / Not (0)')
+    ax1.set_title(f'{folder}/{file_name}')
+    ax1.legend(loc='upper left')
+    ax1.set_ylim(-0.1, 1.4)
+
+    # ── Bottom: activity counts ───────────────────────────────────────────────
+    ax2.fill_between(time_all_sec, 0, 1, where=(y_true == 1),
+                    alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
+                    label='Ground truth (walking)')
+    ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax2.set_xlabel('Time (s)')
+    ax2.set_ylabel('Activity count')
+    ax2.legend(loc='upper left')
+
+    # Format x-axis as HH:MM:SS
+    ax2.xaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+    ))
+    fig.autofmt_xdate()
+    plt.tight_layout()
+
+    out_path = os.path.join(OUT_FOLDER, f"{folder}_{file_name}_predictions.png")
+    plt.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved -> {out_path}")
+
+    return 
 
 def process_gait(rw_merged: pd.DataFrame,
                  lw_merged: pd.DataFrame, 
@@ -379,6 +314,8 @@ def process_gait(rw_merged: pd.DataFrame,
                     continue
 
                 bout_result, activity_counts, global_start_idx = run_gsd_on_segment(grp_seg)
+                # if segment <2: 
+                #     print("bout_result", bout_result)
 
                 global_start_sec = global_start_idx // SAMPLING_RATE
                 for i, val in enumerate(activity_counts):
@@ -395,12 +332,19 @@ def process_gait(rw_merged: pd.DataFrame,
                         local_bout_end   = int(bout_row['end'])   + global_start_idx
                         detected_bouts.append((local_bout_start, local_bout_end))
                         y_pred[local_bout_start:local_bout_end] = 1
-            
+            #             if segment < 2: 
+            #                 print("local_bout_start", local_bout_start)
+            # print("last segment was", segment)
+            # print('assigned 1 to elements',len(y_pred==1))
+
             valid_mask = ~np.isnan(y_pred)
             acc  = accuracy_score(y_true[valid_mask], y_pred[valid_mask])
             prec = precision_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
             rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
             f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+
+            if PLOT == True: 
+                plot_predictions(grp_sub, activity_counts_timeline, y_pred, y_true, wrist_label, subject)
 
             results.append({
                 'Subject':   label,
@@ -521,7 +465,7 @@ def process_gait(rw_merged: pd.DataFrame,
          avg_df],
         ignore_index=True
     )
-    output_name = "Results/All_data.csv"
+    output_name = "Results/KheirkhahanGSD_Results_no_faulty_data.csv"
     if save_results == True:
         csv_df.to_csv(output_name, index=False)
         print(f"\nSaved → {output_name}")
