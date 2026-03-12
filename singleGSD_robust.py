@@ -13,7 +13,7 @@ import matplotlib.ticker as mticker
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\temp\Walking_crutches_Tanya"
 file_name = "s2_2LW.txt" #"s1_1RW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
@@ -138,13 +138,15 @@ if __name__ == "__main__":
         for segment, grp in df.groupby('segment', sort=True):
             # global_start_idx = grp.index[0]  # offset into the full df
             # print('grp',grp.)
+            print("segment", segment)
+            
             if len(grp) < MIN_SEGMENT_SAMPLES:
                 y_pred[grp.index] = np.nan
                 skipped_seg += 1
                 continue
 
             bout_result, activity_counts, global_start_idx = run_gsd_on_segment(grp)
-
+            print("global_start_idx", global_start_idx)
             global_start_sec = global_start_idx // SAMPLING_RATE
             for i, val in enumerate(activity_counts):
                 activity_counts_timeline[global_start_sec + i] = val

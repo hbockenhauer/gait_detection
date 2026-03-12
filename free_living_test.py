@@ -21,11 +21,8 @@ SAVE_RESULTS = True
 PRINT_STATS = True
 
 
-def is_gait(df: pd.DataFrame) -> pd.Series:
-    return df['Label']
 
-
-def load_wrist_file(filepath: str):
+def load_csv(filepath: str):
     """
     Read one sensor file, scale acc to m/s², rename columns.
     Returns (imu_df, df_full) on success, or None on failure.
@@ -55,7 +52,7 @@ def load_wrist_file(filepath: str):
         return None
 
 
-def merge_all_wrists(data_path: str) -> pd.DataFrame:
+def merge_csv(data_path: str) -> pd.DataFrame:
     """
     Walk data_path, load every *_annotated.csv file, attach metadata,
     and return a single merged DataFrame.
@@ -75,17 +72,17 @@ def merge_all_wrists(data_path: str) -> pd.DataFrame:
     files = [f for f in os.listdir(data_path) if f.endswith('_annotated.csv')]
 
     for file in files:
-        print(file)
         filepath = os.path.join(data_path, file)
 
         # FIX: wrap unpacking in a None check instead of unpacking directly
-        result = load_wrist_file(filepath)
+        result = load_csv(filepath)
         if result is None:
             continue
 
         imu_df, df_full = result
-        imu_df['y_true'] = is_gait(df_full)
+        imu_df['y_true'] = df_full['Label']
         imu_df['subject'] = file
+        imu_df['condition'] = 'stroke'
         imu_merged_chunks.append(imu_df)
 
         if PRINT_STATS:
@@ -94,7 +91,7 @@ def merge_all_wrists(data_path: str) -> pd.DataFrame:
     if PRINT_STATS:
         print("-" * 50)
 
-    col_order = ['subject', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
+    col_order = ['subject', 'condition', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
 
     imu_merged = (
         pd.concat(imu_merged_chunks, ignore_index=True)[col_order]
@@ -122,7 +119,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 )
                 output_name = 'HickeyGSD_Results.csv'
             case 3:
-                gsd = KheirkhahanGSD(visual=False)
+                gsd = KheirkhahanGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 output_name = 'KheirkhahanGSD_Results.csv'
             case 4:
@@ -299,7 +296,7 @@ if __name__ == "__main__":
         print(f"  Merging: {dataset_name}")
         print(f"{'=' * 80}")
 
-        imu = merge_all_wrists(data_path)
+        imu = merge_csv(data_path)
         imu['dataset'] = dataset_name
         all_imu.append(imu)
 

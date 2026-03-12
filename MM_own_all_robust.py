@@ -11,23 +11,26 @@ import csv
 from datetime import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from free_living_test import _run_gsd_on_group, merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data"
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
-# GSD_n = 3
+
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
-CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane']
+CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'limp', 'armfixed', 'stroke']
 SAVE_RESULTS = True 
 PRINT_STATS = True 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
+OUTPUT_FILE = "Results/KheirkhahanGSD_Results.csv"
 
-PLOT = True
+PLOT = False
 OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
 
 def extract_condition(folder_name: str) -> str:
@@ -36,13 +39,6 @@ def extract_condition(folder_name: str) -> str:
         if kw in folder_lower:
             return kw
     return 'normal' 
-
-def is_gait(folder_name: str, df:pd.DataFrame = None) -> int:
-    if 'test' in folder_name.lower():
-        return df['Label']
-    else:
-        activity = folder_name.split('_')[0].lower()
-        return 1 if activity in GAIT_CLASSES else 0
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -183,8 +179,9 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     return rw_merged, lw_merged
 
 def run_gsd_on_segment(grp) : 
-    global_start_idx = grp.index[0]  # offset into the full df
-    # fing the acceleration columns 
+    grp_start_idx = grp.index[0]  # offset into the full df
+    # print("global_start_idx", grp_start_idx)
+    # find the acceleration columns 
     acc_cols = [c for c in grp.columns if 'acc' in c]
     if len(acc_cols) < 3:
         print("Incorrect number of columns.")
@@ -192,13 +189,14 @@ def run_gsd_on_segment(grp) :
     # rename the columns and run the gsd on them
     seg_imu = grp[acc_cols[:3]].copy().astype(float) * 9.81
     seg_imu.columns = ['acc_pa', 'acc_ml', 'acc_is']
-    seg_imu.reset_index(drop=True)
+    # seg_imu.reset_index(drop=True)
+    seg_imu = seg_imu.reset_index(drop=True)
     
     gsd = KheirkhahanGSD(cwb=False)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
-    return bout_result, activity_counts, global_start_idx
+    return bout_result, activity_counts, grp_start_idx
 
 def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true, file_name, folder):
     time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
@@ -264,7 +262,8 @@ def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true,
     return 
 
 def process_gait(rw_merged: pd.DataFrame,
-                 lw_merged: pd.DataFrame, 
+                 lw_merged: pd.DataFrame,
+                 fl_merged: pd.DataFrame, 
                  save_results: bool = True) -> pd.DataFrame:
     """
     Run GSD on every (subject, wrist) segment inside the merged DataFrames.
@@ -281,41 +280,26 @@ def process_gait(rw_merged: pd.DataFrame,
             print(f"[{wrist_label}] No data — skipping.")
             continue
 
-        # imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
-
         # Process each recording (subject folder) separately so the GSD sees
         # one continuous, coherent signal — not a mix of activities concatenated.
         for subject, grp_sub in merged_df.groupby('subject', sort=True):
             grp_sub = grp_sub.reset_index(drop=True)
-            # print("subject",subject)
-            # print("the grp_sub is ")
-            # print(grp_sub)
             y_true    = grp_sub['y_true'].to_numpy()
             condition = grp_sub['condition'].iloc[0]
             label     = f"{subject}/{wrist_label}"
 
             detected_bouts = []
             y_pred = np.zeros(len(grp_sub))
-            # print()
-            # print(f"Im working on {subject}, {label}")
-            # print("y_pred", len(y_pred))
             activity_counts_timeline = {}
             skipped_seg = 0
 
             for segment, grp_seg in grp_sub.groupby('segment', sort=True):
-                # if segment < 5:
-                #     print("segment",segment)
-                #     print("the grp_seg is ")
-                #     print(grp_seg)
                 if len(grp_seg) < MIN_SEGMENT_SAMPLES:
                     y_pred[grp_seg.index] = np.nan
                     skipped_seg += 1
-                    # print(f"skipped {skipped_seg} segments")
                     continue
 
                 bout_result, activity_counts, global_start_idx = run_gsd_on_segment(grp_seg)
-                # if segment <2: 
-                #     print("bout_result", bout_result)
 
                 global_start_sec = global_start_idx // SAMPLING_RATE
                 for i, val in enumerate(activity_counts):
@@ -324,18 +308,10 @@ def process_gait(rw_merged: pd.DataFrame,
                 if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
                     for _, bout_row in bout_result.gs_list_.iterrows():
                         # Offset local segment indices to global df indices
-                        # global_bout_start = int(bout_row['start']) + global_start_idx
-                        # global_bout_end = int(bout_row['end']) + global_start_idx
-                        # detected_bouts.append((global_bout_start, global_bout_end))
-                        # y_pred[global_bout_start:global_bout_end] = 1
                         local_bout_start = int(bout_row['start']) + global_start_idx
                         local_bout_end   = int(bout_row['end'])   + global_start_idx
                         detected_bouts.append((local_bout_start, local_bout_end))
                         y_pred[local_bout_start:local_bout_end] = 1
-            #             if segment < 2: 
-            #                 print("local_bout_start", local_bout_start)
-            # print("last segment was", segment)
-            # print('assigned 1 to elements',len(y_pred==1))
 
             valid_mask = ~np.isnan(y_pred)
             acc  = accuracy_score(y_true[valid_mask], y_pred[valid_mask])
@@ -363,13 +339,46 @@ def process_gait(rw_merged: pd.DataFrame,
                       f"{acc:.2f}   | {prec:.2f}   | "
                       f"{rec:.2f}   | {f1:.2f}")
 
+    if fl_merged.empty:
+        print("No csv data — skipping.")
+        return pd.DataFrame()
+
+    imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
+
+    for subject, grp in fl_merged.groupby('subject', sort=True):
+        imu_df = grp[imu_cols].reset_index(drop=True)
+        y_true = grp['y_true'].to_numpy()
+        label  = str(subject)
+        condition = grp['condition'].iloc[0]
+
+        result = _run_gsd_on_group(imu_df, y_true, label)
+        if result is None:
+            continue
+
+        metrics, output_name = result
+        # output_name = 'Results/Free_living_Results.csv'  
+
+        results.append({
+            'Subject':   label,
+            'Wrist':     "NA",
+            'Folder':    subject,
+            'Condition': condition,
+            **metrics,
+        })
+
+        if PRINT_STATS:
+            print(f"{label[:35]:<35} | {'':<5} | {condition:<10} | "
+                  f"{metrics['Accuracy']:.2f}   | "
+                  f"{metrics['Precision']:.2f}   | {metrics['Recall']:.2f}   | "
+                  f"{metrics['F1']:.2f}")
+    
+    
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
 
     res_df = pd.DataFrame(results)
 
-    #METRIC_COLS = ['Accuracy', 'Precision', 'Recall', 'F1']
     VARIABLES = ['TP', 'FP', 'FN', 'TN']
 
     def _avg_row(row_type: str, label: str,
@@ -443,13 +452,15 @@ def process_gait(rw_merged: pd.DataFrame,
     # Overall average
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
 
-    # Print summary to console 
-    print("-" * 90)
-    _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
-    _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
-    print()
-    for condition in sorted(res_df['Condition'].unique()):
-        _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
+    # Print summary to console
+    
+    if PRINT_STATS: 
+        print("-" * 90)
+        _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
+        _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
+        print()
+        for condition in sorted(res_df['Condition'].unique()):
+            _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
     print("-" * 90)
     _print_avg("AVERAGE (Overall)", res_df)
 
@@ -465,10 +476,10 @@ def process_gait(rw_merged: pd.DataFrame,
          avg_df],
         ignore_index=True
     )
-    output_name = "Results/KheirkhahanGSD_Results_no_faulty_data.csv"
+
     if save_results == True:
-        csv_df.to_csv(output_name, index=False)
-        print(f"\nSaved → {output_name}")
+        csv_df.to_csv(OUTPUT_FILE, index=False)
+        print(f"\nSaved → {OUTPUT_FILE}")
 
     return res_df
 
@@ -478,15 +489,24 @@ if __name__ == "__main__":
 
     for data_path in DATA_PATHS:
         dataset_name = os.path.basename(data_path.rstrip('/\\'))
-        print(f"\n{'=' * 80}")
-        print(f"  Merging: {dataset_name}")
-        print(f"{'=' * 80}")
-        rw, lw = merge_all_wrists(data_path)
-        # Tag each row with its source dataset for traceability
-        rw['dataset'] = dataset_name
-        lw['dataset'] = dataset_name
-        all_rw.append(rw)
-        all_lw.append(lw)
+        if PRINT_STATS:
+            print(f"\n{'=' * 80}")
+            print(f"  Merging: {dataset_name}")
+            print(f"{'=' * 80}")
+
+        # chech which dataset to process 
+        if "QSense" in dataset_name: 
+            # Tag each row with its source dataset for traceability
+            rw, lw = merge_all_wrists(data_path)
+            rw['dataset'] = dataset_name
+            lw['dataset'] = dataset_name
+            all_rw.append(rw)
+            all_lw.append(lw)
+        else:
+            # for now only accepts one csv file 
+            fl_merged = merge_csv(data_path)
+        
+
 
     # Pool across all datasets
     rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
@@ -501,4 +521,4 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait(rw_merged, lw_merged, SAVE_RESULTS)
+    process_gait(rw_merged, lw_merged, fl_merged, SAVE_RESULTS)
