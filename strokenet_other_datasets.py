@@ -16,7 +16,9 @@ ADL_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship 
 WISDM_PATH    = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\wisdm-dataset\raw\watch\accel'
 WEARGAIT_PD_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\WearGait-PD'
 WEARGAIT_CTRL_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\WearGait-Ctrl'
+BIOCLITE_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\data_6activities_plain.mat'
 WEIGHTS_PATH  = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\eldernet_finetuned.pth'
+PLOTS_DIR =  r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\StrokeNet_Plots'
 REPO_NAME     = 'yonbrand/ElderNet'
 
 WINDOW_SIZE   = 100    # 2s at 50Hz
@@ -416,7 +418,10 @@ def evaluate_hmp(model, device):
         results.append({
             'subject': subj_id, 'dataset': 'HMP',
             'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc,
-            'confusion_matrix': cm.tolist()
+            'confusion_matrix': cm.tolist(),
+            'probs':  probs,        # add this
+            'y_true': y_true,       # add this
+            'y_pred': y_pred       # add this
         })
 
     g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
@@ -429,36 +434,217 @@ def evaluate_hmp(model, device):
     return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
 
-# ============================================================
-# SUMMARY PLOT
-# ============================================================
+BIOCLITE_GAIT_LABEL = 6
+BIOCLITE_LABEL_MAP  = {
+    0: 'Transition', 1: 'Spiral',  2: 'Typing',
+    3: 'Resting',    4: 'Beating', 5: 'Brushing', 6: 'Walking'
+}
 
-# def plot_dataset_comparison(wisdm_global, weargait_global, qsense_global=None):
-#     datasets = ['WISDM', 'WearGait-PD']
-#     globals_ = [wisdm_global, weargait_global]
-#     if qsense_global:
-#         datasets.append('QSense')
-#         globals_.append(qsense_global)
+def evaluate_bioclite(model, device):
+    print("\n" + "="*60)
+    print("EVALUATING: BIOCLITE Free-Living Activities")
+    print("="*60)
 
-#     metrics = ['precision', 'recall', 'f1', 'accuracy']
-#     x = np.arange(len(metrics))
-#     width = 0.25
+    import scipy.io
+    from collections import defaultdict
 
-#     fig, ax = plt.subplots(figsize=(10, 5))
-#     for i, (name, g) in enumerate(zip(datasets, globals_)):
-#         vals = [g[m] for m in metrics]
-#         ax.bar(x + i * width, vals, width, label=name, alpha=0.85)
+    mat  = scipy.io.loadmat(BIOCLITE_PATH, squeeze_me=True)
+    Data = mat['Data_plain']
+    print(f"Found {len(Data)} subjects")
 
-#     ax.set_xticks(x + width)
-#     ax.set_xticklabels(['Precision', 'Recall', 'F1', 'Accuracy'])
-#     ax.set_ylim(0, 1.05)
-#     ax.set_ylabel('Score')
-#     ax.set_title('Finetuned ElderNet — Cross-Dataset Evaluation')
-#     ax.legend()
-#     ax.grid(axis='y', alpha=0.3)
-#     plt.tight_layout()
-#     plt.savefig('cross_dataset_comparison.png', dpi=150)
-#     plt.show()
+    results   = []
+    total_tp  = total_fp = total_fn = total_tn = 0
+
+    for i, trial in enumerate(Data):
+        try:
+            ts_ms       = trial[:, 0].astype(float)
+            acc         = trial[:, 1:4].astype(float)
+            participant = int(trial[0, 7])
+            act_labels  = trial[:, 8].astype(int)
+
+            times    = (ts_ms - ts_ms[0]) / 1000.0
+            y_binary = (act_labels == BIOCLITE_GAIT_LABEL).astype(int)
+
+            print(f"  Trial {i+1:02d} P{participant:02d} | "
+                  f"activities: {np.unique(act_labels)}, "
+                  f"gait samples: {y_binary.sum()}/{len(y_binary)}")
+
+            # Gap-aware windowing (already 50Hz — no resampling needed)
+            dt      = np.diff(times)
+            gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
+            bounds  = np.concatenate([[0], gap_idx, [len(times)]])
+
+            windows, y_true, win_times, win_activities = [], [], [], []
+
+            for k in range(len(bounds) - 1):
+                seg_start = bounds[k]
+                seg_end   = bounds[k + 1]
+                if (seg_end - seg_start) < WINDOW_SIZE:
+                    continue
+                for wi in range(seg_start + WINDOW_SIZE, seg_end, STEP_SIZE):
+                    win     = acc[wi - WINDOW_SIZE:wi]
+                    lab_win = y_binary[wi - WINDOW_SIZE:wi]
+                    act_win = act_labels[wi - WINDOW_SIZE:wi]
+
+                    windows.append(win.T)
+                    y_true.append(int(np.mean(lab_win) > 0.5))
+                    win_times.append(times[wi - 1])
+
+                    # Majority activity label for this window
+                    unique, counts = np.unique(act_win, return_counts=True)
+                    win_activities.append(int(unique[np.argmax(counts)]))
+
+            if len(windows) == 0:
+                print(f"  Trial {i+1:02d} P{participant:02d} | skipped (no valid windows)")
+                continue
+
+            wins_np      = np.array(windows, dtype=np.float32)
+            y_true       = np.array(y_true)
+            win_times    = np.array(win_times)
+            win_activities = np.array(win_activities)
+
+            probs  = run_inference(model, wins_np, device)
+            y_pred = (probs > CONF_THRESH).astype(int)
+
+            prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
+
+            total_tn += cm[0, 0]; total_fp += cm[0, 1]
+            total_fn += cm[1, 0]; total_tp += cm[1, 1]
+
+            print(f"  Trial {i+1:02d} P{participant:02d} | "
+                  f"Prec={prec:.3f}  Rec={rec:.3f}  F1={f1:.3f}  Acc={acc_score:.3f}  "
+                  f"[gait={y_true.sum()}/{len(y_true)} windows]")
+
+            results.append({
+                'subject':        f'P{participant:02d}',
+                'dataset':        'BIOCLITE',
+                'activity':       'FreeLiving',
+                'wrist':          'preferred',
+                'precision':      prec,
+                'recall':         rec,
+                'f1':             f1,
+                'accuracy':       acc_score,
+                'confusion_matrix': cm.tolist(),
+                'probs':          probs,
+                'y_true':         y_true,
+                'y_pred':         y_pred,
+                'win_times':      win_times,
+                'win_activities': win_activities
+            })
+
+        except Exception as e:
+            print(f"  Error in trial {i+1}: {e}")
+
+    # --- Global metrics ---
+    g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    g_rec  = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    g_f1   = 2*g_prec*g_rec / (g_prec+g_rec) if (g_prec+g_rec) > 0 else 0
+    g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn) \
+             if (total_tp+total_tn+total_fp+total_fn) > 0 else 0
+
+    print(f"\nBIOCLITE GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
+          f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
+
+    # --- Breakdown by activity type (pooled across all subjects) ---
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
+    for r in results:
+        yt = r['y_true']
+        yp = r['y_pred']
+        wa = r['win_activities']
+        for act_idx, act_name in BIOCLITE_LABEL_MAP.items():
+            mask = (wa == act_idx)
+            if mask.sum() == 0:
+                continue
+            by_act[act_name][0] += int(((yp[mask]==1) & (yt[mask]==1)).sum())  # tp
+            by_act[act_name][1] += int(((yp[mask]==1) & (yt[mask]==0)).sum())  # fp
+            by_act[act_name][2] += int(((yp[mask]==0) & (yt[mask]==1)).sum())  # fn
+            by_act[act_name][3] += int(((yp[mask]==0) & (yt[mask]==0)).sum())  # tn
+
+    print("\nBy activity (pooled across all subjects):")
+    print(f"  {'Activity':<14} {'Precision':>10} {'Recall':>10} {'F1':>10} "
+          f"{'Accuracy':>10} {'Windows':>10}")
+    print(f"  {'-'*64}")
+    for act_name, (tp, fp, fn, tn) in sorted(by_act.items()):
+        p = tp/(tp+fp) if (tp+fp) > 0 else 0
+        r = tp/(tp+fn) if (tp+fn) > 0 else 0
+        f = 2*p*r/(p+r) if (p+r) > 0 else 0
+        a = (tp+tn)/(tp+tn+fp+fn) if (tp+tn+fp+fn) > 0 else 0
+        print(f"  {act_name:<14} {p:>10.3f} {r:>10.3f} {f:>10.3f} "
+              f"{a:>10.3f} {tp+fp+fn+tn:>10}")
+
+    return results, {'precision': g_prec, 'recall': g_rec,
+                     'f1': g_f1,          'accuracy': g_acc}
+def plot_subject_timeline(results, plots_dir):
+    os.makedirs(plots_dir, exist_ok=True)
+
+    for r in results:
+        dataset  = r['dataset']
+        subject  = r['subject']
+        wrist    = r.get('wrist', 'right')
+        probs    = r['probs']
+        y_pred   = r['y_pred']
+        y_true   = r['y_true']
+
+        # X-axis: use timestamps if available, else window indices
+        if 'win_times' in r and r['win_times'] is not None:
+            x      = r['win_times']
+            xlabel = 'Time (s)'
+        else:
+            x      = np.arange(len(probs))
+            xlabel = 'Window index'
+
+        fig, axes = plt.subplots(3, 1, figsize=(16, 8), sharex=True)
+        fig.suptitle(f"{dataset} — {subject} ({wrist})", fontsize=14, fontweight='bold')
+
+        # --- Probability ---
+        axes[0].plot(x, probs, color='steelblue', linewidth=1.5, label='Gait probability')
+        axes[0].axhline(CONF_THRESH, color='black', linestyle='--', linewidth=1,
+                        label=f'Threshold = {CONF_THRESH}')
+        axes[0].fill_between(x, 0, probs, alpha=0.15, color='steelblue')
+        axes[0].set_ylim(-0.05, 1.1)
+        axes[0].set_ylabel('Probability', fontsize=11)
+        axes[0].legend(fontsize=9, loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+
+        # --- Prediction vs Ground Truth ---
+        axes[1].step(x, y_true, where='post', color='green',
+                     linewidth=2, alpha=0.7, label='Ground truth')
+        axes[1].step(x, y_pred + 0.05, where='post', color='crimson',
+                     linewidth=1.5, linestyle='--', label='Prediction')
+        axes[1].fill_between(x, 0, y_true, step='post',
+                             alpha=0.15, color='green')
+        axes[1].set_ylim(-0.15, 1.2)
+        axes[1].set_ylabel('Gait (0/1)', fontsize=11)
+        axes[1].legend(fontsize=9, loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+
+        # --- Agreement / Error ---
+        correct = (y_pred == y_true).astype(int)
+        tp_mask = (y_pred == 1) & (y_true == 1)
+        fp_mask = (y_pred == 1) & (y_true == 0)
+        fn_mask = (y_pred == 0) & (y_true == 1)
+        tn_mask = (y_pred == 0) & (y_true == 0)
+
+        axes[2].fill_between(x, 0, tp_mask.astype(float), step='post',
+                             color='green',  alpha=0.6, label='TP')
+        axes[2].fill_between(x, 0, tn_mask.astype(float), step='post',
+                             color='lightgrey', alpha=0.6, label='TN')
+        axes[2].fill_between(x, 0, fp_mask.astype(float), step='post',
+                             color='orange', alpha=0.8, label='FP')
+        axes[2].fill_between(x, 0, fn_mask.astype(float), step='post',
+                             color='crimson', alpha=0.8, label='FN')
+        axes[2].set_ylim(-0.1, 1.2)
+        axes[2].set_ylabel('Classification', fontsize=11)
+        axes[2].set_xlabel(xlabel, fontsize=11)
+        axes[2].legend(fontsize=9, loc='upper right', ncol=4)
+        axes[2].grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        safe_subject = subject.replace('/', '_').replace(' ', '_')
+        save_path = os.path.join(plots_dir, f'{dataset}_{safe_subject}_{wrist}.png')
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  Saved: {save_path}")
 
 
 # ============================================================
@@ -475,15 +661,14 @@ def main():
     wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
     weargait_results, weargait_global = evaluate_weargait(model, device)
     hmp_results, hmp_global = evaluate_hmp(model, device)
+    bioclite_results, bioclite_global = evaluate_bioclite(model, device)
 
-    # Optional: pass in your QSense global metrics for comparison
-    qsense_global = {'precision': 0.946, 'recall': 0.997, 'f1': 0.971, 'accuracy': 0.977}
-
-    # plot_dataset_comparison(wisdm_global, weargait_global, qsense_global)
+    all_results = wisdm_results + weargait_results + hmp_results + bioclite_results 
+    plot_subject_timeline(all_results, PLOTS_DIR)
 
     # Save combined results
     all_rows = []
-    for r in wisdm_results + weargait_results + hmp_results:
+    for r in wisdm_results + weargait_results + hmp_results + bioclite_results:
         all_rows.append({
             'dataset':   r['dataset'],
             'subject':   r['subject'],
