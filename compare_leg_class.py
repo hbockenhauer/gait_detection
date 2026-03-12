@@ -3,7 +3,11 @@ import glob
 import pandas as pd
 import numpy as np
 
-DATASET_PATH = r'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = (os.path.dirname(SCRIPT_DIR)
+                if os.path.basename(SCRIPT_DIR) in {'ElderNet', 'StrokeNet'}
+                else SCRIPT_DIR)
+DATASET_PATH = os.path.join(PROJECT_ROOT, 'Datasets', 'QSense_data_mixed')
 
 def compare_leg_class(filepath):
     df = pd.read_csv(filepath, sep=None, engine="python")

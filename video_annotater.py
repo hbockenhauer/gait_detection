@@ -3,7 +3,11 @@ import csv
 import argparse
 from datetime import time, datetime, timedelta
 
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Free_living\Device2_sub6.csv"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = (os.path.dirname(SCRIPT_DIR)
+                if os.path.basename(SCRIPT_DIR) in {'ElderNet', 'StrokeNet'}
+                else SCRIPT_DIR)
+DATA_PATH = os.path.join(PROJECT_ROOT, 'Datasets', 'Free_living', 'Device2_sub6.csv')
 
 # The timestamp in the recording that corresponds to t=0 seconds
 # Format: "HH:MM:SS.fff"  (e.g. "13:41:50.000")

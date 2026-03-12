@@ -1,7 +1,0 @@
-QSenseHub Info: 
-
-Start Time: 03-Mar-26 11:59:43 AM
-Stop Time: 03-Mar-26 12:05:57 PM
-Device Id: A3EFE10BC4659BC
-BLE Address: CCB5E45C349C
-
