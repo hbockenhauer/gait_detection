@@ -6,6 +6,7 @@ import torch.nn as nn
 import copy
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
+from collections import defaultdict
 from eldernet_WearGait import load_weargait_data, detect_sampling_rate
 from scipy import signal
 import glob
@@ -135,6 +136,64 @@ def compute_metrics(y_true, y_pred):
     return prec, rec, f1, acc, cm
 
 
+def update_activity_confusions(by_act, y_true, y_pred, win_activities):
+    for act_name in np.unique(win_activities):
+        mask = (win_activities == act_name)
+        if mask.sum() == 0:
+            continue
+        by_act[act_name][0] += int(((y_pred[mask] == 1) & (y_true[mask] == 1)).sum())
+        by_act[act_name][1] += int(((y_pred[mask] == 1) & (y_true[mask] == 0)).sum())
+        by_act[act_name][2] += int(((y_pred[mask] == 0) & (y_true[mask] == 1)).sum())
+        by_act[act_name][3] += int(((y_pred[mask] == 0) & (y_true[mask] == 0)).sum())
+
+
+def print_by_activity_table(by_act, dataset_name):
+    print(f"\n{dataset_name} - By activity (pooled across all subjects):")
+    print(f"  {'Activity':<22} {'Precision':>10} {'Recall':>10} {'F1':>10} "
+          f"{'Accuracy':>10} {'Windows':>10}")
+    print(f"  {'-'*76}")
+
+    for act_name, (tp, fp, fn, tn) in sorted(by_act.items()):
+        p = tp / (tp + fp) if (tp + fp) > 0 else 0
+        r = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f = 2 * p * r / (p + r) if (p + r) > 0 else 0
+        a = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
+        print(f"  {str(act_name):<22} {p:>10.3f} {r:>10.3f} {f:>10.3f} "
+              f"{a:>10.3f} {tp + fp + fn + tn:>10}")
+
+
+def extract_windows_with_gaps_and_activity(times, acc_data, labels, activities):
+    dt      = np.diff(times)
+    gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
+    bounds  = np.concatenate([[0], gap_idx, [len(times)]])
+
+    windows, targets, win_times, win_activities = [], [], [], []
+
+    for k in range(len(bounds) - 1):
+        seg_start = bounds[k]
+        seg_end   = bounds[k + 1]
+        if (seg_end - seg_start) < WINDOW_SIZE:
+            continue
+        for i in range(seg_start + WINDOW_SIZE, seg_end, STEP_SIZE):
+            win     = acc_data[i - WINDOW_SIZE:i]
+            lab_win = labels[i - WINDOW_SIZE:i]
+            act_win = activities[i - WINDOW_SIZE:i]
+
+            windows.append(win.T)
+            targets.append(int(np.mean(lab_win) > 0.5))
+            win_times.append(times[i - 1])
+
+            unique, counts = np.unique(act_win, return_counts=True)
+            win_activities.append(str(unique[np.argmax(counts)]))
+
+    if len(windows) == 0:
+        return None, None, None, None
+    return (np.array(windows, dtype=np.float32),
+            np.array(targets),
+            np.array(win_times),
+            np.array(win_activities, dtype=object))
+
+
 # ============================================================
 # WISDM LOADER
 # ============================================================
@@ -149,6 +208,7 @@ def evaluate_wisdm(model, device):
 
     results = []
     total_tp = total_fp = total_fn = total_tn = 0
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
 
     for fname in files:
         fpath   = os.path.join(WISDM_PATH, fname)
@@ -159,6 +219,10 @@ def evaluate_wisdm(model, device):
                              names=['user', 'activity', 'ts', 'x', 'y', 'z'])
             df['z'] = df['z'].astype(str).str.replace(';', '').astype(float)
             df = df.dropna(subset=['x', 'y', 'z'])
+
+            # Add this after loading df in evaluate_wisdm:
+            activity_counts = df['activity'].value_counts()
+            gait_rows = df[df['activity'].isin(WISDM_GAIT_CODES)]
 
             # WISDM is 20Hz — resample to 50Hz to match your model's training data
             # (your model was trained on 50Hz QSense + Free-Living data)
@@ -182,12 +246,30 @@ def evaluate_wisdm(model, device):
                 for l in labels_resampled
             ])
 
-            wins_np, y_true = extract_windows_no_gaps(acc_resampled, y_binary)
-            if wins_np is None:
+            windows, y_true, win_activities = [], [], []
+            for i in range(WINDOW_SIZE, len(acc_resampled), STEP_SIZE):
+                win     = acc_resampled[i - WINDOW_SIZE:i]
+                lab_win = y_binary[i - WINDOW_SIZE:i]
+                act_win = labels_resampled[i - WINDOW_SIZE:i]
+
+                windows.append(win.T)
+                y_true.append(int(np.mean(lab_win) > 0.5))
+
+                unique, counts = np.unique(act_win, return_counts=True)
+                act_code = str(unique[np.argmax(counts)])
+                win_activities.append(ACTIVITY_MAP.get(act_code, act_code))
+
+            if len(windows) == 0:
                 continue
+
+            wins_np = np.array(windows, dtype=np.float32)
+            y_true = np.array(y_true)
+            win_activities = np.array(win_activities, dtype=object)
 
             probs  = run_inference(model, wins_np, device)
             y_pred = (probs > CONF_THRESH).astype(int)
+
+            update_activity_confusions(by_act, y_true, y_pred, win_activities)
 
             prec, rec, f1, acc, cm = compute_metrics(y_true, y_pred)
 
@@ -215,6 +297,7 @@ def evaluate_wisdm(model, device):
     g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
     print(f"\nWISDM GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
+    print_by_activity_table(by_act, "WISDM")
 
     return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
@@ -250,6 +333,7 @@ def evaluate_weargait(model, device):
 
     results = []
     total_tp = total_fp = total_fn = total_tn = 0
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
 
     for fpath in csv_files:
         fname   = os.path.basename(fpath)
@@ -288,14 +372,16 @@ def evaluate_weargait(model, device):
                     for a in activities_resampled
                 ])
 
-                wins_np, y_true, win_times = extract_windows_with_gaps(
-                    times_resampled, acc_resampled, y_binary
+                wins_np, y_true, win_times, win_activities = extract_windows_with_gaps_and_activity(
+                    times_resampled, acc_resampled, y_binary, activities_resampled
                 )
                 if wins_np is None:
                     continue
 
                 probs  = run_inference(model, wins_np, device)
                 y_pred = (probs > CONF_THRESH).astype(int)
+
+                update_activity_confusions(by_act, y_true, y_pred, win_activities)
 
                 prec, rec, f1, acc, cm = compute_metrics(y_true, y_pred)
 
@@ -323,6 +409,7 @@ def evaluate_weargait(model, device):
     g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
     print(f"\nWearGait GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
+    print_by_activity_table(by_act, "WearGait")
 
     return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
@@ -353,10 +440,11 @@ def evaluate_hmp(model, device):
 
     results = []
     total_tp = total_fp = total_fn = total_tn = 0
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
 
     for subj_id in sorted(subject_files.keys()):
         files_sorted = sorted(subject_files[subj_id], key=lambda x: x[0])
-        all_data, all_labels = [], []
+        all_data, all_labels, all_activity_names = [], [], []
 
         for ts, cat, f in files_sorted:
             try:
@@ -377,6 +465,7 @@ def evaluate_hmp(model, device):
                 label = 1 if cat in GAIT_CLASSES else 0
                 all_data.append(data)
                 all_labels.extend([label] * len(data))
+                all_activity_names.extend([cat] * len(data))
 
             except Exception as e:
                 continue
@@ -386,17 +475,20 @@ def evaluate_hmp(model, device):
 
         concat_data   = np.vstack(all_data)
         concat_labels = np.array(all_labels)
+        concat_activities = np.array(all_activity_names, dtype=object)
 
         if len(concat_data) < HMP_WINDOW_SIZE:
             continue
 
-        # Window — no real timestamps so treat as continuous
-        windows, y_true = [], []
+        windows, y_true, win_activities = [], [], []
         for i in range(HMP_WINDOW_SIZE, len(concat_data), STEP_SIZE):
             win     = concat_data[i - HMP_WINDOW_SIZE:i]
             lab_win = concat_labels[i - HMP_WINDOW_SIZE:i]
-            windows.append(win.T)                           # (3, 100)
+            act_win = concat_activities[i - HMP_WINDOW_SIZE:i]
+            windows.append(win.T)
             y_true.append(int(np.mean(lab_win) > 0.5))
+            unique, counts = np.unique(act_win, return_counts=True)
+            win_activities.append(str(unique[np.argmax(counts)]))
 
         if len(windows) == 0:
             continue
@@ -405,6 +497,9 @@ def evaluate_hmp(model, device):
         probs   = run_inference(model, wins_np, device)
         y_true  = np.array(y_true)
         y_pred  = (probs > CONF_THRESH).astype(int)
+        win_activities = np.array(win_activities, dtype=object)
+
+        update_activity_confusions(by_act, y_true, y_pred, win_activities)
 
         prec, rec, f1, acc, cm = compute_metrics(y_true, y_pred)
 
@@ -430,6 +525,7 @@ def evaluate_hmp(model, device):
     g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
     print(f"\nHMP GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
+    print_by_activity_table(by_act, "HMP")
 
     return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
@@ -446,8 +542,6 @@ def evaluate_bioclite(model, device):
     print("="*60)
 
     import scipy.io
-    from collections import defaultdict
-
     mat  = scipy.io.loadmat(BIOCLITE_PATH, squeeze_me=True)
     Data = mat['Data_plain']
     print(f"Found {len(Data)} subjects")
@@ -663,23 +757,24 @@ def main():
     hmp_results, hmp_global = evaluate_hmp(model, device)
     bioclite_results, bioclite_global = evaluate_bioclite(model, device)
 
-    all_results = wisdm_results + weargait_results + hmp_results + bioclite_results 
-    plot_subject_timeline(all_results, PLOTS_DIR)
+    # all_results = wisdm_results + weargait_results + hmp_results + bioclite_results 
+    # plot_subject_timeline(all_results, PLOTS_DIR)
 
-    # Save combined results
-    all_rows = []
-    for r in wisdm_results + weargait_results + hmp_results + bioclite_results:
-        all_rows.append({
-            'dataset':   r['dataset'],
-            'subject':   r['subject'],
-            'wrist':     r.get('wrist', 'right'),
-            'precision': r['precision'],
-            'recall':    r['recall'],
-            'f1':        r['f1'],
-            'accuracy':  r['accuracy']
-        })
-    pd.DataFrame(all_rows).to_csv('cross_dataset_results.csv', index=False)
-    print("\nSaved: cross_dataset_results.csv")
+
+    # # Save combined results
+    # all_rows = []
+    # for r in wisdm_results + weargait_results + hmp_results + bioclite_results:
+    #     all_rows.append({
+    #         'dataset':   r['dataset'],
+    #         'subject':   r['subject'],
+    #         'wrist':     r.get('wrist', 'right'),
+    #         'precision': r['precision'],
+    #         'recall':    r['recall'],
+    #         'f1':        r['f1'],
+    #         'accuracy':  r['accuracy']
+    #     })
+    # pd.DataFrame(all_rows).to_csv('cross_dataset_results.csv', index=False)
+    # print("\nSaved: cross_dataset_results.csv")
 
 
 if __name__ == '__main__':
