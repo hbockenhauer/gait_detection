@@ -7,6 +7,7 @@ from GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
+from singleGSD_robust import parse_time
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
@@ -17,7 +18,7 @@ GSD_n = 3
 SAMPLING_RATE = 50
 DEBUG = False
 GAIT_CLASSES = {'walking', 'stairs'}
-SAVE_RESULTS = True
+SAVE_RESULTS = False
 PRINT_STATS = True
 
 
@@ -32,7 +33,48 @@ def load_csv(filepath: str):
     """
     try:
         df = pd.read_csv(filepath, sep=None, engine="python")
-        df = df.reset_index(drop=True)
+        # df = df.reset_index(drop=True)
+        
+        # 3. Create datetime helper
+        # Using Month/Day/Year as identified previously
+        df['time_dt'] = pd.to_datetime(df['time'], format='%m/%d/%Y %H:%M:%S.%f')
+
+        # 4. Filter non-increasing timestamps
+        time_diffs = df['time_dt'].diff().dt.total_seconds()
+        valid_mask = (time_diffs > 0) | (time_diffs.isna())
+        df = df[valid_mask].copy()
+        
+        dropped_rows = len(df) - valid_mask.sum()
+        df = df[valid_mask].copy()
+
+        # 5. Add requested columns in specific string formats
+        # yyyy-MM-dd (e.g., 2025-06-19)
+        df['yyyy-MM-dd'] = df['time_dt'].dt.strftime('%Y-%m-%d')
+        
+        # HH:mm:ss.fff (e.g., 10:45:26.605)
+        # Note: %f provides microseconds, so we slice to get 3 digits (milliseconds)
+        df['HH:mm:ss.fff'] = df['time_dt'].dt.strftime('%H:%M:%S.%f').str[:-3]
+        
+        # 6. Identify Gaps and Segments
+        # Re-calculate diffs on the cleaned data
+        df['gap_ms'] = df['time_dt'].diff().dt.total_seconds() * 1000
+        
+        threshold = 1001 / SAMPLING_RATE # e.g., 20.02ms for 50Hz
+        
+        # Every time a gap exceeds the threshold, the cumsum increments the segment ID
+        df['segment'] = (df['gap_ms'] > threshold).cumsum().fillna(0).astype(int)
+
+        if DEBUG:
+            print(f"Dropped {dropped_rows} rows.")
+            print(f"Found {df['segment'].nunique()} segments.")
+            print(f"Kept {len(df)} rows.")
+
+        # Cleanup: Remove helper columns if you want to keep the DF clean
+        # df = df.drop(columns=['time_dt', 'gap_ms'])
+
+        # df = pd.DataFrame(clean_rows)
+        # df = df.reset_index(drop=True)
+        # df['segment'] = segments
 
         # FIX: use startswith('a') instead of 'a' in col.lower() to avoid
         # matching unrelated columns like 'Label', 'gz', 'mag_x', etc.
@@ -41,11 +83,27 @@ def load_csv(filepath: str):
             print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
             return None
 
+        # imu_df = df[acc_cols[:3]].copy()
+        # imu_df = imu_df * 9.81          # convert g → m/s²
+        # imu_df['segment'] = df['segment']
+        # imu_df['y_true'] = df['Label']
+        # imu_df['yyyy-MM-dd'] = df['yyyy-MM-dd']
+        # imu_df['HH:mm:ss.fff'] = df['HH:mm:ss.fff']
+        # imu_df.columns = ['yyyy-MM-dd', 'HH:mm:ss.fff', 'acc_pa', 'acc_ml', 'acc_is', 'segment', 'y_true']
         imu_df = df[acc_cols[:3]].copy()
-        imu_df = imu_df * 9.81          # convert g → m/s²
-        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']
+        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is'] # Rename just the accels first
+        imu_df = imu_df * 9.81
 
-        return imu_df, df
+        imu_df['segment'] = df['segment']
+        # imu_df['y_true'] = df['Label']
+        imu_df['yyyy-MM-dd'] = df['yyyy-MM-dd']
+        imu_df['HH:mm:ss.fff'] = df['HH:mm:ss.fff']
+        
+        y_true_clean = pd.to_numeric(df['Label'], errors='coerce').fillna(0).astype(int)
+        imu_df['y_true'] = y_true_clean
+
+        
+        return imu_df
 
     except Exception as e:
         print(f"  [ERROR] Failed to load {filepath}: {e}")
@@ -75,13 +133,11 @@ def merge_csv(data_path: str) -> pd.DataFrame:
         filepath = os.path.join(data_path, file)
 
         # FIX: wrap unpacking in a None check instead of unpacking directly
-        result = load_csv(filepath)
-        if result is None:
+        imu_df = load_csv(filepath)
+        if imu_df is None:
             continue
-
-        imu_df, df_full = result
-        imu_df['y_true'] = df_full['Label']
-        imu_df['subject'] = file
+        # imu_df = result
+        imu_df['subject'] = file.split('.')[0]
         imu_df['condition'] = 'stroke'
         imu_merged_chunks.append(imu_df)
 
@@ -91,7 +147,7 @@ def merge_csv(data_path: str) -> pd.DataFrame:
     if PRINT_STATS:
         print("-" * 50)
 
-    col_order = ['subject', 'condition', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
+    col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff','subject', 'segment', 'condition', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
 
     imu_merged = (
         pd.concat(imu_merged_chunks, ignore_index=True)[col_order]

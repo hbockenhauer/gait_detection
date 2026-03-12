@@ -15,23 +15,23 @@ from free_living_test import _run_gsd_on_group, merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\Free_living"
+    # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
 DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'limp', 'armfixed', 'stroke']
-SAVE_RESULTS = True 
+SAVE_RESULTS = False 
 PRINT_STATS = True 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results.csv"
 
-PLOT = False
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
+PLOT = True
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\data"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -179,6 +179,11 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     return rw_merged, lw_merged
 
 def run_gsd_on_segment(grp) : 
+    """
+    Input grp: columns = 'yyyy-MM-dd', 'HH:mm:ss.fff', 
+                         'accX', 'accY', 'accZ', 
+                         'segment', 'y_true', 'condition', 'subject'
+    """
     grp_start_idx = grp.index[0]  # offset into the full df
     # print("global_start_idx", grp_start_idx)
     # find the acceleration columns 
@@ -215,25 +220,27 @@ def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true,
 
 
     time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
 
-    # ── Top: y_pred and y_true ────────────────────────────────────────────────
-    ax1.fill_between(time_all_sec, 0, 1, where=(y_true == 1),
-                    alpha=0.3, color='green', label='Ground truth (walking)')
-    ax1.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
-            linewidth=1, color='steelblue')
+    # ── figure 1: raw data ────────────────────────────────────────────────────
+    ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                     alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
+                     label='Ground truth (walking)')
+    acc_cols = [c for c in df.columns if 'acc' in c]
+    for acc in acc_cols:
+
+        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
 
     for i, jt in enumerate(jump_times_sec):
         ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
                     label='Time gap' if i == 0 else None)
 
-    ax1.set_ylabel('Walking (1) / Not (0)')
+    ax1.set_ylabel(f'Acceleration (m/s^{2})')
     ax1.set_title(f'{folder}/{file_name}')
     ax1.legend(loc='upper left')
-    ax1.set_ylim(-0.1, 1.4)
 
-    # ── Bottom: activity counts ───────────────────────────────────────────────
-    ax2.fill_between(time_all_sec, 0, 1, where=(y_true == 1),
+    # ── figure 2: activity counts ───────────────────────────────────────────────
+    ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
                     label='Ground truth (walking)')
     ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
@@ -243,18 +250,32 @@ def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true,
         ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
                     label='Time gap' if i == 0 else None)
 
-    ax2.set_xlabel('Time (s)')
+    ax2.set_xlabel('Time')
     ax2.set_ylabel('Activity count')
     ax2.legend(loc='upper left')
 
+    # ── figure 3: y_pred and y_true ──────────────────────────────────────────────
+    ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', label='Ground truth (walking)')
+    ax3.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax3.set_ylabel('Walking (1) / Not (0)')
+    ax3.legend(loc='upper left')
+    ax3.set_ylim(-0.1, 1.4)
+
     # Format x-axis as HH:MM:SS
-    ax2.xaxis.set_major_formatter(mticker.FuncFormatter(
+    ax3.xaxis.set_major_formatter(mticker.FuncFormatter(
         lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
     ))
     fig.autofmt_xdate()
     plt.tight_layout()
 
-    out_path = os.path.join(OUT_FOLDER, f"{folder}_{file_name}_predictions.png")
+    out_path = os.path.join(OUT_FOLDER, f"{folder}{file_name}_predictions.png")
     plt.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"Saved -> {out_path}")
@@ -275,7 +296,8 @@ def process_gait(rw_merged: pd.DataFrame,
           f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
     print("-" * 90)
 
-    for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged)]:
+    # ────────── Process the data per wrist ────────────────────────────────────── 
+    for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged), ('',fl_merged)]:
         if merged_df.empty:
             print(f"[{wrist_label}] No data — skipping.")
             continue
@@ -339,38 +361,38 @@ def process_gait(rw_merged: pd.DataFrame,
                       f"{acc:.2f}   | {prec:.2f}   | "
                       f"{rec:.2f}   | {f1:.2f}")
 
-    if fl_merged.empty:
-        print("No csv data — skipping.")
-        return pd.DataFrame()
+    # # ────────── Process the csv data ────────────────────────────────────────────
+    # if fl_merged.empty:
+    #     print("No csv data — skipping.")
+    # else: 
+    #     imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
 
-    imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
+    #     for subject, grp in fl_merged.groupby('subject', sort=True):
+    #         imu_df = grp[imu_cols].reset_index(drop=True)
+    #         y_true = grp['y_true'].to_numpy()
+    #         label  = str(subject)
+    #         condition = grp['condition'].iloc[0]
 
-    for subject, grp in fl_merged.groupby('subject', sort=True):
-        imu_df = grp[imu_cols].reset_index(drop=True)
-        y_true = grp['y_true'].to_numpy()
-        label  = str(subject)
-        condition = grp['condition'].iloc[0]
+    #         result = _run_gsd_on_group(imu_df, y_true, label)
+    #         if result is None:
+    #             continue
 
-        result = _run_gsd_on_group(imu_df, y_true, label)
-        if result is None:
-            continue
+    #         metrics, output_name = result
+    #         # output_name = 'Results/Free_living_Results.csv'  
 
-        metrics, output_name = result
-        # output_name = 'Results/Free_living_Results.csv'  
+    #         results.append({
+    #             'Subject':   label,
+    #             'Wrist':     "NA",
+    #             'Folder':    subject,
+    #             'Condition': condition,
+    #             **metrics,
+    #         })
 
-        results.append({
-            'Subject':   label,
-            'Wrist':     "NA",
-            'Folder':    subject,
-            'Condition': condition,
-            **metrics,
-        })
-
-        if PRINT_STATS:
-            print(f"{label[:35]:<35} | {'':<5} | {condition:<10} | "
-                  f"{metrics['Accuracy']:.2f}   | "
-                  f"{metrics['Precision']:.2f}   | {metrics['Recall']:.2f}   | "
-                  f"{metrics['F1']:.2f}")
+    #         if PRINT_STATS:
+    #             print(f"{label[:35]:<35} | {'':<5} | {condition:<10} | "
+    #                 f"{metrics['Accuracy']:.2f}   | "
+    #                 f"{metrics['Precision']:.2f}   | {metrics['Recall']:.2f}   | "
+    #                 f"{metrics['F1']:.2f}")
     
     
     if not results:
@@ -486,6 +508,7 @@ def process_gait(rw_merged: pd.DataFrame,
 if __name__ == "__main__":
     all_rw: list[pd.DataFrame] = []
     all_lw: list[pd.DataFrame] = []
+    all_fl: list[pd.DataFrame] = []
 
     for data_path in DATA_PATHS:
         dataset_name = os.path.basename(data_path.rstrip('/\\'))
@@ -502,15 +525,17 @@ if __name__ == "__main__":
             lw['dataset'] = dataset_name
             all_rw.append(rw)
             all_lw.append(lw)
-        else:
-            # for now only accepts one csv file 
-            fl_merged = merge_csv(data_path)
+        else: 
+            fl = merge_csv(data_path)
+            fl['dataset'] = dataset_name
+            all_fl.append(fl)
         
 
 
     # Pool across all datasets
     rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
     lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
+    fl_merged = pd.concat(all_fl, ignore_index=True) if all_fl else pd.DataFrame()
 
     # Save pooled merged files
     # rw_merged.to_csv('merged_RW.csv', index=False)
