@@ -58,7 +58,7 @@ class KheirkhahanGSD:
         self.upper_percentile = 90
         self.win_size_s = 9
         self.win_shift_s = 1
-        self.threshold = 0.58
+        self.threshold = 0.62
         self.cwb = cwb
         # self.visual = visual
 
@@ -139,9 +139,6 @@ class KheirkhahanGSD:
         self.data = data
         self.data_len = len(data)
 
-        # if self.visual == True:
-        #     self.plot_acceleration_data(data, sampling_rate_hz, xaxis='Time(s)', yaxis='Raw accelerations')
-
         # In the current implementation for wrist worn sensors we use the norm
         acc = self.data.iloc[:, 0:3]
         norm_acc = np.linalg.norm(acc, axis=1)
@@ -149,24 +146,9 @@ class KheirkhahanGSD:
         # Finds the activity counts per second
         # turning acc to g-units for activity counts calculation
         norm_acc = norm_acc / 9.81
-        # if self.visual == True:
-        #     self.plot_acceleration_data(pd.DataFrame(norm_acc,columns=['norm_acc']), sampling_rate_hz, 
-        #                                 title="norm_acc", xaxis='Time(s)', yaxis="Normalized Acceleration")
-        #AC = ActivityCounts()
-        # if self.visual == True: 
-        #     activity_counts = ActivityCounts().calculate_debug(data=norm_acc.copy(), 
-        #                                                    sampling_rate=self.sampling_rate_hz, 
-        #                                                    switch=self.switch).activity_counts_
-        # else:
+
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
                                                      sampling_rate=self.sampling_rate_hz).activity_counts_
-        
-        # if self.visual == True: 
-        #     #self.plot_acceleration_data(tmp, sampling_rate_hz, title="tmp")
-        #     scale_AC = len(activity_counts) / self.data_len
-        #     # print("scale_AC", scale_AC)
-        #     self.plot_acceleration_data(activity_counts, sampling_rate_hz=1, title="activity counts",
-        #                                 scale = scale_AC, yaxis="activity", switch_sampling_rate=self.sampling_rate_hz)
         
         # shortcut if all activity counts are 0 no gait can be detected
         if np.all(activity_counts == 0):
@@ -182,9 +164,7 @@ class KheirkhahanGSD:
         # Creates overlapping windows of activity counts data (activity counts are expressed in seconds)
         windows = window(activity_counts, self.win_size_s, self.win_shift_s, copy=True)
         # for 265 1s bin, windows are of size (257, 9) (265-9+1)
-        # print("windows", windows)
-        # print('size', windows.shape)
-        # print(windows[:3, :])
+
 
         # Outlier removal only when window size is 5 or higher otherwise this method might remove regular values
         if self.win_size_s > 4:
@@ -196,24 +176,18 @@ class KheirkhahanGSD:
         # Calculates the ratio of inactive data in each window
         inactivity_parameter = calc_activity_parameter(filtered_activity_counts)
         # inactivity_parameter has the size of the number of windows 
-        # print("inactivity_parameter", inactivity_parameter)
-        # print('size', inactivity_parameter.shape)
-        # print(inactivity_parameter[:3,])
+
 
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
         walking_windows[inactivity_parameter < self.threshold] = 1
-        # if self.visual == True: 
-        #     self.plot_acceleration_data(walking_windows, sampling_rate_hz=1, title="walking windows",
-        #                                 scale = scale_AC, yaxis="walking", switch_sampling_rate=self.sampling_rate_hz)
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
 
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
-        # if self.visual == True: 
-        #     self.plot_acceleration_data(detected_walking, sampling_rate_hz, title='detected walking')
+
 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file

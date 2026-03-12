@@ -11,14 +11,14 @@ import csv
 from datetime import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from free_living_test import _run_gsd_on_group, merge_csv
+from free_living_test import merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    # r"C:\Users\orlov\intern\gait_detection\Free_living"
+    r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
@@ -31,7 +31,7 @@ MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results.csv"
 
 PLOT = True
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\test"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -216,7 +216,7 @@ def run_gsd_on_segment(grp) :
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
     
-    gsd = KheirkhahanGSD(cwb=False)
+    gsd = KheirkhahanGSD()
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
@@ -378,41 +378,7 @@ def process_gait(rw_merged: pd.DataFrame,
             if PRINT_STATS == True: 
                 print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
                       f"{acc:.2f}   | {prec:.2f}   | "
-                      f"{rec:.2f}   | {f1:.2f}")
-
-    # # ────────── Process the csv data ────────────────────────────────────────────
-    # if fl_merged.empty:
-    #     print("No csv data — skipping.")
-    # else: 
-    #     imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
-
-    #     for subject, grp in fl_merged.groupby('subject', sort=True):
-    #         imu_df = grp[imu_cols].reset_index(drop=True)
-    #         y_true = grp['y_true'].to_numpy()
-    #         label  = str(subject)
-    #         condition = grp['condition'].iloc[0]
-
-    #         result = _run_gsd_on_group(imu_df, y_true, label)
-    #         if result is None:
-    #             continue
-
-    #         metrics, output_name = result
-    #         # output_name = 'Results/Free_living_Results.csv'  
-
-    #         results.append({
-    #             'Subject':   label,
-    #             'Wrist':     "NA",
-    #             'Folder':    subject,
-    #             'Condition': condition,
-    #             **metrics,
-    #         })
-
-    #         if PRINT_STATS:
-    #             print(f"{label[:35]:<35} | {'':<5} | {condition:<10} | "
-    #                 f"{metrics['Accuracy']:.2f}   | "
-    #                 f"{metrics['Precision']:.2f}   | {metrics['Recall']:.2f}   | "
-    #                 f"{metrics['F1']:.2f}")
-    
+                      f"{rec:.2f}   | {f1:.2f}")    
     
     if not results:
         print("No results to summarise.")
@@ -500,8 +466,8 @@ def process_gait(rw_merged: pd.DataFrame,
         _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
         _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
         print()
-        for condition in sorted(res_df['Condition'].unique()):
-            _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
+    for condition in sorted(res_df['Condition'].unique()):
+        _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
     print("-" * 90)
     _print_avg("AVERAGE (Overall)", res_df)
 
@@ -545,7 +511,7 @@ if __name__ == "__main__":
             all_rw.append(rw)
             all_lw.append(lw)
         else: 
-            fl = merge_csv(data_path)
+            fl = merge_csv(data_path, PRINT_STATS)
             fl['dataset'] = dataset_name
             all_fl.append(fl)
         

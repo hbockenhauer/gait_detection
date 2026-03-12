@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
-GSD_n = 3
+GSD_n = 2
 SAMPLING_RATE = 50
 DEBUG = False
 GAIT_CLASSES = {'walking', 'stairs'}
@@ -110,7 +110,7 @@ def load_csv(filepath: str):
         return None
 
 
-def merge_csv(data_path: str) -> pd.DataFrame:
+def merge_csv(data_path: str, PRINT_STATS: bool = False) -> pd.DataFrame:
     """
     Walk data_path, load every *_annotated.csv file, attach metadata,
     and return a single merged DataFrame.
