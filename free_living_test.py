@@ -18,7 +18,7 @@ GSD_n = 3
 SAMPLING_RATE = 50
 DEBUG = False
 GAIT_CLASSES = {'walking', 'stairs'}
-SAVE_RESULTS = False
+SAVE_RESULTS = True
 PRINT_STATS = True
 
 
@@ -116,9 +116,6 @@ def merge_csv(data_path: str) -> pd.DataFrame:
     and return a single merged DataFrame.
 
     Columns: subject | y_true | acc_pa | acc_ml | acc_is
-
-    FIX: rw_rows was potentially undefined if no files loaded → NameError.
-    FIX: load_wrist_file returns None on failure; must check before unpacking.
     """
     imu_merged_chunks: list[pd.DataFrame] = []
 
@@ -132,7 +129,6 @@ def merge_csv(data_path: str) -> pd.DataFrame:
     for file in files:
         filepath = os.path.join(data_path, file)
 
-        # FIX: wrap unpacking in a None check instead of unpacking directly
         imu_df = load_csv(filepath)
         if imu_df is None:
             continue
@@ -175,7 +171,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 )
                 output_name = 'HickeyGSD_Results.csv'
             case 3:
-                gsd = KheirkhahanGSD()
+                gsd = KheirkhahanGSD(cwb=False)
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 output_name = 'KheirkhahanGSD_Results.csv'
             case 4:

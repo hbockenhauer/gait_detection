@@ -15,9 +15,9 @@ from free_living_test import _run_gsd_on_group, merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
     # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
@@ -31,7 +31,7 @@ MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results.csv"
 
 PLOT = True
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\data"
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -48,7 +48,8 @@ def parse_time(t_str):
 def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
     try:
         # open the file 
-        with open(os.path.join(DATA_PATH, file_name), newline='') as f:
+        filepath = os.path.join(DATA_PATH, file_name)
+        with open(filepath, newline='') as f:
             reader = csv.DictReader(f, delimiter='\t')
             rows = list(reader)
 
@@ -84,18 +85,20 @@ def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
                 segments.append(segment_id)
             else:
                 dropped_rows += 1
-        
+        df = pd.DataFrame(clean_rows)
+        df = df.reset_index(drop=True)
+        df['segment'] = segments
+
         if DEBUG:
             print(f"Dropped {dropped_rows} rows.")
             print(f"Found {segment_id+1} segments. ")
             print(f"Kept {len(clean_rows)} rows. \n")
-        df = pd.DataFrame(clean_rows)
-        df = df.reset_index(drop=True)
-        df['segment'] = segments
+
         # df.columns are now :
         # ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
         # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
+        
     except Exception as e:
         print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
     
@@ -111,6 +114,8 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     rw_chunks: list[pd.DataFrame] = []
     lw_chunks: list[pd.DataFrame] = []
+
+    acc_col = ['acc_pa', 'acc_ml', 'acc_is']
 
     if PRINT_STATS == True:
         print(f"Scanning: {data_path}\n")
@@ -132,6 +137,9 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         if os.path.exists(rw_path):
             rw_df = load_segmented(folder_path, 's1_1RW.txt')
+        #    ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
+        # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
+        # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
             if rw_df is not None:
                 # assign true values 
                 if 'test' in folder.lower():
@@ -139,12 +147,17 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                 else:
                     activity = folder.split('_')[0].lower()
                     rw_df['y_true'] =  np.ones(len(rw_df)) if activity in GAIT_CLASSES else np.zeros(len(rw_df))
-                # lebal the conditions and the subject 
+
+                acc_cols = [c for c in rw_df.columns if 'acc' in c]
+                if len(acc_cols) < 3:
+                    print("Incorrect number of columns.")
+                    print(f"On {rw_path}, {len(acc_cols)} columns found instead.")
+                rw_df[acc_col] = rw_df[acc_cols[:3]].copy().astype(float) * 9.8
+
                 rw_df['condition'] = condition
                 rw_df['subject']   = subject
                 rw_chunks.append(rw_df)
                 rw_rows = len(rw_df)
-
         if os.path.exists(lw_path):
             lw_df = load_segmented(folder_path, 's2_2LW.txt')
             if lw_df is not None:
@@ -155,7 +168,13 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                     activity = folder.split('_')[0].lower()
                     # print("activity is", activity)
                     lw_df['y_true'] =  np.ones(len(lw_df)) if activity in GAIT_CLASSES else np.zeros(len(lw_df))
-                    # print(lw_df['y_true'])
+
+                acc_cols = [c for c in lw_df.columns if 'acc' in c]
+                if len(acc_cols) < 3:
+                    print("Incorrect number of columns.")
+                    print(f"On {lw_path}, {len(acc_cols)} columns found instead.")
+                lw_df[acc_col] = lw_df[acc_cols[:3]].copy().astype(float) * 9.8
+
                 lw_df['condition'] = condition
                 lw_df['subject']   = subject
                 lw_chunks.append(lw_df)
@@ -168,7 +187,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         print("-" * 80)
 
     col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff', 
-                 'accX', 'accY', 'accZ', 
+                 'acc_pa', 'acc_ml', 'acc_is', 
                  'segment', 'y_true', 'condition', 'subject']
 
     rw_merged = (pd.concat(rw_chunks, ignore_index=True)[col_order]
@@ -192,7 +211,7 @@ def run_gsd_on_segment(grp) :
         print("Incorrect number of columns.")
         print(f"{len(acc_cols)} columns found instead.")
     # rename the columns and run the gsd on them
-    seg_imu = grp[acc_cols[:3]].copy().astype(float) * 9.81
+    seg_imu = grp[acc_cols].copy().astype(float) 
     seg_imu.columns = ['acc_pa', 'acc_ml', 'acc_is']
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
