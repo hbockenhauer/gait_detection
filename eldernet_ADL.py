@@ -179,7 +179,7 @@ def main():
             batch_freq = np.array(batch_freq)
 
             # Decision Logic
-            preds = ((probs > CONF_THRESH) & (batch_energy > ENERGY_THRESH)).astype(int)
+            preds = ((probs > CONF_THRESH).astype(int)) #& (batch_energy > ENERGY_THRESH)).astype(int)
 
             all_y_true.extend(y.numpy())
             all_y_pred.extend(preds)
@@ -248,140 +248,140 @@ def main():
         
         print(f"{subj:<10} | {p_s:>6.2f} | {r_s:>6.2f} | {f1_s:>6.2f}")
 
-    # --- 3. Prepare per-subject sequences for plotting ---
-    plot_dir = 'ElderNet_ADL_Plots'
-    os.makedirs(plot_dir, exist_ok=True)
+    # # --- 3. Prepare per-subject sequences for plotting ---
+    # plot_dir = 'ElderNet_ADL_Plots'
+    # os.makedirs(plot_dir, exist_ok=True)
 
-    subject_groups = {}
-    for subj_id, prob, eng, frq, act in zip(all_subject_ids, all_probs, all_energies, all_freqs, all_names):
-        if subj_id not in subject_groups:
-            subject_groups[subj_id] = {'ConfSeq': [], 'EnergiesSeq': [], 'FreqsSeq': [], 'ActivitySeq': []}
-        subject_groups[subj_id]['ConfSeq'].append(prob)
-        subject_groups[subj_id]['EnergiesSeq'].append(eng)
-        subject_groups[subj_id]['FreqsSeq'].append(frq)
-        subject_groups[subj_id]['ActivitySeq'].append(act)
+    # subject_groups = {}
+    # for subj_id, prob, eng, frq, act in zip(all_subject_ids, all_probs, all_energies, all_freqs, all_names):
+    #     if subj_id not in subject_groups:
+    #         subject_groups[subj_id] = {'ConfSeq': [], 'EnergiesSeq': [], 'FreqsSeq': [], 'ActivitySeq': []}
+    #     subject_groups[subj_id]['ConfSeq'].append(prob)
+    #     subject_groups[subj_id]['EnergiesSeq'].append(eng)
+    #     subject_groups[subj_id]['FreqsSeq'].append(frq)
+    #     subject_groups[subj_id]['ActivitySeq'].append(act)
 
-    # Present available subject ids
-    subject_list = sorted(list(subject_groups.keys()))
-    if len(subject_list) == 0:
-        print('No per-subject sequences to plot.')
-        return
+    # # Present available subject ids
+    # subject_list = sorted(list(subject_groups.keys()))
+    # if len(subject_list) == 0:
+    #     print('No per-subject sequences to plot.')
+    #     return
 
-    print('\n' + '='*40)
-    print('AVAILABLE SUBJECTS FOR PLOTTING:')
-    for i, subj_id in enumerate(subject_list):
-        n_windows = len(subject_groups[subj_id]['ConfSeq'])
-        print(f"  {i}: {subj_id} ({n_windows} windows)")
+    # print('\n' + '='*40)
+    # print('AVAILABLE SUBJECTS FOR PLOTTING:')
+    # for i, subj_id in enumerate(subject_list):
+    #     n_windows = len(subject_groups[subj_id]['ConfSeq'])
+    #     print(f"  {i}: {subj_id} ({n_windows} windows)")
 
-    def parse_selection(input_str, max_idx):
-        parts = [p.strip() for p in input_str.split(',') if p.strip()]
-        idxs = set()
-        for part in parts:
-            if '-' in part:
-                try:
-                    a, b = part.split('-')
-                    a, b = int(a), int(b)
-                    for j in range(a, b+1):
-                        if 0 <= j < max_idx:
-                            idxs.add(j)
-                except Exception:
-                    return None
-            else:
-                try:
-                    v = int(part)
-                    if 0 <= v < max_idx:
-                        idxs.add(v)
-                except Exception:
-                    return None
-        return sorted(list(idxs))
+    # def parse_selection(input_str, max_idx):
+    #     parts = [p.strip() for p in input_str.split(',') if p.strip()]
+    #     idxs = set()
+    #     for part in parts:
+    #         if '-' in part:
+    #             try:
+    #                 a, b = part.split('-')
+    #                 a, b = int(a), int(b)
+    #                 for j in range(a, b+1):
+    #                     if 0 <= j < max_idx:
+    #                         idxs.add(j)
+    #             except Exception:
+    #                 return None
+    #         else:
+    #             try:
+    #                 v = int(part)
+    #                 if 0 <= v < max_idx:
+    #                     idxs.add(v)
+    #             except Exception:
+    #                 return None
+    #     return sorted(list(idxs))
 
-    while True:
-        sel = input("Enter subject index/indices to plot (e.g. '0' or '0,2-4' or 'quit'): ").strip()
-        if sel.lower() == 'quit':
-            return
-        sel_idxs = parse_selection(sel, len(subject_list))
-        if sel_idxs is None or len(sel_idxs) == 0:
-            print('Invalid selection')
-            continue
-        break
+    # while True:
+    #     sel = input("Enter subject index/indices to plot (e.g. '0' or '0,2-4' or 'quit'): ").strip()
+    #     if sel.lower() == 'quit':
+    #         return
+    #     sel_idxs = parse_selection(sel, len(subject_list))
+    #     if sel_idxs is None or len(sel_idxs) == 0:
+    #         print('Invalid selection')
+    #         continue
+    #     break
 
-    for s in sel_idxs:
-        subj_id = subject_list[s]
-        seqs = subject_groups[subj_id]
-        fig, axes = plt.subplots(3,1, figsize=(14,10))
-        info = [('Confidence','ConfSeq','Confidence (probability)', axes[0]), ('Energy','EnergiesSeq','Energy (std)', axes[1]), ('Frequency','FreqsSeq','Mean Frequency (Hz)', axes[2])]
-        acts = seqs['ActivitySeq']
-        conf_seq = np.array(seqs['ConfSeq'])
-        energy_seq = np.array(seqs['EnergiesSeq'])
-        freq_seq = np.array(seqs['FreqsSeq'])
-        # optional freq thresholds (useful if available)
-        min_freq = 0.5
-        max_freq = 3.0
-        # Gait detection mask: confidence AND energy (and freq if valid)
-        gait_mask = (conf_seq > CONF_THRESH) & (energy_seq > ENERGY_THRESH)
-        if not np.all(np.isnan(freq_seq)):
-            gait_mask &= (freq_seq > min_freq) & (freq_seq < max_freq)
-        # identify contiguous gait regions for shading
-        gait_regions = []
-        in_gait = False
-        start_idx = 0
-        for i, val in enumerate(gait_mask):
-            if val and not in_gait:
-                start_idx = i
-                in_gait = True
-            elif not val and in_gait:
-                gait_regions.append((start_idx, i-1))
-                in_gait = False
-        if in_gait:
-            gait_regions.append((start_idx, len(gait_mask)-1))
+    # for s in sel_idxs:
+    #     subj_id = subject_list[s]
+    #     seqs = subject_groups[subj_id]
+    #     fig, axes = plt.subplots(3,1, figsize=(14,10))
+    #     info = [('Confidence','ConfSeq','Confidence (probability)', axes[0]), ('Energy','EnergiesSeq','Energy (std)', axes[1]), ('Frequency','FreqsSeq','Mean Frequency (Hz)', axes[2])]
+    #     acts = seqs['ActivitySeq']
+    #     conf_seq = np.array(seqs['ConfSeq'])
+    #     energy_seq = np.array(seqs['EnergiesSeq'])
+    #     freq_seq = np.array(seqs['FreqsSeq'])
+    #     # optional freq thresholds (useful if available)
+    #     min_freq = 0.5
+    #     max_freq = 3.0
+    #     # Gait detection mask: confidence AND energy (and freq if valid)
+    #     gait_mask = (conf_seq > CONF_THRESH) & (energy_seq > ENERGY_THRESH)
+    #     if not np.all(np.isnan(freq_seq)):
+    #         gait_mask &= (freq_seq > min_freq) & (freq_seq < max_freq)
+    #     # identify contiguous gait regions for shading
+    #     gait_regions = []
+    #     in_gait = False
+    #     start_idx = 0
+    #     for i, val in enumerate(gait_mask):
+    #         if val and not in_gait:
+    #             start_idx = i
+    #             in_gait = True
+    #         elif not val and in_gait:
+    #             gait_regions.append((start_idx, i-1))
+    #             in_gait = False
+    #     if in_gait:
+    #         gait_regions.append((start_idx, len(gait_mask)-1))
         
-        # Group consecutive activities
-        activity_transitions = []  # list of (start_idx, activity_name)
-        last_act = None
-        for xi, act in enumerate(acts):
-            if act != last_act:
-                activity_transitions.append((xi, act))
-                last_act = act
+    #     # Group consecutive activities
+    #     activity_transitions = []  # list of (start_idx, activity_name)
+    #     last_act = None
+    #     for xi, act in enumerate(acts):
+    #         if act != last_act:
+    #             activity_transitions.append((xi, act))
+    #             last_act = act
         
-        for title, key, ylabel, ax in info:
-            seq = seqs[key]
-            x = np.arange(len(seq))
-            # Shade gait detection regions with light gold
-            for start, end in gait_regions:
-                ax.axvspan(start - 0.5, end + 0.5, alpha=0.15, color='gold')
-            ax.plot(x, seq, color='steelblue', linewidth=1.5)
+    #     for title, key, ylabel, ax in info:
+    #         seq = seqs[key]
+    #         x = np.arange(len(seq))
+    #         # Shade gait detection regions with light gold
+    #         for start, end in gait_regions:
+    #             ax.axvspan(start - 0.5, end + 0.5, alpha=0.15, color='gold')
+    #         ax.plot(x, seq, color='steelblue', linewidth=1.5)
 
-            # Add threshold lines in gold
-            if key == 'ConfSeq':
-                ax.axhline(CONF_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Conf threshold={CONF_THRESH}')
-                ax.legend(loc='upper right', fontsize=8)
-            elif key == 'EnergiesSeq':
-                ax.axhline(ENERGY_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Energy threshold={ENERGY_THRESH}')
-                ax.legend(loc='upper right', fontsize=8)
-            elif key == 'FreqsSeq':
-                # draw optional freq bounds if desired
-                ax.axhline(min_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Min freq={min_freq}')
-                ax.axhline(max_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Max freq={max_freq}')
-                ax.legend(loc='upper right', fontsize=8)
+    #         # Add threshold lines in gold
+    #         if key == 'ConfSeq':
+    #             ax.axhline(CONF_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Conf threshold={CONF_THRESH}')
+    #             ax.legend(loc='upper right', fontsize=8)
+    #         elif key == 'EnergiesSeq':
+    #             ax.axhline(ENERGY_THRESH, color='gold', linestyle='--', linewidth=1.5, alpha=0.8, label=f'Energy threshold={ENERGY_THRESH}')
+    #             ax.legend(loc='upper right', fontsize=8)
+    #         elif key == 'FreqsSeq':
+    #             # draw optional freq bounds if desired
+    #             ax.axhline(min_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Min freq={min_freq}')
+    #             ax.axhline(max_freq, color='gold', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Max freq={max_freq}')
+    #             ax.legend(loc='upper right', fontsize=8)
 
-            # Mark activity transitions only (green for gait)
-            for xi, act in activity_transitions:
-                line_color = 'green' if act in GAIT_CLASSES else 'red'
-                ax.axvline(xi, color=line_color, linestyle='--', alpha=0.4)
-                yval = seq[xi] if xi < len(seq) else None
-                if yval is not None:
-                    ax.text(xi + 0.5, yval, act, rotation=90, fontsize=7, color=line_color, va='bottom')
+    #         # Mark activity transitions only (green for gait)
+    #         for xi, act in activity_transitions:
+    #             line_color = 'green' if act in GAIT_CLASSES else 'red'
+    #             ax.axvline(xi, color=line_color, linestyle='--', alpha=0.4)
+    #             yval = seq[xi] if xi < len(seq) else None
+    #             if yval is not None:
+    #                 ax.text(xi + 0.5, yval, act, rotation=90, fontsize=7, color=line_color, va='bottom')
 
-            ax.set_ylabel(ylabel)
-            ax.set_xlabel('Window index')
-            ax.set_title(f"Subject {subj_id} - {title}")
-            ax.grid(True, alpha=0.3)
-        fig.suptitle(f"Subject {subj_id}: Gait Detection Metrics with Activity Annotations", fontsize=14, fontweight='bold')
-        fig.tight_layout()
-        out = os.path.join(plot_dir, f'subject_{subj_id}_gait_detection.png')
-        plt.savefig(out, dpi=150)
-        print(f"Saved plot: {out}")
-        plt.show()
+    #         ax.set_ylabel(ylabel)
+    #         ax.set_xlabel('Window index')
+    #         ax.set_title(f"Subject {subj_id} - {title}")
+    #         ax.grid(True, alpha=0.3)
+    #     fig.suptitle(f"Subject {subj_id}: Gait Detection Metrics with Activity Annotations", fontsize=14, fontweight='bold')
+    #     fig.tight_layout()
+    #     out = os.path.join(plot_dir, f'subject_{subj_id}_gait_detection.png')
+    #     plt.savefig(out, dpi=150)
+    #     print(f"Saved plot: {out}")
+    #     plt.show()
 
 if __name__ == "__main__":
     main()

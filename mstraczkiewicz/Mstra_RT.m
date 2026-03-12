@@ -3,9 +3,9 @@ clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
 dataPaths = {
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
+    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
+    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
     'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_tests'
 };
 PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
@@ -43,7 +43,7 @@ for d = 1:length(dataPaths)
     for i = 1:length(subDirs)
         folderName = subDirs(i).name;
         folderPath = fullfile(dataPath, folderName);
-        targetFiles = {'s1_1RW.txt', 'Right'; 's2_2LW.txt', 'Left'};
+        targetFiles = {'s0_Hub.txt', 'Right'; 's2_2LW.txt', 'Left'};
         
         plotData = struct(); 
         for f = 1:size(targetFiles, 1)
@@ -76,6 +76,27 @@ for d = 1:length(dataPaths)
                         runningMax = fullDateTime(k);
                     end
                 end
+
+                % --- DIAGNOSTIC: Print removed row indices and timestamps ---
+                removedIdx = find(~keepMask);
+                if ~isempty(removedIdx)
+                    fprintf('    Removed rows (backwards filter):\n');
+                    % Group into contiguous blocks for cleaner output
+                    blockStarts = removedIdx([true; diff(removedIdx) > 1]);
+                    blockEnds   = removedIdx([diff(removedIdx) > 1; true]);
+                    for b = 1:length(blockStarts)
+                        if blockStarts(b) == blockEnds(b)
+                            fprintf('      Row %d: %s\n', blockStarts(b), string(fullDateTime(blockStarts(b))));
+                        else
+                            fprintf('      Rows %d-%d: %s to %s (%d rows)\n', ...
+                                blockStarts(b), blockEnds(b), ...
+                                string(fullDateTime(blockStarts(b))), ...
+                                string(fullDateTime(blockEnds(b))), ...
+                                blockEnds(b) - blockStarts(b) + 1);
+                        end
+                    end
+                end
+                
                 fullDateTime = fullDateTime(keepMask);
                 data         = data(keepMask, :);
                 rowsAfterBackwards = height(data);

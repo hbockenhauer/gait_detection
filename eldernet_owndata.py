@@ -60,11 +60,31 @@ def load_data(filepath):
         errors='coerce'
     )
 
-    # Remove rows with invalid timestamps
-    df = df.dropna(subset=['datetime'])
-    df = df.sort_values('datetime')
-    df = df.drop_duplicates(subset='datetime', keep='first')
-    df = df.reset_index(drop=True)
+    # Step 0: Remove backwards-jump blocks
+    timestamps = df['datetime']
+    running_max = timestamps.iloc[0]
+    keep_mask = []
+    for t in timestamps:
+        if t < running_max:
+            keep_mask.append(False)
+        else:
+            keep_mask.append(True)
+            running_max = t
+    df = df[keep_mask].reset_index(drop=True)
+
+    # Step 1: Fix time travelers (>100 day jumps)
+    dt = df['datetime'].diff()
+    jump_idx = dt[abs(dt) > pd.Timedelta(days=100)].index
+    for idx in jump_idx:
+        false_gap = dt[idx] - pd.Timedelta(seconds=1/50)
+        df.loc[idx:, 'datetime'] = df.loc[idx:, 'datetime'] - false_gap
+        dt = df['datetime'].diff()
+
+    # Step 2: Sort
+    df = df.sort_values('datetime').reset_index(drop=True)
+
+    # Step 3: Remove duplicates
+    df = df.drop_duplicates(subset='datetime', keep='first').reset_index(drop=True)
 
     time_seconds = (df['datetime'] - df['datetime'].iloc[0]).dt.total_seconds().values
 
@@ -124,44 +144,38 @@ def prepare_windows_overlapping(df, window_size, step_size, nfft=512):
     windows, energies, freqs, activities, timestamps, Q_energies = [], [], [], [], [], []
 
     def get_dominant_freq(win, fs=30, nfft_size=512):
-        # 1. Calculate 3D magnitude (orientation-invariant)
         mag = np.sqrt(np.sum(win**2, axis=0))
-        
-        # 2. Remove DC offset (gravity)
         mag = mag - np.mean(mag)
-        
-        # 3. Apply Hann window to reduce spectral leakage
-        # np.hanning applies the windowing function to smoothly taper the edges
         hann_win = np.hanning(len(mag))
         mag_windowed = mag * hann_win
-        
-        
-        # 4. Calculate FFT with zero-padding
-        # Passing 'n=nfft_size' to rfft automatically pads the signal with zeros up to 512
         freqs_fft = np.fft.rfftfreq(nfft_size, d=1/fs)
-        
-        # 5. Calculate Power Spectrum (magnitude squared)
         power_spectrum = np.abs(np.fft.rfft(mag_windowed, n=nfft_size))**2
-        
-        
-        # 6. Return the frequency bin with the maximum power
         return freqs_fft[np.argmax(power_spectrum)]
 
-    for i in range(window_size, len(acc_data), step_size):
-        win = acc_data[i - window_size:i]
-        act_win = gt_raw[i - window_size:i]
+    # --- Find continuous segments (skip across gaps) ---
+    dt = np.diff(times)
+    gap_threshold = 0.1  # seconds
+    gap_indices = np.where(dt > gap_threshold)[0] + 1
+    segment_boundaries = np.concatenate([[0], gap_indices, [len(acc_data)]])
+    segments = []
+    for k in range(len(segment_boundaries) - 1):
+        start = segment_boundaries[k]
+        end   = segment_boundaries[k + 1]
+        if end - start >= window_size:
+            segments.append((start, end))
 
-        windows.append(win.T)
-        
-        # Energy: Standard deviation of the 3D magnitude
-        energies.append(np.std(np.sqrt(np.sum((win)**2, axis=1)))*9.81**3)
-        
-        # Pass nfft to the frequency calculation
-        freqs.append(get_dominant_freq(win.T, fs=30, nfft_size=nfft))
-        
-        activities.append(int(np.mean(act_win) > 0.5))
-        timestamps.append(times[i-1])
-        Q_energies.append(np.mean(q_energies[i - window_size:i]))
+    # --- Window within each segment only ---
+    for (seg_start, seg_end) in segments:
+        for i in range(seg_start + window_size, seg_end, step_size):
+            win     = acc_data[i - window_size:i]
+            act_win = gt_raw[i - window_size:i]
+
+            windows.append(win.T)
+            energies.append(np.std(np.sqrt(np.sum((win)**2, axis=1)))*9.81**3)
+            freqs.append(get_dominant_freq(win.T, fs=30, nfft_size=nfft))
+            activities.append(int(np.mean(act_win) > 0.5))
+            timestamps.append(times[i-1])
+            Q_energies.append(np.mean(q_energies[i - window_size:i]))
 
     return (
         torch.FloatTensor(np.array(windows)),
@@ -577,6 +591,6 @@ def main():
     subjects  = ['Hendrik', 'Tanya']
     metrics   = ['probability', 'energy', 'Q_energies', 'frequency']
 
-    #plot_per_activity(results, subjects, metrics)
+    plot_per_activity(results, subjects, metrics)
 
 if __name__ == "__main__":main()

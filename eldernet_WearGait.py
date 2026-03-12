@@ -29,7 +29,7 @@ STEP_SIZE = 30
 REPO_NAME = 'yonbrand/ElderNet'
 
 # Thresholds
-CONF_THRESH = 0.65
+CONF_THRESH = 0.5
 ENERGY_THRESH = 0.7
 MIN_FREQ = 1.0
 MAX_FREQ = 2.5
@@ -198,11 +198,11 @@ def main():
         print(results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean())
         print(f"\n{results_df.to_string()}")
         
-        results_df.to_csv('weargait_eldernet_dual_results.csv', index=False)
-        with open('weargait_detailed_dual_results.pkl', 'wb') as f:
-            pickle.dump(all_plot_data, f)
+        # results_df.to_csv('weargait_eldernet_dual_results.csv', index=False)
+        # with open('weargait_detailed_dual_results.pkl', 'wb') as f:
+        #     pickle.dump(all_plot_data, f)
             
-        plot_weargait_results_dual(all_plot_data)
+        #plot_weargait_results_dual(all_plot_data)
 
 def plot_weargait_results_dual(results_list):
     ACTIVITY_MAP = {'Chair': 'Chair', 'Stairs': 'Stairs', 'Standing': 'Standing', 'Walk': 'Walking'}
