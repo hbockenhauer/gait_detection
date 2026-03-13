@@ -4,7 +4,7 @@ Gait detection algorithm using wrist-worn Inertial Measurement Unit (IMU) data f
 
 ## Project Overview
 
-This project implements Machine Learning models (ElderNet/StrokeNet) and Signal Processing algorithms (mstraczkiewicz) for activity and gait detection from wearable IMU sensors. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait, Bioclite) as well as stroke patient cohorts and self-recorded data.
+This project implements Machine Learning models (ElderNet/StrokeNet) and Signal Processing algorithms (mstraczkiewicz) for gait detection from wearable IMU sensors. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait, Bioclite) as well as stroke patient cohorts and self-recorded data using QSense Motion Capture IMUs.
 
 ## Directory Structure
 
@@ -148,8 +148,9 @@ python analysis/cross_dataset.py
 - WearGait Dataset: https://physionet.org/content/weargait/1.0.0/
 - Bioclite Dataset: https://zenodo.org/records/14623732
 - ElderNet Repo: https://github.com/yonbrand/ElderNet
+- MStraczkiewicz find_walking repo: https://github.com/MStraczkiewicz/find_walking/tree/main
 
 ## Authors
 
-Hendrik Böckenhauer, h.q.bockenhauer@student.tudelft.nl @hbockenhauer
-Tatiana Orlovskaia, t.orlovskaia@student.tudelft.nl @tatiana-8501
+- Hendrik Böckenhauer, h.q.bockenhauer@student.tudelft.nl @hbockenhauer
+- Tatiana Orlovskaia, t.orlovskaia@student.tudelft.nl @tatiana-8501

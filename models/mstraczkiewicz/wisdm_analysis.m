@@ -1,8 +1,81 @@
 clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
-dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\wisdm-dataset\raw\watch\accel';
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:8
+    hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
+    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
+    if hasModels && hasData
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+datasetName = 'wisdm-dataset';
+dataCandidates = {
+    fullfile(projectRoot, 'wisdm-dataset', 'raw', 'watch', 'accel')
+    fullfile(projectRoot, 'Datasets', 'wisdm-dataset', 'raw', 'watch', 'accel')
+};
+dataCandidates = dataCandidates(cellfun(@(p) exist(p, 'dir') == 7, dataCandidates));
+if ~isempty(dataCandidates)
+    dataPath = dataCandidates{1};
+else
+    dataPath = fullfile(projectRoot, 'wisdm-dataset', 'raw', 'watch', 'accel');
+end
 saveResults = true; % Added missing variable
+
+if ~exist(dataPath, 'dir')
+    rootCandidates = {pwd, fileparts(pwd), fileparts(fileparts(pwd)), fileparts(fileparts(fileparts(pwd)))};
+    foundDataPath = '';
+    for r = 1:length(rootCandidates)
+        rootCandidate = rootCandidates{r};
+        candidatePaths = {
+            fullfile(rootCandidate, 'wisdm-dataset', 'raw', 'watch', 'accel')
+            fullfile(rootCandidate, 'Datasets', 'wisdm-dataset', 'raw', 'watch', 'accel')
+        };
+        idx = find(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths), 1);
+        if ~isempty(idx)
+            projectRoot = rootCandidate;
+            foundDataPath = candidatePaths{idx};
+            break;
+        end
+    end
+
+    if ~isempty(foundDataPath)
+        outputsRoot = fullfile(projectRoot, 'outputs');
+        resultsDir = fullfile(outputsRoot, 'results');
+        dataPath = foundDataPath;
+        fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
+    else
+        error('WISDM dataset directory not found: %s | projectRoot=%s | pwd=%s', dataPath, projectRoot, pwd);
+    end
+end
 
 F_MIN = 0.5;
 F_MAX = 3.50;
@@ -93,8 +166,8 @@ for i = 1:length(files)
         rec = tp / (tp + fn); if isnan(rec), rec = 0; end
         f1 = 2 * (prec * rec) / (prec + rec); if isnan(f1), f1 = 0; end
 
-        resRow = table({subjectID}, acc, prec, rec, f1, steps, ...
-            'VariableNames', {'Subject', 'Accuracy', 'Precision', 'Recall', 'F1', 'Steps'});
+        resRow = table({datasetName}, {subjectID}, acc, prec, rec, f1, steps, ...
+            'VariableNames', {'Dataset', 'Subject', 'Accuracy', 'Precision', 'Recall', 'F1', 'Steps'});
         summaryResults = [summaryResults; resRow];
         
         fprintf('%-22s | %-8.2f | %-8.2f | %-8.2f | %-8.2f\n', ...
@@ -113,7 +186,12 @@ if ~isempty(summaryResults)
         mean(summaryResults.Recall), mean(summaryResults.F1));
 end
 
-%if saveResults, writetable(summaryResults, 'WISDM_Global_Summary.csv'); end
+if saveResults && ~isempty(summaryResults)
+    if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+    outCsv = fullfile(resultsDir, 'sigpro_MStra_WISDM_results.csv');
+    writetable(summaryResults, outCsv);
+    fprintf('Saved results to: %s\n', outCsv);
+end
 
 % function [wi, steps] = run_straczkiewicz_lite(vm, fs)
 %     fs_int = round(fs);

@@ -3,13 +3,84 @@
 clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
-dataPaths = {
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:8
+    hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
+    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
+    if hasModels && hasData
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+qSenseCandidates = {
+    fullfile(projectRoot, 'QSense_data_edge')
+    fullfile(projectRoot, 'QSense_data')
+    fullfile(projectRoot, 'QSense_data_mixed')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
+    fullfile(projectRoot, 'Datasets', 'QSense_data')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
 };
 
-PlotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots';
+dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
+dataPaths = unique(dataPaths, 'stable');
+if isempty(dataPaths)
+    rootCandidates = {pwd, fileparts(pwd), fileparts(fileparts(pwd)), fileparts(fileparts(fileparts(pwd)))};
+    fallbackPaths = {};
+
+    for r = 1:length(rootCandidates)
+        rootCandidate = rootCandidates{r};
+        candidatePaths = {
+            fullfile(rootCandidate, 'QSense_data_edge')
+            fullfile(rootCandidate, 'QSense_data')
+            fullfile(rootCandidate, 'QSense_data_mixed')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+        };
+        existingPaths = candidatePaths(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths));
+        if ~isempty(existingPaths)
+            projectRoot = rootCandidate;
+            fallbackPaths = unique(existingPaths, 'stable');
+            break;
+        end
+    end
+
+    if ~isempty(fallbackPaths)
+        outputsRoot = fullfile(projectRoot, 'outputs');
+        resultsDir = fullfile(outputsRoot, 'results');
+        dataPaths = fallbackPaths;
+        fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
+    else
+        error('No QSense dataset directories found. projectRoot=%s | pwd=%s', projectRoot, pwd);
+    end
+end
 
 % Use your optimized parameters from the grid search
 F_MIN = 0.50;
@@ -23,6 +94,9 @@ fs = 50;
 summaryResults = table();
 for d = 1:length(dataPaths)
     dataPath = dataPaths{d};
+    [~, datasetName] = fileparts(dataPath);
+    plotPath = fullfile(outputsRoot, 'plots', datasetName, 'SigPro');
+    if ~exist(plotPath, 'dir'), mkdir(plotPath); end
     fprintf('\nProcessing dataset: %s\n', dataPath);
 
     subDirs = dir(dataPath);
@@ -133,8 +207,8 @@ for d = 1:length(dataPaths)
                 
                 % Store results
                 fullID = sprintf('%s_%s', folderName, sideLabel);
-                resRow = table({fullID}, {folderName}, {sideLabel}, acc, prec, rec, f1, steps, tp, tn, fp, fn, 'VariableNames', ...
-                    {'ID','Subject','Wrist','Accuracy','Precision','Recall','F1','Steps','TP','TN','FP','FN'});
+                resRow = table({datasetName}, {fullID}, {folderName}, {sideLabel}, acc, prec, rec, f1, steps, tp, tn, fp, fn, 'VariableNames', ...
+                    {'Dataset','ID','Subject','Wrist','Accuracy','Precision','Recall','F1','Steps','TP','TN','FP','FN'});
                 summaryResults = [summaryResults; resRow];
                 
                 % ORIGINAL PRINT STATEMENT
@@ -224,7 +298,7 @@ for d = 1:length(dataPaths)
             title('Final Gait Detection (1=Gait, 0=No Gait)');
 
             % Create a filename
-            saveName = fullfile(PlotPath, [folderName, '_Plot.png']);
+            saveName = fullfile(plotPath, [folderName, '_Plot.png']);
 
             % Export at high resolution (300 DPI)
             exportgraphics(fig, saveName, 'Resolution', 300);
@@ -257,10 +331,10 @@ end
 
 % --- 4. EXPORT RESULTS TO CSV ---
 % Define the full path for the CSV file
-csvFileName = fullfile(PlotPath, 'MStra_Summary.csv');
+csvFileName = fullfile(resultsDir, 'sigpro__opt_QSense_results.csv');
 
 % Create the folder if it doesn't exist (safety check)
-if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
+if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
 % Write the table to a CSV file
 writetable(summaryResults, csvFileName);

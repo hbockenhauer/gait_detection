@@ -3,8 +3,57 @@ clear; clc; close all;
 warning('off', 'MATLAB:datetime:AmbiguousInputFormat');
 
 % --- 1. CONFIGURATION ---
-dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\Free_living';
-plotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_FreeLiving';
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:6
+    if exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+       exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir')
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+if ~exist(fullfile(projectRoot, 'Free_living'), 'dir') && ...
+   ~exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir')
+    if exist(fullfile(pwd, 'Free_living'), 'dir') || ...
+       exist(fullfile(pwd, 'Datasets', 'Free_living'), 'dir')
+        projectRoot = pwd;
+    elseif exist(fullfile(fileparts(pwd), 'Free_living'), 'dir') || ...
+           exist(fullfile(fileparts(pwd), 'Datasets', 'Free_living'), 'dir')
+        projectRoot = fileparts(pwd);
+    end
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+dataCandidates = {
+    fullfile(projectRoot, 'Free_living')
+    fullfile(projectRoot, 'Datasets', 'Free_living')
+};
+dataCandidates = dataCandidates(cellfun(@(p) exist(p, 'dir') == 7, dataCandidates));
+if isempty(dataCandidates)
+    error('Free_living dataset directory not found. projectRoot=%s | pwd=%s', projectRoot, pwd);
+end
+dataPath = dataCandidates{1};
+datasetName = 'Free_living';
+plotPath = fullfile(outputsRoot, 'plots', datasetName, 'SigPro');
 
 % 0.96248    5.4359    0.78589    260.11    0.035257    0.12653
  % 0.89768    5.5618    0.83446    569.84    0.04083    0.28275
@@ -17,6 +66,7 @@ stepSize   = 1 * fs;
 maxGap     = 1.5 / fs;
 
 if ~exist(plotPath, 'dir'), mkdir(plotPath); end
+if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
 % --- 2. INITIALIZE SUMMARY ---
 summaryResults = table();
@@ -24,6 +74,12 @@ dataQuality    = table();
 
 % --- 3. FIND ALL ANNOTATED FILES ---
 allFiles = dir(fullfile(dataPath, '*_annotated.csv'));
+if isempty(allFiles)
+    allFiles = dir(fullfile(dataPath, '**', '*_annotated.csv'));
+    if ~isempty(allFiles)
+        fprintf('No top-level annotated files found. Using recursive search under: %s\n', dataPath);
+    end
+end
 
 fprintf('\nFound %d annotated files in: %s\n', length(allFiles), dataPath);
 fprintf('%-30s | %-8s | %-8s | %-8s | %-8s\n', 'File', 'Accuracy', 'Precision', 'Recall', 'F1');
@@ -31,7 +87,7 @@ fprintf('%s\n', repmat('-', 1, 75));
 
 for i = 1:length(allFiles)
     fileName = allFiles(i).name;
-    filePath = fullfile(dataPath, fileName);
+    filePath = fullfile(allFiles(i).folder, fileName);
 
     % Extract subject name e.g. Device2_sub1_annotated.csv -> sub1
     parts   = split(strrep(fileName, '_annotated.csv', ''), '_');
@@ -329,9 +385,12 @@ if ~isempty(summaryResults)
     fprintf('Time lost to gaps:     %.1f s (waiting for window to fill)\n', globalBufferLostSec);
     fprintf('======================================================================\n');
     
-    % Save to Excel
-    resFile = fullfile(plotPath, 'FreeLiving_MStra_Results.xlsx');
+    % Save RT results to outputs/results
+    resFile = fullfile(resultsDir, 'sigpro_RT_Free_living_results.xlsx');
+    writetable(summaryResults, resFile, 'Sheet', 'All_Files');
+    writetable(subjectSummary, resFile, 'Sheet', 'By_Subject');
     writetable(dataQuality, resFile, 'Sheet', 'Data_Quality');
+    fprintf('RT results saved to: %s\n', resFile);
 end
 
 

@@ -2,13 +2,89 @@
 clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
-dataPaths = {
-    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
-    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-    % 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
-    'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_tests'
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:8
+    hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
+    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
+    if hasModels && hasData
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+qSenseCandidates = {
+    fullfile(projectRoot, 'QSense_data_mixed')
+    fullfile(projectRoot, 'QSense_data_edge')
+    fullfile(projectRoot, 'QSense_data')
+    fullfile(projectRoot, 'QSense_tests')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
+    fullfile(projectRoot, 'Datasets', 'QSense_data')
+    fullfile(projectRoot, 'Datasets', 'Qsense_tests')
 };
-PlotPath  = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots_RT';
+
+dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
+dataPaths = unique(dataPaths, 'stable');
+if isempty(dataPaths)
+    rootCandidates = {pwd, fileparts(pwd), fileparts(fileparts(pwd)), fileparts(fileparts(fileparts(pwd)))};
+    fallbackPaths = {};
+
+    for r = 1:length(rootCandidates)
+        rootCandidate = rootCandidates{r};
+        candidatePaths = {
+            fullfile(rootCandidate, 'QSense_data_mixed')
+            fullfile(rootCandidate, 'QSense_data_edge')
+            fullfile(rootCandidate, 'QSense_data')
+            fullfile(rootCandidate, 'QSense_tests')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data')
+            fullfile(rootCandidate, 'Datasets', 'Qsense_tests')
+        };
+        existingPaths = candidatePaths(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths));
+        if ~isempty(existingPaths)
+            projectRoot = rootCandidate;
+            fallbackPaths = unique(existingPaths, 'stable');
+            break;
+        end
+    end
+
+    if ~isempty(fallbackPaths)
+        outputsRoot = fullfile(projectRoot, 'outputs');
+        resultsDir = fullfile(outputsRoot, 'results');
+        if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+        dataPaths = fallbackPaths;
+        fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
+    else
+        error('No QSense dataset directories found. projectRoot=%s | pwd=%s', projectRoot, pwd);
+    end
+end
 % 0.044467    6.2058     2.647       103.4
 % 0.0345    9.5063    2.6053    489.33    111.02    536.61
 % 0.1169    6.8252    2.666    491.22    116.67    1059.8
@@ -20,7 +96,7 @@ fs = 50;
 windowSize = 2 * fs;
 stepSize = 1 * fs;
 
-if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
+if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
 % --- 2. INITIALIZE SUMMARIES ---
 summaryResults = table();
@@ -32,6 +108,10 @@ allExecTimes = [];
 for d = 1:length(dataPaths)
     dataPath = dataPaths{d};
     if ~exist(dataPath, 'dir'), continue; end
+
+    [~, datasetName] = fileparts(dataPath);
+    plotPath = fullfile(outputsRoot, 'plots', datasetName, 'SigPro');
+    if ~exist(plotPath, 'dir'), mkdir(plotPath); end
     
     subDirs = dir(dataPath);
     subDirs = subDirs([subDirs.isdir] & ~ismember({subDirs.name}, {'.', '..'}));
@@ -268,8 +348,8 @@ for d = 1:length(dataPaths)
                     subjectName  = 'Unknown';
                 end
 
-                summaryResults = [summaryResults; table({subjectName}, {activityType}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
-                    'VariableNames', {'Subject','Activity','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
+                summaryResults = [summaryResults; table({datasetName}, {subjectName}, {activityType}, {sideLabel}, acc, f1, prec, rec, tp, tn, fp, fn, ...
+                    'VariableNames', {'Dataset','Subject','Activity','Wrist','Accuracy','F1','Precision','Recall','TP','TN','FP','FN'})];
 
                 % --- UPDATED DATA QUALITY CALCULATIONS ---
                 totalRawRows = rowsBefore;
@@ -279,9 +359,9 @@ for d = 1:length(dataPaths)
                 totalCleanedSec = rowsAfterUnique / fs; % The amount of "good" data we have
                 evaluableSec    = sum(sampleValid) / fs; % The amount of data the algorithm actually processed
                 
-                dataQuality = [dataQuality; table({subjectName}, {activityType}, {sideLabel}, ...
+                dataQuality = [dataQuality; table({datasetName}, {subjectName}, {activityType}, {sideLabel}, ...
                     totalRawRows, faultyRowsRemoved, pctFaultyRows, totalCleanedSec, evaluableSec, ...
-                    'VariableNames', {'Subject','Activity','Wrist','TotalRawRows','FaultyRowsRemoved','PctFaultyRows','TotalCleanedSec','EvaluableSec'})];
+                    'VariableNames', {'Dataset','Subject','Activity','Wrist','TotalRawRows','FaultyRowsRemoved','PctFaultyRows','TotalCleanedSec','EvaluableSec'})];
             catch ME
                 fprintf('Error in %s: %s\n', folderName, ME.message);
             end
@@ -384,7 +464,7 @@ for d = 1:length(dataPaths)
                 end
 
                 drawnow;
-                savePath = fullfile(PlotPath, [folderName, '_RT_Plot.png']);
+                savePath = fullfile(plotPath, [folderName, '_RT_Plot.png']);
                 saveas(fig, savePath);
                 fprintf('  --> Plot saved: %s\n', savePath);
                 close(fig);
@@ -453,7 +533,7 @@ if ~isempty(summaryResults)
     fprintf('Precision: %.4f | Recall: %.4f | F1: %.4f\n', ...
             global_precision, global_recall, global_f1);
         
-    resultsFile = fullfile(PlotPath, 'Detailed_MStra_RT_Results.xlsx');
+    resultsFile = fullfile(resultsDir, 'sigpro_optRT_QSense_results.xlsx');
     writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
     writetable(wristFinal, resultsFile, 'Sheet', 'By_Wrist');
     writetable(activityFinal, resultsFile, 'Sheet', 'By_Activity');
@@ -491,6 +571,7 @@ if ~isempty(summaryResults)
     
     % Save to Excel
     writetable(dataQuality, resultsFile, 'Sheet', 'Data_Quality');
+    fprintf('RT results saved to: %s\n', resultsFile);
 end
 
 %% --- RT FUNCTION ---

@@ -10,18 +10,90 @@ beta = 2;             % Max ratio above step frequency (ignore high harmonics)
 step_freq = [0.5 3.5];  % Walking cadence frequency range (Hz)
 
 % --- CONFIGURATION ---
-dataPaths = {
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_edge'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data'
-   'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\QSense_data_mixed'
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:8
+    hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
+    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
+    if hasModels && hasData
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+qSenseCandidates = {
+    fullfile(projectRoot, 'QSense_data_edge')
+    fullfile(projectRoot, 'QSense_data')
+    fullfile(projectRoot, 'QSense_data_mixed')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
+    fullfile(projectRoot, 'Datasets', 'QSense_data')
+    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
 };
 
-PlotPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\mstraczkiewicz\MStraPlots';
+dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
+dataPaths = unique(dataPaths, 'stable');
+if isempty(dataPaths)
+    rootCandidates = {pwd, fileparts(pwd), fileparts(fileparts(pwd)), fileparts(fileparts(fileparts(pwd)))};
+    fallbackPaths = {};
+
+    for r = 1:length(rootCandidates)
+        rootCandidate = rootCandidates{r};
+        candidatePaths = {
+            fullfile(rootCandidate, 'QSense_data_edge')
+            fullfile(rootCandidate, 'QSense_data')
+            fullfile(rootCandidate, 'QSense_data_mixed')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data')
+            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+        };
+        existingPaths = candidatePaths(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths));
+        if ~isempty(existingPaths)
+            projectRoot = rootCandidate;
+            fallbackPaths = unique(existingPaths, 'stable');
+            break;
+        end
+    end
+
+    if ~isempty(fallbackPaths)
+        outputsRoot = fullfile(projectRoot, 'outputs');
+        resultsDir = fullfile(outputsRoot, 'results');
+        dataPaths = fallbackPaths;
+        fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
+    else
+        error('No QSense dataset directories found. projectRoot=%s | pwd=%s', projectRoot, pwd);
+    end
+end
 
 summaryResults = table();
 
 for d = 1:length(dataPaths)
     dataPath = dataPaths{d};
+    [~, datasetName] = fileparts(dataPath);
     fprintf('\nProcessing dataset: %s\n', dataPath);
 
     subDirs = dir(dataPath);
@@ -148,9 +220,9 @@ for d = 1:length(dataPaths)
 
                 % --- STORE ---
                 fullID = sprintf('%s_%s', folderName, sideLabel);
-                resRow = table({fullID}, {folderName}, {sideLabel}, acc, prec, rec, f1, ...
+                resRow = table({datasetName}, {fullID}, {folderName}, {sideLabel}, acc, prec, rec, f1, ...
                                steps_count, tp, tn, fp, fn, ...
-                    'VariableNames', {'ID', 'Subject', 'Wrist', 'Accuracy', ...
+                    'VariableNames', {'Dataset', 'ID', 'Subject', 'Wrist', 'Accuracy', ...
                                       'Precision', 'Recall', 'F1', 'Steps', ...
                                       'TP', 'TN', 'FP', 'FN'});
                 summaryResults = [summaryResults; resRow];
@@ -186,8 +258,8 @@ end
 
 %% --- EXPORT RESULTS ---
 if ~isempty(summaryResults)
-    if ~exist(PlotPath, 'dir'), mkdir(PlotPath); end
-    csvFileName = fullfile(PlotPath, 'MStra_Summary_Tuned.csv');
+    if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+    csvFileName = fullfile(resultsDir, 'sigpro_MStra_QSense_results.csv');
     writetable(summaryResults, csvFileName);
     fprintf('Results saved to: %s\n', csvFileName);
 end

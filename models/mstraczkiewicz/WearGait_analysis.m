@@ -2,7 +2,82 @@
 clear; clc; close all;
 
 % --- 1. CONFIGURATION ---
-dataPath = 'C:\Users\hendr\OneDrive\Documents\TU Delft\MSc Robotics\Internship at Erasmus MC\gait_detection\WearGait-PD';
+scriptFullPath = mfilename('fullpath');
+if isempty(scriptFullPath)
+    s = dbstack('-completenames');
+    if ~isempty(s)
+        scriptFullPath = s(1).file;
+    end
+end
+if isempty(scriptFullPath)
+    scriptDir = pwd;
+else
+    scriptDir = fileparts(scriptFullPath);
+end
+
+projectRoot = scriptDir;
+for k = 1:8
+    hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
+    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
+              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'WearGait'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
+    if hasModels && hasData
+        break;
+    end
+    parentDir = fileparts(projectRoot);
+    if strcmp(parentDir, projectRoot)
+        break;
+    end
+    projectRoot = parentDir;
+end
+
+outputsRoot = fullfile(projectRoot, 'outputs');
+resultsDir = fullfile(outputsRoot, 'results');
+datasetName = 'WearGait';
+dataCandidates = {
+    fullfile(projectRoot, datasetName)
+    fullfile(projectRoot, 'Datasets', datasetName)
+    fullfile(projectRoot, 'Datasets', 'WearGait', datasetName)
+};
+dataCandidates = dataCandidates(cellfun(@(p) exist(p, 'dir') == 7, dataCandidates));
+if ~isempty(dataCandidates)
+    dataPath = dataCandidates{1};
+else
+    dataPath = fullfile(projectRoot, datasetName);
+end
+
+if ~exist(dataPath, 'dir')
+    rootCandidates = {pwd, fileparts(pwd), fileparts(fileparts(pwd)), fileparts(fileparts(fileparts(pwd)))};
+    foundDataPath = '';
+    for r = 1:length(rootCandidates)
+        rootCandidate = rootCandidates{r};
+        candidatePaths = {
+            fullfile(rootCandidate, datasetName)
+            fullfile(rootCandidate, 'Datasets', datasetName)
+            fullfile(rootCandidate, 'Datasets', 'WearGait', datasetName)
+        };
+        idx = find(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths), 1);
+        if ~isempty(idx)
+            projectRoot = rootCandidate;
+            foundDataPath = candidatePaths{idx};
+            break;
+        end
+    end
+
+    if ~isempty(foundDataPath)
+        outputsRoot = fullfile(projectRoot, 'outputs');
+        resultsDir = fullfile(outputsRoot, 'results');
+        dataPath = foundDataPath;
+        fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
+    else
+        error('WearGait dataset directory not found: %s | projectRoot=%s | pwd=%s', dataPath, projectRoot, pwd);
+    end
+end
 
 F_MIN = 0.50;
 F_MAX = 3.50;
@@ -11,12 +86,14 @@ A_THRESH = 0.1;
 fs = 100;
 
 % --- 2. FILE INITIALIZATION ---
-wFiles = dir(fullfile(dataPath, 'W*.csv')); 
-nFiles = dir(fullfile(dataPath, 'N*.csv')); 
-files = [wFiles; nFiles];
+files = dir(fullfile(dataPath, '**', '*.csv'));
+fileNames = lower(string({files.name}));
+isWalkFile = contains(fileNames, 'freewalk');
+isMetadata = contains(fileNames, 'manifest') | contains(fileNames, 'demographic');
+files = files(isWalkFile & ~isMetadata);
 
 if isempty(files)
-    error('No CSV files found. Check your dataPath.');
+    error('No WearGait walk CSV files found under: %s', dataPath);
 end
 
 summaryResults = table();
@@ -28,11 +105,12 @@ fprintf('-----------------------------------------------------------------------
 for i = 1:length(files)
     fileName = files(i).name;
     subjectID = strrep(fileName, '.csv', '');
+    fullFilePath = fullfile(files(i).folder, fileName);
     
     try
-        opts = detectImportOptions(fullfile(dataPath, fileName));
+        opts = detectImportOptions(fullFilePath);
         opts.VariableNamingRule = 'preserve';
-        data = readtable(fullfile(dataPath, fileName), opts);
+        data = readtable(fullFilePath, opts);
         cols = data.Properties.VariableNames;
         
         % Identify available wrists (Right, Left, or Generic)
@@ -121,6 +199,11 @@ fprintf('Mean Accuracy:  %.2f\n', avgAcc);
 fprintf('Mean Precision: %.2f\n', avgPrec);
 fprintf('Mean Recall:    %.2f\n', avgRec);
 fprintf('Mean F1-Score:  %.2f\n', avgF1);
+
+if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+resultsCsv = fullfile(resultsDir, 'sigpro_opt_WearGait_results.csv');
+writetable(summaryResults, resultsCsv);
+fprintf('Saved results to: %s\n', resultsCsv);
 
 %% --- OPTIMIZED DETECTION FUNCTION ---
 function [wi, steps, peakFs, ampVals, maxPks, T_vec] = run_straczkiewicz_optimized(vm, fs, fMin, fMax, pThr, aThr)
