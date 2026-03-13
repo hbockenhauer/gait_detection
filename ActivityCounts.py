@@ -111,8 +111,8 @@ class ActivityCounts:
         np.ndarray
             The truncated data.
         """
-        upper_threshold = 1.2  # g
-        lower_threshold = 0.060  # g
+        upper_threshold = 2.13 # 1.2  # g
+        lower_threshold = 0.068  # g
         data[data > upper_threshold] = upper_threshold
         data[data < lower_threshold] = 0
         return data
@@ -131,7 +131,7 @@ class ActivityCounts:
         np.ndarray
             The digitized data.
         """
-        max_val = 1.2  # g
+        max_val = 2.13 #1.2  # g
         data //= max_val / (2 ** 7)
         return data
 

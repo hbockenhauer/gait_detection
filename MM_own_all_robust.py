@@ -4,6 +4,7 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from GSD3_test import KheirkhahanGSD
+# from multimob.GSD.GSD3 import KheirkhahanGSD
 # from multimob.GSD.GSD4 import MacLeanGSD
 # from multimob.GSD.GSD5 import KerenGSD
 # from GSD2a import HickeyGSD
@@ -15,23 +16,25 @@ from free_living_test import merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\Free_living"
+    # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
-DEBUG = False; 
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'limp', 'armfixed', 'stroke']
-SAVE_RESULTS = False 
-PRINT_STATS = True 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
-OUTPUT_FILE = "Results/KheirkhahanGSD_Results.csv"
+
+DEBUG = False; 
+PRINT_STATS = True 
+
+SAVE_RESULTS = False 
+OUTPUT_FILE = "Results/KheirkhahanGSD_Results_ad1.csv"
 
 PLOT = True
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\test"
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\edge"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()

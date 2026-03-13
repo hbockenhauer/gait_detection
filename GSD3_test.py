@@ -58,7 +58,7 @@ class KheirkhahanGSD:
         self.upper_percentile = 90
         self.win_size_s = 9
         self.win_shift_s = 1
-        self.threshold = 0.62
+        self.threshold = 0.58
         self.cwb = cwb
         # self.visual = visual
 
