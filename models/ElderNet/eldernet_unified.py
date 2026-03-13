@@ -27,6 +27,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config.paths import HMP_PATH, WISDM_PATH
+from utils.hub_utils import safe_hub_load
 
 # --- 1. DATASET LOADERS ---
 
@@ -112,7 +113,7 @@ def run_evaluation(dataset_type="WISDM"):
         activity_map = {}
 
     loader = DataLoader(dataset, batch_size=32, shuffle=False)
-    model = torch.hub.load('yonbrand/ElderNet', 'eldernet_ft').to(device)
+    model = safe_hub_load('yonbrand/ElderNet', 'eldernet_ft').to(device)
     model.eval()
 
     all_y_true, all_y_pred, all_names = [], [], []

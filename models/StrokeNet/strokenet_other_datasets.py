@@ -23,18 +23,19 @@ from config.paths import (
     WEARGAIT_CTRL,
     BIOCLITE_PATH,
     STROKENET_WEIGHTS,
-    STROKENET_PLOTS,
+    PLOTS_DIR as OUTPUT_PLOTS_DIR,
+    RESULTS_DIR,
 )
 
 from models.ElderNet.eldernet_WearGait import load_weargait_data, detect_sampling_rate
 from models.ElderNet.eldernet_ADL import extract_subject_id_and_timestamp
+from utils.hub_utils import safe_hub_load
 
 # --- CONFIGURATION ---
 ADL_PATH = HMP_PATH
 WEARGAIT_PD_PATH = WEARGAIT_PD
 WEARGAIT_CTRL_PATH = WEARGAIT_CTRL
 WEIGHTS_PATH = STROKENET_WEIGHTS
-PLOTS_DIR = STROKENET_PLOTS
 REPO_NAME     = 'yonbrand/ElderNet'
 
 WINDOW_SIZE   = 100    # 2s at 50Hz
@@ -74,7 +75,7 @@ def remove_last_downsample(model):
     return model
 
 def load_finetuned_model(weights_path):
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True)
     model = fix_circular_padding(model)
     model = remove_last_downsample(model)
     model.load_state_dict(torch.load(weights_path, map_location='cpu'))
@@ -209,6 +210,20 @@ def extract_windows_with_gaps_and_activity(times, acc_data, labels, activities):
             np.array(win_activities, dtype=object))
 
 
+def is_git_lfs_pointer(filepath):
+    """Return True when a file is a Git LFS pointer, not the actual dataset."""
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            line1 = f.readline().strip()
+            line2 = f.readline().strip()
+        return (
+            line1 == 'version https://git-lfs.github.com/spec/v1'
+            and line2.startswith('oid sha256:')
+        )
+    except OSError:
+        return False
+
+
 # ============================================================
 # WISDM LOADER
 # ============================================================
@@ -309,7 +324,8 @@ def evaluate_wisdm(model, device):
     g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
     g_rec  = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     g_f1   = 2*g_prec*g_rec / (g_prec+g_rec) if (g_prec+g_rec) > 0 else 0
-    g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
+    wisdm_total = total_tp + total_tn + total_fp + total_fn
+    g_acc  = (total_tp + total_tn) / wisdm_total if wisdm_total > 0 else 0
     print(f"\nWISDM GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
     print_by_activity_table(by_act, "WISDM")
@@ -323,24 +339,22 @@ def evaluate_wisdm(model, device):
 
 def evaluate_weargait(model, device):
     print("\n" + "="*60)
-    print("EVALUATING: WearGait-PD")
+    print("EVALUATING: WearGait-PD & CTRL")
     print("="*60)
 
-    csv_PD_files = sorted(glob.glob(os.path.join(WEARGAIT_PD_PATH, '**', '*.csv'),
-                                  recursive=True)
-                       if False else  # placeholder — adjust to your folder structure
-                       [os.path.join(WEARGAIT_PD_PATH, f)
-                        for f in os.listdir(WEARGAIT_PD_PATH)
-                        if f.endswith('.csv')])
+    csv_PD_files = sorted([
+        os.path.join(WEARGAIT_PD_PATH, f)
+        for f in os.listdir(WEARGAIT_PD_PATH)
+        if f.lower().endswith('.csv') and 'freewalk' in f.lower()
+    ])
 
     print(f"Found {len(csv_PD_files)} CSV files")
 
-    csv_CTRL_files = sorted(glob.glob(os.path.join(WEARGAIT_CTRL_PATH, '**', '*.csv'),
-                                  recursive=True)
-                       if False else  # placeholder — adjust to your folder structure
-                       [os.path.join(WEARGAIT_CTRL_PATH, f)
-                        for f in os.listdir(WEARGAIT_CTRL_PATH)
-                        if f.endswith('.csv')])
+    csv_CTRL_files = sorted([
+        os.path.join(WEARGAIT_CTRL_PATH, f)
+        for f in os.listdir(WEARGAIT_CTRL_PATH)
+        if f.lower().endswith('.csv') and 'freewalk' in f.lower()
+    ])
 
     print(f"Found {len(csv_CTRL_files)} CSV files")
 
@@ -350,9 +364,16 @@ def evaluate_weargait(model, device):
     total_tp = total_fp = total_fn = total_tn = 0
     by_act = defaultdict(lambda: [0, 0, 0, 0])
 
+    lfs_skipped = 0
+
     for fpath in csv_files:
         fname   = os.path.basename(fpath)
         subject = fname.replace('.csv', '')
+
+        if is_git_lfs_pointer(fpath):
+            lfs_skipped += 1
+            print(f"  Skipping {fname}: Git LFS pointer (run 'git lfs pull')")
+            continue
 
         for wrist in ['right', 'left']:
             try:
@@ -418,13 +439,20 @@ def evaluate_weargait(model, device):
             except Exception as e:
                 print(f"  Error in {fname} ({wrist}): {e}")
 
+    weargait_total = total_tp + total_tn + total_fp + total_fn
     g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
     g_rec  = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     g_f1   = 2*g_prec*g_rec / (g_prec+g_rec) if (g_prec+g_rec) > 0 else 0
-    g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
+    g_acc  = (total_tp + total_tn) / weargait_total if weargait_total > 0 else 0
     print(f"\nWearGait GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
-    print_by_activity_table(by_act, "WearGait")
+    if lfs_skipped > 0:
+        print(f"  Note: {lfs_skipped} WearGait files were Git LFS pointers and were skipped.")
+
+    if weargait_total == 0:
+        print("  No valid WearGait windows were evaluated.")
+    elif len(by_act) > 0:
+        print_by_activity_table(by_act, "WearGait")
 
     return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
@@ -534,10 +562,11 @@ def evaluate_hmp(model, device):
             'y_pred': y_pred       # add this
         })
 
+    hmp_total = total_tp + total_tn + total_fp + total_fn
     g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
     g_rec  = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     g_f1   = 2*g_prec*g_rec / (g_prec+g_rec) if (g_prec+g_rec) > 0 else 0
-    g_acc  = (total_tp+total_tn) / (total_tp+total_tn+total_fp+total_fn)
+    g_acc  = (total_tp + total_tn) / hmp_total if hmp_total > 0 else 0
     print(f"\nHMP GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | "
           f"F1={g_f1:.3f} | Acc={g_acc:.3f}")
     print_by_activity_table(by_act, "HMP")
@@ -573,10 +602,6 @@ def evaluate_bioclite(model, device):
 
             times    = (ts_ms - ts_ms[0]) / 1000.0
             y_binary = (act_labels == BIOCLITE_GAIT_LABEL).astype(int)
-
-            print(f"  Trial {i+1:02d} P{participant:02d} | "
-                  f"activities: {np.unique(act_labels)}, "
-                  f"gait samples: {y_binary.sum()}/{len(y_binary)}")
 
             # Gap-aware windowing (already 50Hz — no resampling needed)
             dt      = np.diff(times)
@@ -683,8 +708,8 @@ def evaluate_bioclite(model, device):
 
     return results, {'precision': g_prec, 'recall': g_rec,
                      'f1': g_f1,          'accuracy': g_acc}
-def plot_subject_timeline(results, plots_dir):
-    os.makedirs(plots_dir, exist_ok=True)
+def plot_subject_timeline(results, plots_root_dir):
+    os.makedirs(plots_root_dir, exist_ok=True)
 
     for r in results:
         dataset  = r['dataset']
@@ -750,7 +775,10 @@ def plot_subject_timeline(results, plots_dir):
 
         plt.tight_layout()
         safe_subject = subject.replace('/', '_').replace(' ', '_')
-        save_path = os.path.join(plots_dir, f'{dataset}_{safe_subject}_{wrist}.png')
+        dataset_safe = str(dataset).replace('/', '_').replace(' ', '_')
+        dataset_plot_dir = os.path.join(plots_root_dir, dataset_safe, 'strokenet')
+        os.makedirs(dataset_plot_dir, exist_ok=True)
+        save_path = os.path.join(dataset_plot_dir, f'{dataset_safe}_{safe_subject}_{wrist}.png')
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  Saved: {save_path}")
@@ -772,24 +800,37 @@ def main():
     hmp_results, hmp_global = evaluate_hmp(model, device)
     bioclite_results, bioclite_global = evaluate_bioclite(model, device)
 
-    # all_results = wisdm_results + weargait_results + hmp_results + bioclite_results 
-    # plot_subject_timeline(all_results, PLOTS_DIR)
+    all_results = wisdm_results + weargait_results + hmp_results + bioclite_results
+    plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
 
+    # Save per-subject results
+    all_rows = []
+    for r in all_results:
+        all_rows.append({
+            'dataset':   r['dataset'],
+            'subject':   r['subject'],
+            'wrist':     r.get('wrist', 'N/A'),
+            'precision': r['precision'],
+            'recall':    r['recall'],
+            'f1':        r['f1'],
+            'accuracy':  r['accuracy']
+        })
 
-    # # Save combined results
-    # all_rows = []
-    # for r in wisdm_results + weargait_results + hmp_results + bioclite_results:
-    #     all_rows.append({
-    #         'dataset':   r['dataset'],
-    #         'subject':   r['subject'],
-    #         'wrist':     r.get('wrist', 'right'),
-    #         'precision': r['precision'],
-    #         'recall':    r['recall'],
-    #         'f1':        r['f1'],
-    #         'accuracy':  r['accuracy']
-    #     })
-    # pd.DataFrame(all_rows).to_csv('cross_dataset_results.csv', index=False)
-    # print("\nSaved: cross_dataset_results.csv")
+    # Save global summary
+    global_rows = [
+        {'dataset': 'WISDM',    **wisdm_global},
+        {'dataset': 'WearGait', **weargait_global},
+        {'dataset': 'HMP',      **hmp_global},
+        {'dataset': 'BIOCLITE', **bioclite_global},
+    ]
+
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
+    global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
+    pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
+    pd.DataFrame(global_rows).to_csv(global_csv, index=False)
+    print(f"\nSaved per-subject results : {per_subject_csv}")
+    print(f"Saved global summary      : {global_csv}")
 
 
 if __name__ == '__main__':

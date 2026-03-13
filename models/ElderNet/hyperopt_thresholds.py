@@ -14,6 +14,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config.paths import RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
 from eldernet_WearGait import (
     DATA_PATH, REPO_NAME, load_weargait_data, detect_sampling_rate,
@@ -32,7 +33,7 @@ def collect_sequences(data_path, wrists=('right', 'left')):
     all_y = []
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
     model.eval()
 
     for filepath in csv_files:

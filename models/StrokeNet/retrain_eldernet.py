@@ -18,6 +18,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config.paths import QSENSE_MIXED, QSENSE_EDGE, FREELIVING_PATH
+from utils.hub_utils import safe_hub_load
 
 QSENSE_MIXED_PATH = QSENSE_MIXED
 QSENSE_EDGE_PATH = QSENSE_EDGE
@@ -389,7 +390,7 @@ def train_model(model, train_loader, val_loader, epochs=40, lr=1e-4):
 
 def main():
     print("Loading pretrained ElderNet...")
-    pretrained = torch.hub.load('yonbrand/ElderNet', 'eldernet_ft', trust_repo=True)
+    pretrained = safe_hub_load('yonbrand/ElderNet', 'eldernet_ft', trust_repo=True)
 
     print("\nAdapting model for 100-sample (2s @ 50Hz) input...")
     model = adapt_eldernet(pretrained, new_window_size=WINDOW_SIZE)

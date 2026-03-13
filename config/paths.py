@@ -53,11 +53,16 @@ WISDM_PATH = os.path.join(DATASETS_ROOT, 'wisdm-dataset', 'raw', 'watch', 'accel
 FREELIVING_PATH = os.path.join(DATASETS_ROOT, 'Free_living')
 BIOCLITE_PATH = os.path.join(DATASETS_ROOT, 'Bioclite', 'data_6activities_plain.mat')
 
-# Output subdirectories for specific models
-ELDERNET_PLOTS = os.path.join(PLOTS_DIR, 'ElderNet_ADL_Plots')
-ELDERNET_DUAL_PLOTS = os.path.join(PLOTS_DIR, 'ElderNet_DualWrist_Plots')
-ELDERNET_WISDM_PLOTS = os.path.join(PLOTS_DIR, 'ElderNet_WISDM_Plots')
-STROKENET_PLOTS = os.path.join(PLOTS_DIR, 'StrokeNet_Plots')
+def get_plot_dir(dataset: str, model: str) -> str:
+    """Return the canonical output path for plots: outputs/plots/{dataset}/{model}/"""
+    return os.path.join(PLOTS_DIR, dataset, model)
+
+
+# Convenience constants — outputs/plots/{dataset}/{model}/
+ELDERNET_PLOTS      = get_plot_dir('HMP',             'eldernet')
+ELDERNET_DUAL_PLOTS = get_plot_dir('WearGait',        'eldernet')
+ELDERNET_WISDM_PLOTS = get_plot_dir('WISDM',          'eldernet')
+STROKENET_PLOTS     = get_plot_dir('QSense_data',     'strokenet')
 
 
 def validate_dataset_paths():

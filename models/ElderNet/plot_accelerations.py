@@ -29,6 +29,7 @@ if PROJECT_ROOT not in sys.path:
 from config.paths import QSENSE_MIXED, PLOTS_DIR
 
 DATASET_PATH = QSENSE_MIXED
+PLOT_DATASET_NAME = os.path.basename(DATASET_PATH)
 
 set_seed(42)
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
@@ -90,7 +91,7 @@ def main():
                     plt.show()
 
                     # save to disk
-                    save_path = os.path.join(PLOTS_DIR, 'QSense_data_mixed', f"{folder}_raw_acceleration.png")
+                    save_path = os.path.join(PLOTS_DIR, PLOT_DATASET_NAME, 'eldernet', f"{folder}_raw_acceleration.png")
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
                     fig.savefig(save_path)
                                 

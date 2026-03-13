@@ -1,8 +1,16 @@
 import torch
 from ptflops import get_model_complexity_info
 import os
+import sys
 import time
 import psutil
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from utils.hub_utils import safe_hub_load
 
 def print_memory():
     process = psutil.Process(os.getpid())
@@ -16,7 +24,7 @@ print_memory()
 # --- Load ElderNet model ---
 REPO_NAME = 'yonbrand/ElderNet'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
 model.eval()
 
 print("After model load:")

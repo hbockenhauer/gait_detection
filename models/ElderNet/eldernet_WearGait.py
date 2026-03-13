@@ -29,7 +29,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import WEARGAIT_PD, ELDERNET_DUAL_PLOTS
+from config.paths import WEARGAIT_PD, ELDERNET_DUAL_PLOTS, RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
 DATA_PATH = WEARGAIT_PD
 WINDOW_SIZE = 300
@@ -141,7 +142,7 @@ def create_ground_truth(activities):
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
     model.eval()
     
     csv_files = sorted(glob.glob(os.path.join(DATA_PATH, '*.csv')))
@@ -205,12 +206,13 @@ def main():
         print(f"\nMean Performance:")
         print(results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean())
         print(f"\n{results_df.to_string()}")
-        
-        # results_df.to_csv('weargait_eldernet_dual_results.csv', index=False)
-        # with open('weargait_detailed_dual_results.pkl', 'wb') as f:
-        #     pickle.dump(all_plot_data, f)
+
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        metrics_csv = os.path.join(RESULTS_DIR, 'eldernet_WearGait_metrics.csv')
+        results_df.to_csv(metrics_csv, index=False)
+        print(f"Saved metrics summary to: {metrics_csv}")
             
-        #plot_weargait_results_dual(all_plot_data)
+        plot_weargait_results_dual(all_plot_data)
 
 def plot_weargait_results_dual(results_list):
     ACTIVITY_MAP = {'Chair': 'Chair', 'Stairs': 'Stairs', 'Standing': 'Standing', 'Walk': 'Walking'}

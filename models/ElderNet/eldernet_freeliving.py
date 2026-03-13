@@ -31,9 +31,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import FREELIVING_PATH, PLOTS_DIR
+from config.paths import FREELIVING_PATH, PLOTS_DIR, RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
 DATA_PATH = FREELIVING_PATH
+PLOT_DATASET_NAME = os.path.basename(DATA_PATH)
 WINDOW_SIZE = 300
 STEP_SIZE = 30
 REPO_NAME = 'yonbrand/ElderNet'
@@ -298,7 +300,7 @@ def plot_per_subject(results_list, metrics):
 
         plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-        plots_dir = os.path.join(PLOTS_DIR, 'FreeLiving')
+        plots_dir = os.path.join(PLOTS_DIR, PLOT_DATASET_NAME, 'eldernet')
         os.makedirs(plots_dir, exist_ok=True)
         save_path = os.path.join(plots_dir, f"subject_{subject}.png")
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -309,7 +311,7 @@ def plot_per_subject(results_list, metrics):
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
     model.eval()
 
     results = []
@@ -428,9 +430,10 @@ def main():
         'accuracy': r['accuracy']
     } for r in results])
 
-    plots_dir = os.path.join(PLOTS_DIR, 'FreeLiving')
-    os.makedirs(plots_dir, exist_ok=True)
-    df_metrics.to_csv(os.path.join(plots_dir, 'performance_metrics.csv'), index=False)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    metrics_csv = os.path.join(RESULTS_DIR, 'eldernet_FreeLiving_metrics.csv')
+    df_metrics.to_csv(metrics_csv, index=False)
+    print(f"Saved metrics summary to: {metrics_csv}")
 
     print("\n=== OVERALL SUMMARY ===")
     print("\nBy Subject:")

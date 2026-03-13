@@ -17,9 +17,10 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import QSENSE_DATA, STROKENET_WEIGHTS, STROKENET_PLOTS
+from config.paths import QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED, FREELIVING_PATH, STROKENET_WEIGHTS, PLOTS_DIR, RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
-DATASET_PATH = QSENSE_DATA
+DATASET_PATH = FREELIVING_PATH  # change to QSENSE_DATA/QSENSE_MIXED/QSENSE_EDGE/FREELIVING_PATH as needed
 WEIGHTS_PATH = STROKENET_WEIGHTS
 REPO_NAME     = 'yonbrand/ElderNet'
 
@@ -108,7 +109,7 @@ def remove_last_downsample(model):
     return model
 
 def load_finetuned_model(weights_path):
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True)
     model = fix_circular_padding(model)
     model = remove_last_downsample(model)
     model.load_state_dict(torch.load(weights_path, map_location='cpu'))
@@ -239,14 +240,13 @@ def prepare_windows(df, window_size=WINDOW_SIZE, step_size=STEP_SIZE):
 # PLOTTING — reused from original script
 # ============================================================
 
-def plot_per_activity(results_list, subjects, metrics):
+def plot_per_activity(results_list, subjects, metrics, plots_dir):
     activities_by_type = {}
     for result in results_list:
         act = result['activity_type']
         activities_by_type.setdefault(act, []).append(result)
 
     activity_types = sorted(activities_by_type.keys())
-    print(f"\nFound {len(activity_types)} unique activities: {activity_types}")
 
     # Color per subject, linestyle per wrist
     color_palette = ['#1f77b4', '#d62728', '#2ca02c', '#9467bd',
@@ -261,7 +261,7 @@ def plot_per_activity(results_list, subjects, metrics):
         fig, axes = plt.subplots(n_rows, 1, figsize=(16, 4 * n_rows), sharex=False)
         if n_rows == 1:
             axes = [axes]
-        fig.suptitle(f"Activity: {activity_type} (Finetuned ElderNet)",
+        fig.suptitle(f"Activity: {activity_type} (StrokeNet)",
                      fontsize=16, fontweight='bold')
 
         has_data = False
@@ -356,7 +356,6 @@ def plot_per_activity(results_list, subjects, metrics):
                    fontsize=10, title='Subject | Wrist', frameon=True, ncol=1)
         plt.tight_layout(rect=[0, 0, 0.86, 0.95])
 
-        plots_dir = os.path.join(STROKENET_PLOTS, 'QSense_data')
         os.makedirs(plots_dir, exist_ok=True)
         save_path = os.path.join(plots_dir, f'activity_{activity_type}.png')
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -376,167 +375,167 @@ def main():
 
     results = []
 
-    # QSENSE DATA
-    for folder in sorted(os.listdir(DATASET_PATH)):
-        folder_path = os.path.join(DATASET_PATH, folder)
-        if not os.path.isdir(folder_path):
-            continue
-
-        parts         = folder.split('_')
-        activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
-        subject       = parts[-1] if len(parts) > 1 else 'Unknown'
-
-        for fname, wrist in [('s1_1RW.txt', 'right'), ('s2_2LW.txt', 'left')]:
-            fpath = os.path.join(folder_path, fname)
-            if not os.path.exists(fpath):
-                continue
-
-            try:
-                df = load_data(fpath)
-
-                wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
-                    prepare_windows(df)
-
-                if len(wins) == 0:
-                    print(f"  Skipping {folder}/{fname}: no valid windows")
-                    continue
-
-                with torch.no_grad():
-                    logits = model(wins.to(device))
-                    probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
-
-                y_pred = (probs > CONF_THRESH).astype(int)
-                y_true = acts  # window-level GT from prepare_windows
-
-                # Metrics
-                if y_true.sum() == 0:
-                    precision = recall = f1 = 0.0
-                else:
-                    precision, recall, f1, _ = precision_recall_fscore_support(
-                        y_true, y_pred, labels=[1], average='binary', zero_division=0)
-                accuracy = accuracy_score(y_true, y_pred)
-                cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-
-                print(f"{folder} | {wrist.upper()} | "
-                      f"Prec={precision:.3f}  Rec={recall:.3f}  "
-                      f"F1={f1:.3f}  Acc={accuracy:.3f}")
-
-                results.append({
-                    'subject':       subject,
-                    'folder':        folder,
-                    'activity_type': activity_type,
-                    'wrist':         wrist,
-                    'raw_timestamps': raw_times,
-                    'raw_gt':        raw_gt,
-                    'timestamps':    tmstps,
-                    'y_true':        y_true,
-                    'y_pred':        y_pred,
-                    'probability':   probs,
-                    'energy':        engs,
-                    'frequency':     frqs,
-                    'Q_energies':    Q_energies,
-                    'precision':     precision,
-                    'recall':        recall,
-                    'f1':            f1,
-                    'accuracy':      accuracy,
-                    'confusion_matrix': cm.tolist()
-                })
-
-            except Exception as e:
-                print(f"  Error in {folder}/{fname}: {e}")
-
-    # ## FREE-LIVING DATA
-    # for fname in sorted(os.listdir(DATASET_PATH)):
-    #     if not fname.endswith('_annotated.csv'):
+    # # QSENSE DATA
+    # for folder in sorted(os.listdir(DATASET_PATH)):
+    #     folder_path = os.path.join(DATASET_PATH, folder)
+    #     if not os.path.isdir(folder_path):
     #         continue
 
-    #     fpath   = os.path.join(DATASET_PATH, fname)
-    #     parts   = fname.replace('_annotated.csv', '').split('_')
-    #     subject = parts[1] if len(parts) > 1 else fname   # e.g. sub1
-    #     activity_type = subject  # one plot per subject
-    #     wrist   = 'left'  # single wrist device
+    #     parts         = folder.split('_')
+    #     activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
+    #     subject       = parts[-1] if len(parts) > 1 else 'Unknown'
 
-    #     try:
-    #         # Free-Living specific loading
-    #         raw = pd.read_csv(fpath)
-    #         raw['datetime'] = pd.to_datetime(
-    #             raw['time'], format='%m/%d/%Y %H:%M:%S.%f', errors='coerce'
-    #         )
-    #         raw = raw.dropna(subset=['datetime']).reset_index(drop=True)
-    #         raw['label'] = pd.to_numeric(raw['Label'], errors='coerce').fillna(0).astype(int)
-
-    #         # Clean timestamps (no firmware artifacts but run for consistency)
-    #         running_max = raw['datetime'].iloc[0]
-    #         keep = []
-    #         for t in raw['datetime']:
-    #             if t < running_max:
-    #                 keep.append(False)
-    #             else:
-    #                 keep.append(True)
-    #                 running_max = t
-    #         raw = raw[keep].reset_index(drop=True)
-    #         raw = raw.sort_values('datetime').reset_index(drop=True)
-    #         raw = raw.drop_duplicates(subset='datetime', keep='first').reset_index(drop=True)
-    #         raw['time_sec'] = (raw['datetime'] - raw['datetime'].iloc[0]).dt.total_seconds()
-
-    #         df = pd.DataFrame({
-    #             'time_sec': raw['time_sec'].values,
-    #             'accX':     pd.to_numeric(raw['ax'], errors='coerce'),
-    #             'accY':     pd.to_numeric(raw['ay'], errors='coerce'),
-    #             'accZ':     pd.to_numeric(raw['az'], errors='coerce'),
-    #             'gt':       raw['label'].values,
-    #             'energy':   np.zeros(len(raw))  # no energy column in Free-Living
-    #         })
-
-    #         wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
-    #             prepare_windows(df)
-
-    #         if len(wins) == 0:
-    #             print(f"  Skipping {fname}: no valid windows")
+    #     for fname, wrist in [('s1_1RW.txt', 'right'), ('s2_2LW.txt', 'left')]:
+    #         fpath = os.path.join(folder_path, fname)
+    #         if not os.path.exists(fpath):
     #             continue
 
-    #         with torch.no_grad():
-    #             logits = model(wins.to(device))
-    #             probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+    #         try:
+    #             df = load_data(fpath)
 
-    #         y_pred = (probs > CONF_THRESH).astype(int)
-    #         y_true = acts
+    #             wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
+    #                 prepare_windows(df)
 
-    #         if y_true.sum() == 0:
-    #             precision = recall = f1 = 0.0
-    #         else:
-    #             precision, recall, f1, _ = precision_recall_fscore_support(
-    #                 y_true, y_pred, labels=[1], average='binary', zero_division=0)
-    #         accuracy = accuracy_score(y_true, y_pred)
-    #         cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+    #             if len(wins) == 0:
+    #                 print(f"  Skipping {folder}/{fname}: no valid windows")
+    #                 continue
 
-    #         print(f"{fname} | "
-    #               f"Prec={precision:.3f}  Rec={recall:.3f}  "
-    #               f"F1={f1:.3f}  Acc={accuracy:.3f}")
+    #             with torch.no_grad():
+    #                 logits = model(wins.to(device))
+    #                 probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
 
-    #         results.append({
-    #             'subject':        subject,
-    #             'folder':         fname,
-    #             'activity_type':  activity_type,
-    #             'wrist':          wrist,
-    #             'raw_timestamps': raw_times,
-    #             'raw_gt':         raw_gt,
-    #             'timestamps':     tmstps,
-    #             'y_true':         y_true,
-    #             'y_pred':         y_pred,
-    #             'probability':    probs,
-    #             'energy':         engs,
-    #             'frequency':      frqs,
-    #             'Q_energies':     Q_energies,
-    #             'precision':      precision,
-    #             'recall':         recall,
-    #             'f1':             f1,
-    #             'accuracy':       accuracy,
-    #             'confusion_matrix': cm.tolist()
-    #         })
+    #             y_pred = (probs > CONF_THRESH).astype(int)
+    #             y_true = acts  # window-level GT from prepare_windows
 
-    #     except Exception as e:
-    #         print(f"  Error in {fname}: {e}")
+    #             # Metrics
+    #             if y_true.sum() == 0:
+    #                 precision = recall = f1 = 0.0
+    #             else:
+    #                 precision, recall, f1, _ = precision_recall_fscore_support(
+    #                     y_true, y_pred, labels=[1], average='binary', zero_division=0)
+    #             accuracy = accuracy_score(y_true, y_pred)
+    #             cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+
+    #             print(f"{folder} | {wrist.upper()} | "
+    #                   f"Prec={precision:.3f}  Rec={recall:.3f}  "
+    #                   f"F1={f1:.3f}  Acc={accuracy:.3f}")
+
+    #             results.append({
+    #                 'subject':       subject,
+    #                 'folder':        folder,
+    #                 'activity_type': activity_type,
+    #                 'wrist':         wrist,
+    #                 'raw_timestamps': raw_times,
+    #                 'raw_gt':        raw_gt,
+    #                 'timestamps':    tmstps,
+    #                 'y_true':        y_true,
+    #                 'y_pred':        y_pred,
+    #                 'probability':   probs,
+    #                 'energy':        engs,
+    #                 'frequency':     frqs,
+    #                 'Q_energies':    Q_energies,
+    #                 'precision':     precision,
+    #                 'recall':        recall,
+    #                 'f1':            f1,
+    #                 'accuracy':      accuracy,
+    #                 'confusion_matrix': cm.tolist()
+    #             })
+
+    #         except Exception as e:
+    #             print(f"  Error in {folder}/{fname}: {e}")
+
+    ## FREE-LIVING DATA
+    for fname in sorted(os.listdir(DATASET_PATH)):
+        if not fname.endswith('_annotated.csv'):
+            continue
+
+        fpath   = os.path.join(DATASET_PATH, fname)
+        parts   = fname.replace('_annotated.csv', '').split('_')
+        subject = parts[1] if len(parts) > 1 else fname   # e.g. sub1
+        activity_type = subject  # one plot per subject
+        wrist   = 'left'  # single wrist device
+
+        try:
+            # Free-Living specific loading
+            raw = pd.read_csv(fpath)
+            raw['datetime'] = pd.to_datetime(
+                raw['time'], format='%m/%d/%Y %H:%M:%S.%f', errors='coerce'
+            )
+            raw = raw.dropna(subset=['datetime']).reset_index(drop=True)
+            raw['label'] = pd.to_numeric(raw['Label'], errors='coerce').fillna(0).astype(int)
+
+            # Clean timestamps (no firmware artifacts but run for consistency)
+            running_max = raw['datetime'].iloc[0]
+            keep = []
+            for t in raw['datetime']:
+                if t < running_max:
+                    keep.append(False)
+                else:
+                    keep.append(True)
+                    running_max = t
+            raw = raw[keep].reset_index(drop=True)
+            raw = raw.sort_values('datetime').reset_index(drop=True)
+            raw = raw.drop_duplicates(subset='datetime', keep='first').reset_index(drop=True)
+            raw['time_sec'] = (raw['datetime'] - raw['datetime'].iloc[0]).dt.total_seconds()
+
+            df = pd.DataFrame({
+                'time_sec': raw['time_sec'].values,
+                'accX':     pd.to_numeric(raw['ax'], errors='coerce'),
+                'accY':     pd.to_numeric(raw['ay'], errors='coerce'),
+                'accZ':     pd.to_numeric(raw['az'], errors='coerce'),
+                'gt':       raw['label'].values,
+                'energy':   np.zeros(len(raw))  # no energy column in Free-Living
+            })
+
+            wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
+                prepare_windows(df)
+
+            if len(wins) == 0:
+                print(f"  Skipping {fname}: no valid windows")
+                continue
+
+            with torch.no_grad():
+                logits = model(wins.to(device))
+                probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+
+            y_pred = (probs > CONF_THRESH).astype(int)
+            y_true = acts
+
+            if y_true.sum() == 0:
+                precision = recall = f1 = 0.0
+            else:
+                precision, recall, f1, _ = precision_recall_fscore_support(
+                    y_true, y_pred, labels=[1], average='binary', zero_division=0)
+            accuracy = accuracy_score(y_true, y_pred)
+            cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+
+            print(f"{fname} | "
+                  f"Prec={precision:.3f}  Rec={recall:.3f}  "
+                  f"F1={f1:.3f}  Acc={accuracy:.3f}")
+
+            results.append({
+                'subject':        subject,
+                'folder':         fname,
+                'activity_type':  activity_type,
+                'wrist':          wrist,
+                'raw_timestamps': raw_times,
+                'raw_gt':         raw_gt,
+                'timestamps':     tmstps,
+                'y_true':         y_true,
+                'y_pred':         y_pred,
+                'probability':    probs,
+                'energy':         engs,
+                'frequency':      frqs,
+                'Q_energies':     Q_energies,
+                'precision':      precision,
+                'recall':         recall,
+                'f1':             f1,
+                'accuracy':       accuracy,
+                'confusion_matrix': cm.tolist()
+            })
+
+        except Exception as e:
+            print(f"  Error in {fname}: {e}")
 
     # --- Summary ---
     if results:
@@ -607,28 +606,22 @@ def main():
         pooled_metrics(results_with_groups, 'activity')
         pooled_metrics(results_with_groups, 'subject')
 
-        # # QSENSE PLOTTING
-        # plots_dir = os.path.join(DATASET_PATH, 'Plots_Finetuned')
-        # os.makedirs(plots_dir, exist_ok=True)
-        # df_metrics = pd.DataFrame(metrics_rows)
-        # plots_dir = os.path.join(DATASET_PATH, 'Plots_Finetuned')
-        # os.makedirs(plots_dir, exist_ok=True)
-        # df_metrics.to_csv(os.path.join(plots_dir, 'performance_metrics.csv'), index=False)
+        # --- PLOTTING ---
+        dataset_name = os.path.basename(DATASET_PATH)
+        plots_dir = os.path.join(PLOTS_DIR, dataset_name, 'strokenet')
+        os.makedirs(plots_dir, exist_ok=True)
 
-        # subjects = ['Hendrik', 'Tanya']
-        # metrics  = ['probability', 'energy', 'Q_energies', 'frequency']
-        #plot_per_activity(results, subjects, metrics)
+        df_metrics = pd.DataFrame(metrics_rows)
+        dataset_name_safe = os.path.basename(DATASET_PATH)
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        results_csv = os.path.join(RESULTS_DIR, f'strokenet_{dataset_name_safe}_metrics.csv')
+        df_metrics.to_csv(results_csv, index=False)
+        print(f"\nSaved metrics: {results_csv}")
 
-        # ## FREE-LIVING PLOTTING
-        # plots_dir = os.path.join(DATASET_PATH, 'Plots_Finetuned')
-        # os.makedirs(plots_dir, exist_ok=True)
-        # df_metrics = pd.DataFrame(metrics_rows)
-        # df_metrics.to_csv(os.path.join(plots_dir, 'performance_metrics.csv'), index=False)
-
-        # # Derive subjects automatically from results
-        # subjects = sorted(set(r['subject'].capitalize() for r in results))
-        # metrics  = ['probability', 'frequency']  # no energy column in Free-Living
-        # plot_per_activity(results, subjects, metrics)
+        subjects = sorted(set(r['subject'].capitalize() for r in results))
+        is_freeliving = (DATASET_PATH == FREELIVING_PATH)
+        plot_metrics = ['probability', 'frequency'] if is_freeliving else ['probability', 'energy', 'Q_energies', 'frequency']
+        plot_per_activity(results, subjects, plot_metrics, plots_dir)
 
 
 if __name__ == '__main__':

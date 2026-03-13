@@ -26,7 +26,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import WISDM_PATH, ELDERNET_WISDM_PLOTS
+from config.paths import WISDM_PATH, ELDERNET_WISDM_PLOTS, RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
 # --- 1. CORE FUNCTIONS ---
 def load_wisdm_cleaned(path):
@@ -73,7 +74,7 @@ FOLDER_PATH = WISDM_PATH
 ACTIVITY_MAP = {'A':'Walk', 'B':'Jog', 'C':'Stairs', 'D':'Sit', 'E':'Stand', 'F':'Type', 'G':'Teeth', 'H':'Soup', 'I':'Chips', 'J':'Pasta', 'K':'Drink', 'L':'Sandwich', 'M':'Kicking', 'O':'Catch', 'P':'Dribbling', 'Q':'Writing', 'R':'Clapping', 'S':'Folding'}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.hub.load('yonbrand/ElderNet', 'eldernet_ft').to(device)
+model = safe_hub_load('yonbrand/ElderNet', 'eldernet_ft').to(device)
 model.eval()
 
 results_list = []
@@ -156,6 +157,15 @@ print("\n" + "="*50)
 print("OVERALL METRICS (MEAN ACROSS SUBJECTS)")
 if not results_df.empty:
     print(results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean())
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    subject_csv = os.path.join(RESULTS_DIR, 'eldernet_WISDM_subject_metrics.csv')
+    results_df.to_csv(subject_csv, index=False)
+
+    global_row = results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean().to_dict()
+    pd.DataFrame([global_row]).to_csv(
+        os.path.join(RESULTS_DIR, 'eldernet_WISDM_global_metrics.csv'),
+        index=False,
+    )
 else:
     print('No subject results collected.')
 
@@ -170,6 +180,7 @@ if len(all_act_data) > 0:
     print("\n" + "="*50)
     print("PER-ACTIVITY PERFORMANCE")
     print(summary_act)
+    summary_act.to_csv(os.path.join(RESULTS_DIR, 'eldernet_WISDM_activity_metrics.csv'))
 else:
     print('No activity details collected.')
 

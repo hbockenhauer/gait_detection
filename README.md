@@ -1,10 +1,10 @@
 # Gait Detection
 
-Gait detection algorithm using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke and healthy controls.
+Gait detection algorithm using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke.
 
 ## Project Overview
 
-This project implements **ElderNet** and **StrokeNet** models for activity and gait detection from wearable IMU sensors. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait) and patient cohorts.
+This project implements Machine Learning models (ElderNet/StrokeNet) and Signal Processing algorithms (mstraczkiewicz) for activity and gait detection from wearable IMU sensors. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait, Bioclite) as well as stroke patient cohorts and self-recorded data.
 
 ## Directory Structure
 
@@ -17,36 +17,35 @@ gait_detection/
 ├── models/                    # Model implementations
 │   ├── ElderNet/             # Gait detection model source code
 │   ├── StrokeNet/            # Fine-tuned variant for stroke patients
-│   └── mstraczkiewicz/       # Reference MATLAB implementations
+│   └── mstraczkiewicz/       # Signal Processing MATLAB implementations
 │
 ├── Datasets/                  # All training and evaluation data
 │   ├── HMP_Dataset/          # Fall detection dataset (32Hz)
-│   ├── QSense_data/          # Healthy control QSense data (50Hz)
-│   ├── QSense_data_edge/     # Edge device variant
-│   ├── QSense_data_mixed/    # Mixed subject data
-│   ├── WearGait/             # Parkinson's dataset
+│   ├── QSense_data/          # Self-recorded data (50Hz)
+│   ├── QSense_data_edge/     # Self-recorded edge cases (50 Hz)
+│   ├── QSense_data_mixed/    # Self-recorded mixed activity (50 Hz)
+│   ├── WearGait/             # Parkinson's and age-matched control patients (100 Hz)
 │   ├── wisdm-dataset/        # Public activity recognition dataset (20Hz)
-│   ├── Free_living/          # Naturalistic movement data
-│   └── Bioclite/             # 6-activity reference dataset
+│   ├── Free_living/          # Stroke patient data (50 Hz)
+│   └── Bioclite/             # 6-activity reference dataset (50 Hz)
 │
 ├── analysis/                  # Comparative analysis and evaluation scripts
 │   ├── cross_dataset.py      # Multi-dataset evaluation
 │   └── leg_classification.py # Leg classification analysis
 │
 ├── annotation_tools/          # Data annotation and validation tools
-│   ├── video_annotater.py    # Video frame labeling tool
-│   └── mixed_annotater.py    # CSV-based annotation tool
+│   ├── video_annotater.py    # Video frame labeling tool for Free_living data
+│   └── mixed_annotater.py    # Annotation tool for QSense_data_mixed files
 │
 ├── utils/                     # Shared utilities and helpers
 │   ├── visualization.py      # Plotting and visualization functions
 │   └── data_loaders.py       # Common dataset loading utilities
 │
 ├── outputs/                   # Generated outputs (not tracked in git)
-│   ├── plots/                # Visualizations and result plots
-│   ├── results/              # CSV results and metrics
-│   └── logs/                 # Training and evaluation logs
-│
-└── notebooks/                 # Jupyter notebooks for exploration and analysis
+    ├── plots/                # Visualizations and result plots
+    ├── results/              # CSV results and metrics
+    └── logs/                 # Training and evaluation logs
+
 ```
 
 ## Getting Started
@@ -98,12 +97,7 @@ status = validate_dataset_paths()
 ## Models
 
 ### ElderNet
-Core gait detection model trained on multiple public datasets. Supports inference on:
-- WISDM (Activity Recognition)
-- HMP (Fall Detection)
-- WearGait (Parkinson's Disease)
-- QSense variants (Clinical Testing)
-- Free-living data
+Core gait detection model trained on multiple public datasets. Supports inference on provided datasets.
 
 Files:
 - `models/ElderNet/eldernet_*.py` - Dataset-specific evaluation scripts
@@ -115,6 +109,7 @@ Fine-tuned variant of ElderNet optimized for stroke patients. Used for activity-
 Files:
 - `models/StrokeNet/strokenet.py` - Main inference pipeline
 - `models/StrokeNet/retrain_eldernet.py` - Fine-tuning script
+- `models/StrokeNet/strokenet_other_datasets.py` - Script to run inference on public datasets
 
 ## Configuration
 
@@ -151,11 +146,10 @@ python analysis/cross_dataset.py
 - WISDM Activity Recognition Dataset: http://www.cis.fordham.edu/wisdm/
 - HMP Fall Detection Dataset: https://archive.ics.uci.edu/ml/datasets/Heterogeneity+Activity+Recognition+Data+Set
 - WearGait Dataset: https://physionet.org/content/weargait/1.0.0/
-
-## License
-
-[Add license info here]
+- Bioclite Dataset: https://zenodo.org/records/14623732
+- ElderNet Repo: https://github.com/yonbrand/ElderNet
 
 ## Authors
 
-[Add contributor info here]
+Hendrik Böckenhauer, h.q.bockenhauer@student.tudelft.nl @hbockenhauer
+Tatiana Orlovskaia, t.orlovskaia@student.tudelft.nl @tatiana-8501

@@ -24,9 +24,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import QSENSE_MIXED, PLOTS_DIR
+from config.paths import QSENSE_MIXED, PLOTS_DIR, RESULTS_DIR, QSENSE_DATA, QSENSE_EDGE
+from utils.hub_utils import safe_hub_load
 
-DATASET_PATH = QSENSE_MIXED
+DATASET_PATH = QSENSE_EDGE
+PLOT_DATASET_NAME = os.path.basename(DATASET_PATH)
 REPO_NAME = 'yonbrand/ElderNet'
 WINDOW_SIZE = 300      #10s at 30Hz
 STEP_SIZE = 30          #1s at 30Hz
@@ -37,7 +39,7 @@ STEP_SEC = STEP_SIZE / 30.0
 # N_SMOOTH = int(SMOOTHING_SEC / STEP_SEC)
 MIN_BOUT_SEC = 5.0
 
-CONF_THRESH = 0.1
+CONF_THRESH = 0.65
 MIN_ENERGY = 0.07
 MAX_ENERGY = 0.4
 MIN_FREQ = 0.5
@@ -433,7 +435,7 @@ def plot_per_activity(results_list, subjects, metrics):
         plt.tight_layout(rect=[0, 0, 0.86, 0.95])
         
         # Save - use DATASET_PATH from config
-        plots_dir = os.path.join(PLOTS_DIR, 'QSense_data_mixed')
+        plots_dir = os.path.join(PLOTS_DIR, PLOT_DATASET_NAME, 'eldernet')
         os.makedirs(plots_dir, exist_ok=True)
         save_path = os.path.join(plots_dir, f"activity_{activity_type}.png")
         plt.savefig(save_path, dpi=150, bbox_inches='tight')        
@@ -448,7 +450,7 @@ def get_memory_usage():
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
     model.eval()
 
     results = []
@@ -495,7 +497,7 @@ def main():
 
                 print(f"             Processed {os.path.basename(file)}: {len(probs)} windows")
 
-                y_pred = (probs > 0.65).astype(int)
+                y_pred = (probs > CONF_THRESH).astype(int)
 
                 # --- Robust computation of window-level GT to match number of windows ---
                 n_windows = len(probs)  # number of predicted windows
@@ -582,10 +584,10 @@ def main():
     df_metrics = pd.DataFrame(metrics_data)
     
     # Save metrics summary
-    plots_dir = os.path.join(PLOTS_DIR, 'QSense_data_mixed')
-    os.makedirs(plots_dir, exist_ok=True)
-    metrics_path = os.path.join(plots_dir, 'performance_metrics.csv')
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    metrics_path = os.path.join(RESULTS_DIR, f'eldernet_{PLOT_DATASET_NAME}_metrics.csv')
     df_metrics.to_csv(metrics_path, index=False)
+    print(f"Saved metrics summary to: {metrics_path}")
     
     print("\n=== OVERALL SUMMARY ===")
     print("\nBy Wrist:")

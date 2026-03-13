@@ -23,7 +23,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.paths import QSENSE_EDGE, QSENSE_DATA, QSENSE_MIXED
+from config.paths import QSENSE_EDGE, QSENSE_DATA, QSENSE_MIXED, RESULTS_DIR
+from utils.hub_utils import safe_hub_load
 
 DATASET_PATHS = [
     QSENSE_EDGE,
@@ -53,7 +54,7 @@ set_seed(42)
 # --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.hub.load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
+    model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True).to(device)
     model.eval()
 
     results = []
@@ -62,6 +63,7 @@ def main():
     all_y_pred = []
 
     for dataset_path in DATASET_PATHS:
+        dataset_results = []
         for folder in os.listdir(dataset_path):
             if not os.path.isdir(os.path.join(dataset_path, folder)):
                 continue
@@ -140,6 +142,15 @@ def main():
                         "accuracy": acc,
                         "num_windows": len(probs)
                     })
+                    dataset_results.append({
+                        "activity": folder,
+                        "wrist": wrist,
+                        "precision": p,
+                        "recall": r,
+                        "f1": f1,
+                        "accuracy": acc,
+                        "num_windows": len(probs)
+                    })
 
                     all_y_true.extend(y_true.tolist())
                     all_y_pred.extend(y_pred.tolist())
@@ -147,9 +158,17 @@ def main():
                 except Exception as e:
                     print(f"Error processing {os.path.basename(file)}: {e}")
                     continue
-        results_df = pd.DataFrame(results)
-        # summary_path = os.path.join(DATASET_PATH, "overall_wrist_summary.csv")
-        # results_df.to_csv(summary_path, index=False)
+        results_df = pd.DataFrame(dataset_results)
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        dataset_name = os.path.basename(dataset_path)
+        summary_path = os.path.join(RESULTS_DIR, f"eldernet_{dataset_name}_metrics.csv")
+        results_df.to_csv(summary_path, index=False)
+        print(f"Saved metrics summary to: {summary_path}")
+
+        if results_df.empty:
+            print(f"\n=== FOLDER SUMMARY ({dataset_name}) ===")
+            print("No valid windows found.")
+            continue
 
         print("\n=== FOLDER SUMMARY ===")
         print(results_df.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
@@ -167,5 +186,13 @@ def main():
     print(f"Recall:    {r_g:.3f}")
     print(f"F1-score:  {f1_g:.3f}")
     print(f"Accuracy:  {acc_g:.3f}")
+
+    pd.DataFrame([{
+        'dataset': 'QSense_combined',
+        'precision': p_g,
+        'recall': r_g,
+        'f1': f1_g,
+        'accuracy': acc_g,
+    }]).to_csv(os.path.join(RESULTS_DIR, 'eldernet_QSense_combined_global_metrics.csv'), index=False)
 
 if __name__ == "__main__":main()
