@@ -7,7 +7,7 @@ import os
 import sys
 import pickle
 import random
-from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 
 # --- 0. REPRODUCIBILITY LOCKDOWN ---
 def seed_everything(seed=42):
@@ -109,7 +109,14 @@ try:
                 idx = [i for i, c in enumerate(codes) if c == code]
                 # Precision/Recall for THIS specific activity
                 p_a, r_a, f_a, _ = precision_recall_fscore_support(np.array(y_true)[idx], y_pred[idx], labels=[1], average='binary', zero_division=0)
-                activity_stats.append({'Activity': ACTIVITY_MAP.get(code, code), 'Precision': p_a, 'Recall': r_a, 'F1': f_a})
+                acc_a = accuracy_score(np.array(y_true)[idx], y_pred[idx])
+                activity_stats.append({
+                    'Activity': ACTIVITY_MAP.get(code, code),
+                    'Accuracy': acc_a,
+                    'Precision': p_a,
+                    'Recall': r_a,
+                    'F1': f_a
+                })
 
                 # Mean descriptors for plotting
                 mean_freq = float(np.mean(freqs[idx])) if len(idx) > 0 else float('nan')
@@ -125,10 +132,12 @@ try:
 
             # Subject-wide Metrics
             p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, labels=[1], average='binary', zero_division=0)
+            cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
             results_list.append({
                 'Subject': subject_id,
                 'Accuracy': accuracy_score(y_true, y_pred),
                 'Precision': p, 'Recall': r, 'F1': f1,
+                'confusion_matrix': cm.tolist(),
                 'ActivityDetails': activity_stats,
                 'ActivityPoints': activity_points,
                 'EnergiesSeq': energies.tolist() if hasattr(energies, 'tolist') else list(energies),
@@ -136,13 +145,6 @@ try:
                 'ConfSeq': probs_smoothed.tolist() if hasattr(probs_smoothed, 'tolist') else list(probs_smoothed),
                 'CodesSeq': list(codes)
             })
-
-            # save intermediate results
-            try:
-                with open('results_partial.pkl', 'wb') as fh:
-                    pickle.dump(results_list, fh)
-            except Exception:
-                pass
 
             print(f"✅ ID {subject_id}: Precision={p:.2f}, Recall={r:.2f}, F1={f1:.2f}")
 
@@ -154,14 +156,30 @@ except KeyboardInterrupt:
 # --- 4. GLOBAL SUMMARY ---
 results_df = pd.DataFrame(results_list)
 print("\n" + "="*50)
-print("OVERALL METRICS (MEAN ACROSS SUBJECTS)")
+print("OVERALL METRICS (POOLED COUNTS)")
 if not results_df.empty:
-    print(results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean())
+    tn = fp = fn = tp = 0
+    for row in results_list:
+        c = np.array(row.get('confusion_matrix', []))
+        if c.shape != (2, 2):
+            continue
+        tn += int(c[0, 0])
+        fp += int(c[0, 1])
+        fn += int(c[1, 0])
+        tp += int(c[1, 1])
+
+    total = tp + tn + fp + fn
+    p_g = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    r_g = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1_g = (2 * p_g * r_g / (p_g + r_g)) if (p_g + r_g) > 0 else 0.0
+    acc_g = (tp + tn) / total if total > 0 else 0.0
+
+    print(pd.Series({'Accuracy': acc_g, 'Precision': p_g, 'Recall': r_g, 'F1': f1_g}))
     os.makedirs(RESULTS_DIR, exist_ok=True)
     subject_csv = os.path.join(RESULTS_DIR, 'eldernet_WISDM_subject_metrics.csv')
     results_df.to_csv(subject_csv, index=False)
 
-    global_row = results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean().to_dict()
+    global_row = {'Accuracy': acc_g, 'Precision': p_g, 'Recall': r_g, 'F1': f1_g}
     pd.DataFrame([global_row]).to_csv(
         os.path.join(RESULTS_DIR, 'eldernet_WISDM_global_metrics.csv'),
         index=False,
@@ -333,7 +351,6 @@ if len(results_list) > 0:
         fig.tight_layout()
         out_file = os.path.join(PLOT_DIR, f'subject_{subj_id}_gait_detection.png')
         plt.savefig(out_file, dpi=150)
-        print(f"Plot saved as '{out_file}'")
         plt.show()
 else:
     print('No results to plot.')

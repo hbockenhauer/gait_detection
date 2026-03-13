@@ -8,7 +8,7 @@ import pickle
 from scipy import signal
 from scipy.ndimage import median_filter
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 import random
 
 # --- REPRODUCIBILITY ---
@@ -179,12 +179,14 @@ def main():
                 else:
                     p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, labels=[1], average='binary', zero_division=0)
                 acc = accuracy_score(y_true, y_pred)
+                cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
 
                 # Store for summary table
                 all_subject_summary.append({
                     'Subject': subject_id, 'Wrist': wrist,
                     'Duration_sec': tmstps[-1] if len(tmstps) > 0 else 0,
-                    'NumWindows': len(wins), 'Accuracy': acc, 'Precision': p, 'Recall': r, 'F1': f1
+                    'NumWindows': len(wins), 'Accuracy': acc, 'Precision': p, 'Recall': r, 'F1': f1,
+                    'confusion_matrix': cm.tolist()
                 })
 
                 # Store sequences for dual plotting
@@ -201,10 +203,35 @@ def main():
     if all_subject_summary:
         print("\n" + "="*80 + "\nOVERALL SUMMARY\n" + "="*80)
         results_df = pd.DataFrame(all_subject_summary)
+
+        def pooled_metrics(rows):
+            tn = fp = fn = tp = 0
+            for row in rows:
+                c = np.array(row.get('confusion_matrix', []))
+                if c.shape != (2, 2):
+                    continue
+                tn += int(c[0, 0])
+                fp += int(c[0, 1])
+                fn += int(c[1, 0])
+                tp += int(c[1, 1])
+
+            total = tp + tn + fp + fn
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+            acc = (tp + tn) / total if total > 0 else 0.0
+            return {'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1}
         
         print(f"\nProcessed {len(results_df)} wrist-data entries successfully")
-        print(f"\nMean Performance:")
-        print(results_df[['Accuracy', 'Precision', 'Recall', 'F1']].mean())
+        print(f"\nGlobal Performance (pooled counts):")
+        print(pd.Series(pooled_metrics(all_subject_summary)))
+        print(f"\nBy Wrist (pooled counts):")
+        wrist_rows = []
+        for wrist, grp in results_df.groupby('Wrist'):
+            m = pooled_metrics(grp.to_dict('records'))
+            m['Wrist'] = wrist
+            wrist_rows.append(m)
+        print(pd.DataFrame(wrist_rows).set_index('Wrist')[['Accuracy', 'Precision', 'Recall', 'F1']])
         print(f"\n{results_df.to_string()}")
 
         os.makedirs(RESULTS_DIR, exist_ok=True)

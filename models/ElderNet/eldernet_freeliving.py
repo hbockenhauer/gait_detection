@@ -435,11 +435,45 @@ def main():
     df_metrics.to_csv(metrics_csv, index=False)
     print(f"Saved metrics summary to: {metrics_csv}")
 
+    def pooled_metrics(rows):
+        tn = fp = fn = tp = 0
+        for row in rows:
+            c = np.array(row.get('confusion_matrix', []))
+            if c.shape != (2, 2):
+                continue
+            tn += int(c[0, 0])
+            fp += int(c[0, 1])
+            fn += int(c[1, 0])
+            tp += int(c[1, 1])
+
+        total = tp + tn + fp + fn
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+        acc = (tp + tn) / total if total > 0 else 0.0
+        return {'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc}
+
+    def pooled_by_group(rows, key):
+        groups = {}
+        for row in rows:
+            g = row.get(key)
+            if g is None:
+                continue
+            groups.setdefault(g, []).append(row)
+
+        out = []
+        for g, g_rows in sorted(groups.items()):
+            m = pooled_metrics(g_rows)
+            m[key] = g
+            out.append(m)
+
+        return pd.DataFrame(out, columns=[key, 'precision', 'recall', 'f1', 'accuracy'])
+
     print("\n=== OVERALL SUMMARY ===")
     print("\nBy Subject:")
-    print(df_metrics.groupby("subject")[["precision", "recall", "f1", "accuracy"]].mean())
+    print(pooled_by_group(results, 'subject').set_index('subject'))
     print("\nOverall:")
-    print(df_metrics[["precision", "recall", "f1", "accuracy"]].mean())
+    print(pd.Series(pooled_metrics(results)))
 
     # --- PLOTTING ---
     metrics = ['probability', 'energy', 'Q_energies', 'frequency']

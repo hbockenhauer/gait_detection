@@ -46,6 +46,10 @@ MIN_FREQ = 0.5
 MAX_FREQ = 3.5
 
 
+def normalize_subject_name(name):
+    return str(name).strip().title()
+
+
 # --- REPRODUCIBILITY ---
 def set_seed(seed=42):
     random.seed(seed)
@@ -213,10 +217,13 @@ def plot_per_activity(results_list, subjects, metrics):
     print(f"\nFound {len(activity_types)} unique activities: {activity_types}")
     
     # --- COLOR SCHEME ---
-    wrist_colors = {
-        'right': '#1f77b4',   # Blue
-        'left':  '#ff7f0e',   # Orange
+    color_palette = ['#1f77b4', '#d62728', '#2ca02c', '#9467bd',
+                     '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22']
+    subject_colors = {
+        subject: color_palette[idx % len(color_palette)]
+        for idx, subject in enumerate(subjects)
     }
+    wrist_styles = {'right': '-', 'left': '--'}
 
     # --- ONE PLOT PER ACTIVITY ---
     for activity_type, activity_results in activities_by_type.items():
@@ -225,7 +232,20 @@ def plot_per_activity(results_list, subjects, metrics):
         n_rows = len(metrics) + 1  # +1 for GT/Pred row
         fig, axes = plt.subplots(n_rows, 1, 
                                   figsize=(16, 4 * n_rows), 
-                                  sharex=False)
+                                  sharex=True)
+
+        x_min = None
+        x_max = None
+        for result in activity_results:
+            for key in ['raw_timestamps', 'timestamps']:
+                t = np.asarray(result.get(key, []), dtype=float)
+                t = t[np.isfinite(t)]
+                if len(t) == 0:
+                    continue
+                t_min = float(np.min(t))
+                t_max = float(np.max(t))
+                x_min = t_min if x_min is None else min(x_min, t_min)
+                x_max = t_max if x_max is None else max(x_max, t_max)
         
         if n_rows == 1:
             axes = [axes]  # Ensure iterable
@@ -240,7 +260,10 @@ def plot_per_activity(results_list, subjects, metrics):
             for subject in subjects:
                 
                 # Filter results for this subject and metric
-                subject_results = [r for r in activity_results if r['subject'] == subject]
+                subject_results = [
+                    r for r in activity_results
+                    if normalize_subject_name(r['subject']) == normalize_subject_name(subject)
+                ]
                 
                 if not subject_results:
                     print(f"  No data for {subject} in {activity_type}")
@@ -270,14 +293,15 @@ def plot_per_activity(results_list, subjects, metrics):
                     elif metric == 'frequency':
                         values = result['frequency']
                         x = result['timestamps']        # window-level
-                    
-                    wrist = result['wrist']
-                    color = wrist_colors[wrist]
 
-                    label_raw = f"{wrist} | {subject}"
+                    wrist = result['wrist']
+                    color = subject_colors[normalize_subject_name(subject)]
+                    style = wrist_styles.get(wrist, '-')
+                    label_raw = f"{normalize_subject_name(subject)} | {wrist}"
 
                     ax.plot(x, values,
                             color=color,
+                            linestyle=style,
                             linewidth=1.5,
                             alpha=0.95,
                             label=label_raw)
@@ -358,7 +382,10 @@ def plot_per_activity(results_list, subjects, metrics):
         ax_gt_pred = axes[-1]
 
         for subject in subjects:
-            subject_results = [r for r in activity_results if r['subject'] == subject]
+            subject_results = [
+                r for r in activity_results
+                if normalize_subject_name(r['subject']) == normalize_subject_name(subject)
+            ]
             if not subject_results:
                 continue
 
@@ -369,11 +396,9 @@ def plot_per_activity(results_list, subjects, metrics):
                 y_pred = result['y_pred']
                 wrist = result['wrist']
 
-                # --- Color encodes wrist ---
-                if wrist == 'right':
-                    base_color = '#1f77b4' 
-                else:
-                    base_color = '#ff7f0e'  
+                subj_label = normalize_subject_name(subject)
+                base_color = subject_colors[subj_label]
+                line_style = wrist_styles.get(wrist, '-')
 
                 # --- Ground Truth (thick solid band) ---
                 ax_gt_pred.fill_between(
@@ -383,7 +408,7 @@ def plot_per_activity(results_list, subjects, metrics):
                     step='post',
                     alpha=0.25,
                     color=base_color,
-                    label=f'{wrist} | {subject} | GT'
+                    label=f'{subj_label} | {wrist} | GT'
                 )
 
                 # --- Prediction (sharp line, slightly offset) ---
@@ -392,14 +417,19 @@ def plot_per_activity(results_list, subjects, metrics):
                     y_pred + 0.05,
                     where='post',
                     color=base_color,
+                    linestyle=line_style,
                     linewidth=2.5,
-                    label=f'{wrist} | {subject} | Pred'
+                    label=f'{subj_label} | {wrist} | Pred'
                 )
 
         ax_gt_pred.set_ylabel("GT / Prediction", fontsize=12)
         ax_gt_pred.set_ylim(-0.1, 1.15)
         ax_gt_pred.grid(True, alpha=0.3)
         ax_gt_pred.set_xlabel("Time (seconds)", fontsize=12)
+
+        if x_min is not None and x_max is not None and x_max > x_min:
+            for ax in axes:
+                ax.set_xlim(x_min, x_max)
                 
         if not has_data:
             print(f"  Skipping {activity_type}: no data found")
@@ -462,7 +492,7 @@ def main():
         # Extract subject name and activity type from folder name
         parts = folder.split('_')
         activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
-        subject = parts[-1] if len(parts) > 1 else 'Unknown'
+        subject = normalize_subject_name(parts[-1] if len(parts) > 1 else 'Unknown')
 
         files = [
             os.path.join(DATASET_PATH, folder, 's1_1RW.txt'),  # Right wrist
@@ -588,17 +618,69 @@ def main():
     metrics_path = os.path.join(RESULTS_DIR, f'eldernet_{PLOT_DATASET_NAME}_metrics.csv')
     df_metrics.to_csv(metrics_path, index=False)
     print(f"Saved metrics summary to: {metrics_path}")
+
+    def pooled_metrics(rows):
+        tn = fp = fn = tp = 0
+        for row in rows:
+            c = np.array(row.get('confusion_matrix', []))
+            if c.shape != (2, 2):
+                continue
+            tn += int(c[0, 0])
+            fp += int(c[0, 1])
+            fn += int(c[1, 0])
+            tp += int(c[1, 1])
+
+        total = tp + tn + fp + fn
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+        acc = (tp + tn) / total if total > 0 else 0.0
+        return {
+            'precision': prec,
+            'recall': rec,
+            'f1': f1,
+            'accuracy': acc,
+            'tn': tn,
+            'fp': fp,
+            'fn': fn,
+            'tp': tp,
+        }
+
+    def pooled_by_group(rows, key):
+        groups = {}
+        for row in rows:
+            g = row.get(key)
+            if g is None:
+                continue
+            groups.setdefault(g, []).append(row)
+
+        out = []
+        for g, g_rows in sorted(groups.items()):
+            m = pooled_metrics(g_rows)
+            m[key] = g
+            out.append(m)
+
+        cols = [key, 'precision', 'recall', 'f1', 'accuracy', 'tn', 'fp', 'fn', 'tp']
+        return pd.DataFrame(out, columns=cols)
     
     print("\n=== OVERALL SUMMARY ===")
     print("\nBy Wrist:")
-    print(df_metrics.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
+    print(pooled_by_group(results, 'wrist').set_index('wrist')[['precision', 'recall', 'f1', 'accuracy']])
     print("\nBy Activity:")
-    print(df_metrics.groupby("activity")[["precision", "recall", "f1", "accuracy"]].mean())
+    print(pooled_by_group(results, 'activity_type').set_index('activity_type')[['precision', 'recall', 'f1', 'accuracy']])
     print("\nBy Subject:")
-    print(df_metrics.groupby("subject")[["precision", "recall", "f1", "accuracy"]].mean())
+    print(pooled_by_group(results, 'subject').set_index('subject')[['precision', 'recall', 'f1', 'accuracy']])
+    print("\nGlobal (pooled counts):")
+    gm = pooled_metrics(results)
+    print(pd.Series({
+        'precision': gm['precision'],
+        'recall': gm['recall'],
+        'f1': gm['f1'],
+        'accuracy': gm['accuracy'],
+    }))
 
     # --- PLOTTING: one plot per activity ---
-    subjects  = ['Hendrik', 'Tanya']
+    subjects = sorted({normalize_subject_name(r['subject']) for r in results})
     metrics   = ['probability', 'energy', 'Q_energies', 'frequency']
 
     plot_per_activity(results, subjects, metrics)

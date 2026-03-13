@@ -20,7 +20,7 @@ if PROJECT_ROOT not in sys.path:
 from config.paths import QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED, FREELIVING_PATH, STROKENET_WEIGHTS, PLOTS_DIR, RESULTS_DIR
 from utils.hub_utils import safe_hub_load
 
-DATASET_PATH = FREELIVING_PATH  # change to QSENSE_DATA/QSENSE_MIXED/QSENSE_EDGE/FREELIVING_PATH as needed
+DATASET_PATH = QSENSE_MIXED  # change to QSENSE_DATA/QSENSE_MIXED/QSENSE_EDGE/FREELIVING_PATH as needed
 WEIGHTS_PATH = STROKENET_WEIGHTS
 REPO_NAME     = 'yonbrand/ElderNet'
 
@@ -36,6 +36,59 @@ MIN_ENERGY    = 0.07
 MAX_ENERGY    = 0.4
 MIN_FREQ      = 0.5
 MAX_FREQ      = 3.5
+
+
+def get_discontinuity_times(times, gap_threshold=GAP_THRESHOLD):
+    """Return timestamps where gaps indicate discontinuities in cleaned data."""
+    if times is None or len(times) < 2:
+        return np.array([])
+    dt = np.diff(times)
+    gap_idx = np.where(dt > gap_threshold)[0] + 1
+    return np.asarray(times)[gap_idx]
+
+
+def insert_nan_breaks(times, values, break_times=None):
+    """Insert NaNs at specified break timestamps so plotted lines split at discontinuities."""
+    times = np.asarray(times, dtype=float)
+    values = np.asarray(values, dtype=float)
+
+    if len(times) != len(values) or len(times) < 2:
+        return times, values
+
+    if break_times is None:
+        return times, values
+
+    breaks = np.asarray(break_times, dtype=float)
+    breaks = breaks[np.isfinite(breaks)]
+    if len(breaks) == 0:
+        return times, values
+
+    breaks = np.unique(np.sort(breaks))
+
+    # Keep only breaks that lie strictly inside the plotted span.
+    breaks = breaks[(breaks > times[0]) & (breaks < times[-1])]
+    if len(breaks) == 0:
+        return times, values
+
+    times_out = [times[0]]
+    values_out = [values[0]]
+    b_idx = 0
+
+    for i in range(1, len(times)):
+        prev_t = times[i - 1]
+        curr_t = times[i]
+
+        while b_idx < len(breaks) and breaks[b_idx] <= prev_t:
+            b_idx += 1
+
+        if b_idx < len(breaks) and prev_t < breaks[b_idx] <= curr_t:
+            times_out.append(np.nan)
+            values_out.append(np.nan)
+
+        times_out.append(curr_t)
+        values_out.append(values[i])
+
+    return np.asarray(times_out), np.asarray(values_out)
 
 def get_memory_usage():
     """Total process RAM usage."""
@@ -258,11 +311,24 @@ def plot_per_activity(results_list, subjects, metrics, plots_dir):
 
     for activity_type, activity_results in activities_by_type.items():
         n_rows = len(metrics) + 1
-        fig, axes = plt.subplots(n_rows, 1, figsize=(16, 4 * n_rows), sharex=False)
+        fig, axes = plt.subplots(n_rows, 1, figsize=(16, 4 * n_rows), sharex=True)
         if n_rows == 1:
             axes = [axes]
         fig.suptitle(f"Activity: {activity_type} (StrokeNet)",
                      fontsize=16, fontweight='bold')
+
+        x_min = None
+        x_max = None
+        for result in activity_results:
+            for key in ['raw_timestamps', 'timestamps']:
+                t = np.asarray(result.get(key, []), dtype=float)
+                t = t[np.isfinite(t)]
+                if len(t) == 0:
+                    continue
+                t_min = float(np.min(t))
+                t_max = float(np.max(t))
+                x_min = t_min if x_min is None else min(x_min, t_min)
+                x_max = t_max if x_max is None else max(x_max, t_max)
 
         has_data = False
 
@@ -290,7 +356,13 @@ def plot_per_activity(results_list, subjects, metrics, plots_dir):
                     elif metric == 'frequency':
                         values = result['frequency']
 
-                    ax.plot(result['timestamps'], values,
+                    plot_times, plot_values = insert_nan_breaks(
+                        result['timestamps'],
+                        values,
+                        result.get('discontinuity_times', []),
+                    )
+
+                    ax.plot(plot_times, plot_values,
                             color=color, linestyle=style,
                             linewidth=1.5, alpha=0.95, label=label_str)
 
@@ -322,10 +394,21 @@ def plot_per_activity(results_list, subjects, metrics, plots_dir):
                 color    = subject_colors.get(subj_cap, '#333333')
                 style    = wrist_styles[result['wrist']]
 
-                ax_gt.fill_between(result['raw_timestamps'], 0, result['raw_gt'],
+                raw_plot_times, raw_plot_gt = insert_nan_breaks(
+                    result['raw_timestamps'],
+                    result['raw_gt'],
+                    result.get('discontinuity_times', []),
+                )
+                pred_plot_times, pred_plot_values = insert_nan_breaks(
+                    result['timestamps'],
+                    result['y_pred'] + 0.05,
+                    result.get('discontinuity_times', []),
+                )
+
+                ax_gt.fill_between(raw_plot_times, 0, raw_plot_gt,
                                    step='post', alpha=0.25, color=color,
                                    label=f"{subj_cap} | {result['wrist']} | GT")
-                ax_gt.step(result['timestamps'], result['y_pred'] + 0.05,
+                ax_gt.step(pred_plot_times, pred_plot_values,
                            where='post', color=color, linestyle=style, linewidth=2.5,
                            label=f"{subj_cap} | {result['wrist']} | Pred")
 
@@ -333,6 +416,10 @@ def plot_per_activity(results_list, subjects, metrics, plots_dir):
         ax_gt.set_ylim(-0.1, 1.15)
         ax_gt.grid(True, alpha=0.3)
         ax_gt.set_xlabel('Time (s)', fontsize=12)
+
+        if x_min is not None and x_max is not None and x_max > x_min:
+            for ax in axes:
+                ax.set_xlim(x_min, x_max)
 
         if not has_data:
             plt.close(fig)
@@ -375,74 +462,75 @@ def main():
 
     results = []
 
-    # # QSENSE DATA
-    # for folder in sorted(os.listdir(DATASET_PATH)):
-    #     folder_path = os.path.join(DATASET_PATH, folder)
-    #     if not os.path.isdir(folder_path):
-    #         continue
+    # QSENSE DATA
+    for folder in sorted(os.listdir(DATASET_PATH)):
+        folder_path = os.path.join(DATASET_PATH, folder)
+        if not os.path.isdir(folder_path):
+            continue
 
-    #     parts         = folder.split('_')
-    #     activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
-    #     subject       = parts[-1] if len(parts) > 1 else 'Unknown'
+        parts         = folder.split('_')
+        activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
+        subject       = parts[-1] if len(parts) > 1 else 'Unknown'
 
-    #     for fname, wrist in [('s1_1RW.txt', 'right'), ('s2_2LW.txt', 'left')]:
-    #         fpath = os.path.join(folder_path, fname)
-    #         if not os.path.exists(fpath):
-    #             continue
+        for fname, wrist in [('s1_1RW.txt', 'right'), ('s2_2LW.txt', 'left')]:
+            fpath = os.path.join(folder_path, fname)
+            if not os.path.exists(fpath):
+                continue
 
-    #         try:
-    #             df = load_data(fpath)
+            try:
+                df = load_data(fpath)
 
-    #             wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
-    #                 prepare_windows(df)
+                wins, engs, frqs, acts, tmstps, Q_energies, raw_times, raw_gt = \
+                    prepare_windows(df)
 
-    #             if len(wins) == 0:
-    #                 print(f"  Skipping {folder}/{fname}: no valid windows")
-    #                 continue
+                if len(wins) == 0:
+                    print(f"  Skipping {folder}/{fname}: no valid windows")
+                    continue
 
-    #             with torch.no_grad():
-    #                 logits = model(wins.to(device))
-    #                 probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+                with torch.no_grad():
+                    logits = model(wins.to(device))
+                    probs  = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
 
-    #             y_pred = (probs > CONF_THRESH).astype(int)
-    #             y_true = acts  # window-level GT from prepare_windows
+                y_pred = (probs > CONF_THRESH).astype(int)
+                y_true = acts  # window-level GT from prepare_windows
 
-    #             # Metrics
-    #             if y_true.sum() == 0:
-    #                 precision = recall = f1 = 0.0
-    #             else:
-    #                 precision, recall, f1, _ = precision_recall_fscore_support(
-    #                     y_true, y_pred, labels=[1], average='binary', zero_division=0)
-    #             accuracy = accuracy_score(y_true, y_pred)
-    #             cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+                # Metrics
+                if y_true.sum() == 0:
+                    precision = recall = f1 = 0.0
+                else:
+                    precision, recall, f1, _ = precision_recall_fscore_support(
+                        y_true, y_pred, labels=[1], average='binary', zero_division=0)
+                accuracy = accuracy_score(y_true, y_pred)
+                cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
 
-    #             print(f"{folder} | {wrist.upper()} | "
-    #                   f"Prec={precision:.3f}  Rec={recall:.3f}  "
-    #                   f"F1={f1:.3f}  Acc={accuracy:.3f}")
+                print(f"{folder} | {wrist.upper()} | "
+                      f"Prec={precision:.3f}  Rec={recall:.3f}  "
+                      f"F1={f1:.3f}  Acc={accuracy:.3f}")
 
-    #             results.append({
-    #                 'subject':       subject,
-    #                 'folder':        folder,
-    #                 'activity_type': activity_type,
-    #                 'wrist':         wrist,
-    #                 'raw_timestamps': raw_times,
-    #                 'raw_gt':        raw_gt,
-    #                 'timestamps':    tmstps,
-    #                 'y_true':        y_true,
-    #                 'y_pred':        y_pred,
-    #                 'probability':   probs,
-    #                 'energy':        engs,
-    #                 'frequency':     frqs,
-    #                 'Q_energies':    Q_energies,
-    #                 'precision':     precision,
-    #                 'recall':        recall,
-    #                 'f1':            f1,
-    #                 'accuracy':      accuracy,
-    #                 'confusion_matrix': cm.tolist()
-    #             })
+                results.append({
+                    'subject':       subject,
+                    'folder':        folder,
+                    'activity_type': activity_type,
+                    'wrist':         wrist,
+                    'raw_timestamps': raw_times,
+                    'raw_gt':        raw_gt,
+                    'timestamps':    tmstps,
+                    'discontinuity_times': get_discontinuity_times(raw_times),
+                    'y_true':        y_true,
+                    'y_pred':        y_pred,
+                    'probability':   probs,
+                    'energy':        engs,
+                    'frequency':     frqs,
+                    'Q_energies':    Q_energies,
+                    'precision':     precision,
+                    'recall':        recall,
+                    'f1':            f1,
+                    'accuracy':      accuracy,
+                    'confusion_matrix': cm.tolist()
+                })
 
-    #         except Exception as e:
-    #             print(f"  Error in {folder}/{fname}: {e}")
+            except Exception as e:
+                print(f"  Error in {folder}/{fname}: {e}")
 
     ## FREE-LIVING DATA
     for fname in sorted(os.listdir(DATASET_PATH)):
@@ -520,6 +608,7 @@ def main():
                 'wrist':          wrist,
                 'raw_timestamps': raw_times,
                 'raw_gt':         raw_gt,
+                'discontinuity_times': get_discontinuity_times(raw_times),
                 'timestamps':     tmstps,
                 'y_true':         y_true,
                 'y_pred':         y_pred,

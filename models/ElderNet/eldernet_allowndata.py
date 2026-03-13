@@ -126,6 +126,7 @@ def main():
                     else:
                         p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, labels=[1], average='binary', zero_division=0)
                     acc = accuracy_score(y_true, y_pred)
+                    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
 
                     print(
                         f"{folder} | {wrist.upper()} | "
@@ -140,7 +141,8 @@ def main():
                         "recall": r,
                         "f1": f1,
                         "accuracy": acc,
-                        "num_windows": len(probs)
+                        "num_windows": len(probs),
+                        "confusion_matrix": cm.tolist()
                     })
                     dataset_results.append({
                         "activity": folder,
@@ -149,7 +151,8 @@ def main():
                         "recall": r,
                         "f1": f1,
                         "accuracy": acc,
-                        "num_windows": len(probs)
+                        "num_windows": len(probs),
+                        "confusion_matrix": cm.tolist()
                     })
 
                     all_y_true.extend(y_true.tolist())
@@ -171,7 +174,32 @@ def main():
             continue
 
         print("\n=== FOLDER SUMMARY ===")
-        print(results_df.groupby("wrist")[["precision", "recall", "f1", "accuracy"]].mean())
+        def pooled_metrics(rows):
+            tn = fp = fn = tp = 0
+            for row in rows:
+                c = np.array(row.get('confusion_matrix', []))
+                if c.shape != (2, 2):
+                    continue
+                tn += int(c[0, 0])
+                fp += int(c[0, 1])
+                fn += int(c[1, 0])
+                tp += int(c[1, 1])
+
+            total = tp + tn + fp + fn
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+            acc = (tp + tn) / total if total > 0 else 0.0
+            return {'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc}
+
+        pooled_rows = []
+        for wrist, grp in results_df.groupby('wrist'):
+            m = pooled_metrics(grp.to_dict('records'))
+            m['wrist'] = wrist
+            pooled_rows.append(m)
+
+        pooled_df = pd.DataFrame(pooled_rows).set_index('wrist')[['precision', 'recall', 'f1', 'accuracy']]
+        print(pooled_df)
 
     all_y_true = np.array(all_y_true)
     all_y_pred = np.array(all_y_pred)

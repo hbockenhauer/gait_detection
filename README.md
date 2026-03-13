@@ -41,7 +41,7 @@ gait_detection/
 │   ├── visualization.py      # Plotting and visualization functions
 │   └── data_loaders.py       # Common dataset loading utilities
 │
-├── outputs/                   # Generated outputs (not tracked in git)
+├── outputs/                   # Generated outputs
     ├── plots/                # Visualizations and result plots
     ├── results/              # CSV results and metrics
     └── logs/                 # Training and evaluation logs
