@@ -45,6 +45,8 @@ CONF_THRESH   = 0.5
 
 WISDM_GAIT_CODES  = {'A', 'C'}   # Walk, Stairs
 WEARGAIT_PATTERNS = ['walk', 'jog', 'run', 'stair', 'climb', 'freewalk', 'gait']
+HMP_GAIT_ACTIVITIES = {'Walk', 'Climb_stairs', 'Descend_stairs'}
+WISDM_GAIT_ACTIVITIES = {'Walk', 'Stairs'}
 
 ACTIVITY_MAP = {
     'A':'Walk', 'B':'Jog', 'C':'Stairs', 'D':'Sit', 'E':'Stand',
@@ -314,7 +316,8 @@ def evaluate_wisdm(model, device):
                 'subject': subject, 'dataset': 'WISDM',
                 'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc,
                 'confusion_matrix': cm.tolist(),
-                'probs': probs, 'y_true': y_true, 'y_pred': y_pred
+                'probs': probs, 'y_true': y_true, 'y_pred': y_pred,
+                'win_activities': win_activities
             })
 
         except Exception as e:
@@ -433,7 +436,8 @@ def evaluate_weargait(model, device):
                     'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc,
                     'confusion_matrix': cm.tolist(),
                     'probs': probs, 'y_true': y_true, 'y_pred': y_pred,
-                    'win_times': win_times
+                    'win_times': win_times,
+                    'win_activities': win_activities
                 })
 
             except Exception as e:
@@ -461,7 +465,7 @@ def evaluate_hmp(model, device):
     print("EVALUATING: HMP Dataset (ADL)")
     print("="*60)
 
-    GAIT_CLASSES = {'Walk', 'Climb_stairs', 'Descend_stairs'}
+    GAIT_CLASSES = HMP_GAIT_ACTIVITIES
     HMP_WINDOW_SIZE = 100   # 2s at 50Hz
     TARGET_FS = 50.0
     SOURCE_FS = 32.0
@@ -559,7 +563,8 @@ def evaluate_hmp(model, device):
             'confusion_matrix': cm.tolist(),
             'probs':  probs,        # add this
             'y_true': y_true,       # add this
-            'y_pred': y_pred       # add this
+            'y_pred': y_pred,       # add this
+            'win_activities': win_activities
         })
 
     hmp_total = total_tp + total_tn + total_fp + total_fn
@@ -576,8 +581,13 @@ def evaluate_hmp(model, device):
 
 BIOCLITE_GAIT_LABEL = 6
 BIOCLITE_LABEL_MAP  = {
-    0: 'Transition', 1: 'Spiral',  2: 'Typing',
-    3: 'Resting',    4: 'Beating', 5: 'Brushing', 6: 'Walking'
+    0: 'Transitions/Activity Change',
+    1: 'Drawing a spiral',
+    2: 'Typing with a keyboard',
+    3: 'Resting in a chair',
+    4: 'Beating a mixture',
+    5: 'Brushing teeth',
+    6: 'Walking 50 meters'
 }
 
 def evaluate_bioclite(model, device):
@@ -730,6 +740,47 @@ def plot_subject_timeline(results, plots_root_dir):
         fig, axes = plt.subplots(3, 1, figsize=(16, 8), sharex=True)
         fig.suptitle(f"{dataset} — {subject} ({wrist})", fontsize=14, fontweight='bold')
 
+        # Activity transition markers for datasets with per-window activity labels.
+        if dataset in {'BIOCLITE', 'HMP', 'WearGait', 'WISDM'} and 'win_activities' in r and r['win_activities'] is not None:
+            win_acts = np.asarray(r['win_activities'])
+            if len(win_acts) == len(x) and len(win_acts) > 0:
+                transition_idx = np.where(win_acts[1:] != win_acts[:-1])[0] + 1
+                transition_idx = np.concatenate(([0], transition_idx))
+
+                for idx in transition_idx:
+                    xv = x[idx]
+                    if dataset == 'BIOCLITE':
+                        act_id = int(win_acts[idx])
+                        act_name = BIOCLITE_LABEL_MAP.get(act_id, f'Activity {act_id}')
+                        is_gait = (act_id == BIOCLITE_GAIT_LABEL)
+                    elif dataset == 'HMP':
+                        act_name = str(win_acts[idx])
+                        is_gait = (act_name in HMP_GAIT_ACTIVITIES)
+                    elif dataset == 'WISDM':
+                        act_name = str(win_acts[idx])
+                        is_gait = (act_name in WISDM_GAIT_ACTIVITIES)
+                    else:
+                        act_name = str(win_acts[idx])
+                        is_gait = any(p in act_name.lower() for p in WEARGAIT_PATTERNS)
+
+                    line_color = 'green' if is_gait else 'dimgray'
+
+                    for ax in axes:
+                        ax.axvline(xv, color=line_color, linestyle='--', linewidth=0.9, alpha=0.30)
+
+                    axes[0].text(
+                        xv,
+                        0.98,
+                        act_name,
+                        transform=axes[0].get_xaxis_transform(),
+                        rotation=90,
+                        va='top',
+                        ha='left',
+                        fontsize=7,
+                        color=line_color,
+                        alpha=0.9
+                    )
+
         # --- Probability ---
         axes[0].plot(x, probs, color='steelblue', linewidth=1.5, label='Gait probability')
         axes[0].axhline(CONF_THRESH, color='black', linestyle='--', linewidth=1,
@@ -795,42 +846,45 @@ def main():
 
     model = load_finetuned_model(WEIGHTS_PATH).to(device)
 
+    # wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
+    # weargait_results, weargait_global = evaluate_weargait(model, device)
+    # hmp_results, hmp_global = evaluate_hmp(model, device)
+    # bioclite_results, bioclite_global = evaluate_bioclite(model, device)
+
+    # all_results = wisdm_results + weargait_results + hmp_results + bioclite_results
+    # plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
+
     wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
-    weargait_results, weargait_global = evaluate_weargait(model, device)
-    hmp_results, hmp_global = evaluate_hmp(model, device)
-    bioclite_results, bioclite_global = evaluate_bioclite(model, device)
+    plot_subject_timeline(wisdm_results, OUTPUT_PLOTS_DIR)
 
-    all_results = wisdm_results + weargait_results + hmp_results + bioclite_results
-    plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
+    # # Save per-subject results
+    # all_rows = []
+    # for r in all_results:
+    #     all_rows.append({
+    #         'dataset':   r['dataset'],
+    #         'subject':   r['subject'],
+    #         'wrist':     r.get('wrist', 'N/A'),
+    #         'precision': r['precision'],
+    #         'recall':    r['recall'],
+    #         'f1':        r['f1'],
+    #         'accuracy':  r['accuracy']
+    #     })
 
-    # Save per-subject results
-    all_rows = []
-    for r in all_results:
-        all_rows.append({
-            'dataset':   r['dataset'],
-            'subject':   r['subject'],
-            'wrist':     r.get('wrist', 'N/A'),
-            'precision': r['precision'],
-            'recall':    r['recall'],
-            'f1':        r['f1'],
-            'accuracy':  r['accuracy']
-        })
+    # # Save global summary
+    # global_rows = [
+    #     {'dataset': 'WISDM',    **wisdm_global},
+    #     {'dataset': 'WearGait', **weargait_global},
+    #     {'dataset': 'HMP',      **hmp_global},
+    #     {'dataset': 'BIOCLITE', **bioclite_global},
+    # ]
 
-    # Save global summary
-    global_rows = [
-        {'dataset': 'WISDM',    **wisdm_global},
-        {'dataset': 'WearGait', **weargait_global},
-        {'dataset': 'HMP',      **hmp_global},
-        {'dataset': 'BIOCLITE', **bioclite_global},
-    ]
-
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
-    global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
-    pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
-    pd.DataFrame(global_rows).to_csv(global_csv, index=False)
-    print(f"\nSaved per-subject results : {per_subject_csv}")
-    print(f"Saved global summary      : {global_csv}")
+    # os.makedirs(RESULTS_DIR, exist_ok=True)
+    # per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
+    # global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
+    # pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
+    # pd.DataFrame(global_rows).to_csv(global_csv, index=False)
+    # print(f"\nSaved per-subject results : {per_subject_csv}")
+    # print(f"Saved global summary      : {global_csv}")
 
 
 if __name__ == '__main__':
