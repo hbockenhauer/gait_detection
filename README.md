@@ -112,7 +112,7 @@ Fine-tuned variant of ElderNet optimized for stroke patients. Used for activity-
 Files:
 - `models/StrokeNet/strokenet.py` - Main inference pipeline
 - `models/StrokeNet/retrain_eldernet.py` - Fine-tuning script
-- `models/StrokeNet/strokenet_other_datasets.py` - Script to run inference on public datasets
+- `models/StrokeNet/strokenet_utils.py` - Script to run necessary data loaders and plotters for inference
 
 ## Configuration
 

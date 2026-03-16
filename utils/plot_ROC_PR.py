@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 from collections import defaultdict
 
-def plot_roc_curves(results, plots_root_dir):
+def plot_roc_curves(results, plots_root_dir, model_name='strokenet'):
     """Plot pooled ROC curves (per dataset) from stored probabilities and labels."""
     grouped = defaultdict(lambda: {'y_true': [], 'probs': []})
     for r in results:
@@ -18,7 +18,7 @@ def plot_roc_curves(results, plots_root_dir):
         print("No probability/label data found for ROC plotting.")
         return
 
-    roc_dir = os.path.join(plots_root_dir, 'ROC', 'strokenet')
+    roc_dir = os.path.join(plots_root_dir, 'ROC', model_name)
     os.makedirs(roc_dir, exist_ok=True)
 
     plt.figure(figsize=(8, 7))
@@ -56,7 +56,7 @@ def plot_roc_curves(results, plots_root_dir):
     plt.ylim([0.0, 1.0])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('ROC Curves by Dataset (StrokeNet)')
+    plt.title(f'ROC Curves by Dataset ({model_name})')
     plt.legend(loc='lower right')
     plt.grid(alpha=0.3)
     plt.tight_layout()
@@ -67,7 +67,7 @@ def plot_roc_curves(results, plots_root_dir):
     print(f"Saved ROC figure: {roc_fig_path}")
 
 
-def plot_pr_curves(results, plots_root_dir):
+def plot_pr_curves(results, plots_root_dir, model_name='strokenet'):
     """Plot pooled precision-recall curves (per dataset) from stored probabilities and labels."""
     grouped = defaultdict(lambda: {'y_true': [], 'probs': []})
     for r in results:
@@ -80,7 +80,7 @@ def plot_pr_curves(results, plots_root_dir):
         print("No probability/label data found for PR plotting.")
         return
 
-    pr_dir = os.path.join(plots_root_dir, 'PR', 'strokenet')
+    pr_dir = os.path.join(plots_root_dir, 'PR', model_name)
     os.makedirs(pr_dir, exist_ok=True)
 
     plt.figure(figsize=(8, 7))
@@ -128,7 +128,7 @@ def plot_pr_curves(results, plots_root_dir):
     plt.ylim([0.0, 1.0])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title('Precision-Recall Curves by Dataset (StrokeNet)')
+    plt.title(f'Precision-Recall Curves by Dataset ({model_name})')
     plt.legend(loc='lower left')
     plt.grid(alpha=0.3)
     plt.tight_layout()
