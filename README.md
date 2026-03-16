@@ -15,7 +15,7 @@ gait_detection/
 │   └── hyperparameters.py    # Model hyperparameter configs
 │
 ├── models/                    # Model implementations
-│   ├── ElderNet/             # Gait detection model source code
+│   ├── ElderNet/             # Gait detection model inference source code
 │   ├── StrokeNet/            # Fine-tuned variant for stroke patients
 │   └── mstraczkiewicz/       # Signal Processing MATLAB implementations
 │
@@ -31,7 +31,7 @@ gait_detection/
 │
 ├── analysis/                  # Comparative analysis and evaluation scripts
 │   ├── cross_dataset.py      # Multi-dataset evaluation
-│   └── leg_classification.py # Leg classification analysis
+│   └── leg_classification.py # Leg classification analysis using QSense algorithm
 │
 ├── annotation_tools/          # Data annotation and validation tools
 │   ├── video_annotater.py    # Video frame labeling tool for Free_living data
@@ -39,8 +39,11 @@ gait_detection/
 │
 ├── utils/                     # Shared utilities and helpers
 │   ├── visualization.py      # Plotting and visualization functions
-│   └── data_loaders.py       # Common dataset loading utilities
-│
+│   ├── data_loaders.py       # Common dataset loading utilities
+|	├── plot_ROC_PR.py		  # Plot ROC curve and precision-recall curve
+│	├── plot_qsense_activities.py # Plot QSense data with signal processing characteristics
+|	└── comp_load.py 		  # Script to compute compuational load of model
+|
 ├── outputs/                   # Generated outputs
     ├── plots/                # Visualizations and result plots
     ├── results/              # CSV results and metrics

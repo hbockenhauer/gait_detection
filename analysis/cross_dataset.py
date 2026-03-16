@@ -6,8 +6,8 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from models.StrokeNet.strokenet_other_datasets import *
-from models.StrokeNet.strokenet_other_datasets import main
+from models.StrokeNet.strokenet_utils import *
+from models.StrokeNet.strokenet_utils import main
 
 
 if __name__ == '__main__':

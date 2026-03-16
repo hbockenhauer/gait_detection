@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import copy
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 from collections import defaultdict
@@ -16,11 +15,17 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from utils import plot_ROC_PR
+
 from config.paths import (
     HMP_PATH,
     WISDM_PATH,
     WEARGAIT_PD,
     WEARGAIT_CTRL,
+    QSENSE_DATA,
+    QSENSE_EDGE,
+    QSENSE_MIXED,
+    FREELIVING_PATH,
     BIOCLITE_PATH,
     STROKENET_WEIGHTS,
     PLOTS_DIR as OUTPUT_PLOTS_DIR,
@@ -35,6 +40,8 @@ from utils.hub_utils import safe_hub_load
 ADL_PATH = HMP_PATH
 WEARGAIT_PD_PATH = WEARGAIT_PD
 WEARGAIT_CTRL_PATH = WEARGAIT_CTRL
+QSENSE_PATHS = [QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED]
+FREE_LIVING_PATH = FREELIVING_PATH
 WEIGHTS_PATH = STROKENET_WEIGHTS
 REPO_NAME     = 'yonbrand/ElderNet'
 
@@ -47,6 +54,8 @@ WISDM_GAIT_CODES  = {'A', 'C'}   # Walk, Stairs
 WEARGAIT_PATTERNS = ['walk', 'jog', 'run', 'stair', 'climb', 'freewalk', 'gait']
 HMP_GAIT_ACTIVITIES = {'Walk', 'Climb_stairs', 'Descend_stairs'}
 WISDM_GAIT_ACTIVITIES = {'Walk', 'Stairs'}
+QSENSE_GAIT_ACTIVITIES = {'walking', 'stairs'}
+FREE_LIVING_DATASET_NAME = 'free_living'
 
 ACTIVITY_MAP = {
     'A':'Walk', 'B':'Jog', 'C':'Stairs', 'D':'Sit', 'E':'Stand',
@@ -84,52 +93,6 @@ def load_finetuned_model(weights_path):
     model.eval()
     print(f"Loaded finetuned weights from {weights_path}")
     return model
-
-
-# ============================================================
-# WINDOWING — gap-aware, used for WearGait (has timestamps)
-# ============================================================
-
-def extract_windows_with_gaps(times, acc_data, labels):
-    """For data with real timestamps — respects gaps."""
-    dt      = np.diff(times)
-    gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
-    bounds  = np.concatenate([[0], gap_idx, [len(times)]])
-
-    windows, targets, win_times = [], [], []
-
-    for k in range(len(bounds) - 1):
-        seg_start = bounds[k]
-        seg_end   = bounds[k + 1]
-        if (seg_end - seg_start) < WINDOW_SIZE:
-            continue
-        for i in range(seg_start + WINDOW_SIZE, seg_end, STEP_SIZE):
-            win     = acc_data[i - WINDOW_SIZE:i]
-            lab_win = labels[i - WINDOW_SIZE:i]
-            windows.append(win.T)                          # (3, 100)
-            targets.append(int(np.mean(lab_win) > 0.5))
-            win_times.append(times[i - 1])
-
-    if len(windows) == 0:
-        return None, None, None
-    return (np.array(windows, dtype=np.float32),
-            np.array(targets),
-            np.array(win_times))
-
-
-def extract_windows_no_gaps(acc_data, labels):
-    """For WISDM — no real timestamps, treat as continuous."""
-    windows, targets = [], []
-    for i in range(WINDOW_SIZE, len(acc_data), STEP_SIZE):
-        win     = acc_data[i - WINDOW_SIZE:i]
-        lab_win = labels[i - WINDOW_SIZE:i]
-        windows.append(win.T)
-        targets.append(int(np.mean(lab_win) > 0.5))
-
-    if len(windows) == 0:
-        return None, None
-    return (np.array(windows, dtype=np.float32),
-            np.array(targets))
 
 
 # ============================================================
@@ -180,6 +143,58 @@ def print_by_activity_table(by_act, dataset_name):
               f"{a:>10.3f} {tp + fp + fn + tn:>10}")
 
 
+def get_discontinuity_times(times, gap_threshold=GAP_THRESHOLD):
+    """Return timestamps where sample-time gaps exceed threshold."""
+    if times is None or len(times) < 2:
+        return np.array([])
+    times = np.asarray(times, dtype=float)
+    dt = np.diff(times)
+    gap_idx = np.where(dt > gap_threshold)[0] + 1
+    return times[gap_idx]
+
+
+def insert_nan_breaks_at_discontinuities(x, y_values, discontinuity_times):
+    """Insert NaNs into series to visually break plotted lines at discontinuities."""
+    x_arr = np.asarray(x, dtype=float)
+    y_arrs = [np.asarray(y, dtype=float) for y in y_values]
+
+    if (
+        discontinuity_times is None
+        or len(x_arr) < 2
+        or len(discontinuity_times) == 0
+    ):
+        return x_arr, y_arrs
+
+    gap_times = np.asarray(discontinuity_times, dtype=float)
+    gap_times = gap_times[np.isfinite(gap_times)]
+    if len(gap_times) == 0:
+        return x_arr, y_arrs
+
+    break_positions = set()
+    for gap_t in gap_times:
+        idx = np.searchsorted(x_arr, gap_t, side='left')
+        if 0 < idx < len(x_arr):
+            break_positions.add(int(idx))
+
+    if not break_positions:
+        return x_arr, y_arrs
+
+    x_list = x_arr.tolist()
+    y_lists = [arr.tolist() for arr in y_arrs]
+
+    offset = 0
+    for pos in sorted(break_positions):
+        insert_at = pos + offset
+        x_list.insert(insert_at, np.nan)
+        for y_list in y_lists:
+            y_list.insert(insert_at, np.nan)
+        offset += 1
+
+    x_out = np.asarray(x_list, dtype=float)
+    y_out = [np.asarray(y_list, dtype=float) for y_list in y_lists]
+    return x_out, y_out
+
+
 def extract_windows_with_gaps_and_activity(times, acc_data, labels, activities):
     dt      = np.diff(times)
     gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
@@ -224,6 +239,275 @@ def is_git_lfs_pointer(filepath):
         )
     except OSError:
         return False
+
+
+def _column_by_name_or_index(df, name_candidates, fallback_idx):
+    for name in name_candidates:
+        if name in df.columns:
+            return df[name]
+    if fallback_idx is not None and fallback_idx < len(df.columns):
+        return df.iloc[:, fallback_idx]
+    return None
+
+
+def _load_qsense_file(filepath, folder_name):
+    """Load one QSense wrist file and return sample-level times, acc, labels, and activities."""
+    df = pd.read_csv(filepath, sep=None, engine='python').reset_index(drop=True)
+
+    # Parse timestamp from first two columns (Date + Time format used in QSense exports).
+    df['datetime'] = pd.to_datetime(
+        df.iloc[:, 0].astype(str) + ' ' + df.iloc[:, 1].astype(str),
+        errors='coerce'
+    )
+    df = df.dropna(subset=['datetime']).reset_index(drop=True)
+    if len(df) == 0:
+        raise ValueError('No valid datetime rows')
+
+    running_max = df['datetime'].iloc[0]
+    keep = []
+    for t in df['datetime']:
+        if t < running_max:
+            keep.append(False)
+        else:
+            keep.append(True)
+            running_max = t
+    df = df[keep].reset_index(drop=True)
+
+    dt = df['datetime'].diff()
+    jump_idx = dt[abs(dt) > pd.Timedelta(days=100)].index
+    for idx in jump_idx:
+        false_gap = dt[idx] - pd.Timedelta(seconds=1 / 50)
+        df.loc[idx:, 'datetime'] = df.loc[idx:, 'datetime'] - false_gap
+        dt = df['datetime'].diff()
+
+    df = df.sort_values('datetime').reset_index(drop=True)
+    df = df.drop_duplicates(subset='datetime', keep='first').reset_index(drop=True)
+    df['time_sec'] = (df['datetime'] - df['datetime'].iloc[0]).dt.total_seconds()
+
+    acc_x = _column_by_name_or_index(df, ['ax', 'accX', 'AccX'], 5)
+    acc_y = _column_by_name_or_index(df, ['ay', 'accY', 'AccY'], 6)
+    acc_z = _column_by_name_or_index(df, ['az', 'accZ', 'AccZ'], 7)
+    if acc_x is None or acc_y is None or acc_z is None:
+        raise ValueError('Missing accelerometer columns in QSense file')
+
+    acc = np.column_stack([
+        pd.to_numeric(acc_x, errors='coerce').values,
+        pd.to_numeric(acc_y, errors='coerce').values,
+        pd.to_numeric(acc_z, errors='coerce').values,
+    ])
+
+    label_series = None
+    for candidate in ['Label', 'label']:
+        if candidate in df.columns:
+            label_series = pd.to_numeric(df[candidate], errors='coerce').fillna(0).astype(int).values
+            break
+
+    if label_series is None:
+        folder_lower = folder_name.lower()
+        is_gait_folder = any(tag in folder_lower for tag in QSENSE_GAIT_ACTIVITIES)
+        label_series = np.ones(len(df), dtype=int) if is_gait_folder else np.zeros(len(df), dtype=int)
+
+    times = df['time_sec'].values.astype(float)
+    valid = np.isfinite(times) & np.isfinite(acc).all(axis=1)
+    times = times[valid]
+    acc = acc[valid]
+    labels = label_series[valid]
+
+    folder_activity = folder_name.split('_')[0]
+    activities = np.array([folder_activity] * len(times), dtype=object)
+    return times, acc, labels, activities
+
+
+def evaluate_qsense_dataset(model, device, dataset_path):
+    dataset_name = os.path.basename(os.path.normpath(dataset_path))
+    print("\n" + "=" * 60)
+    print(f"EVALUATING: {dataset_name}")
+    print("=" * 60)
+
+    results = []
+    total_tp = total_fp = total_fn = total_tn = 0
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
+
+    if not os.path.isdir(dataset_path):
+        print(f"Path not found: {dataset_path}")
+        return results, {'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'accuracy': 0.0}
+
+    for folder in sorted(os.listdir(dataset_path)):
+        folder_path = os.path.join(dataset_path, folder)
+        if not os.path.isdir(folder_path):
+            continue
+
+        parts = folder.split('_')
+        activity_type = '_'.join(parts[:-1]) if len(parts) > 1 else folder
+        subject = parts[-1] if len(parts) > 1 else 'Unknown'
+
+        wrist_candidates = {
+            'right': ['s1_1RW.txt'],
+            'left': ['s2_2LW.txt'],
+        }
+
+        for wrist, file_candidates in wrist_candidates.items():
+            selected_path = None
+            for fname in file_candidates:
+                p = os.path.join(folder_path, fname)
+                if os.path.exists(p):
+                    selected_path = p
+                    break
+
+            if selected_path is None:
+                continue
+
+            try:
+                times, acc, y_binary, activities = _load_qsense_file(selected_path, folder)
+                discontinuity_times = get_discontinuity_times(times)
+
+                wins_np, y_true, win_times, win_activities = extract_windows_with_gaps_and_activity(
+                    times, acc, y_binary, activities
+                )
+                if wins_np is None:
+                    print(f"  Skipping {folder}/{os.path.basename(selected_path)}: no valid windows")
+                    continue
+
+                probs = run_inference(model, wins_np, device)
+                y_pred = (probs > CONF_THRESH).astype(int)
+                update_activity_confusions(by_act, y_true, y_pred, win_activities)
+
+                prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
+                total_tn += cm[0, 0]
+                total_fp += cm[0, 1]
+                total_fn += cm[1, 0]
+                total_tp += cm[1, 1]
+
+                print(
+                    f"  {folder:<30} {wrist:<6} | Prec={prec:.3f}  Rec={rec:.3f}  "
+                    f"F1={f1:.3f}  Acc={acc_score:.3f}  [gait={y_true.sum()}/{len(y_true)} windows]"
+                )
+
+                results.append({
+                    'subject': subject,
+                    'dataset': dataset_name,
+                    'activity': activity_type,
+                    'wrist': wrist,
+                    'precision': prec,
+                    'recall': rec,
+                    'f1': f1,
+                    'accuracy': acc_score,
+                    'confusion_matrix': cm.tolist(),
+                    'probs': probs,
+                    'y_true': y_true,
+                    'y_pred': y_pred,
+                    'win_times': win_times,
+                    'win_activities': win_activities,
+                    'discontinuity_times': discontinuity_times,
+                })
+
+            except Exception as e:
+                print(f"  Error in {folder}/{os.path.basename(selected_path)} ({wrist}): {e}")
+
+    total = total_tp + total_tn + total_fp + total_fn
+    g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    g_rec = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    g_f1 = 2 * g_prec * g_rec / (g_prec + g_rec) if (g_prec + g_rec) > 0 else 0
+    g_acc = (total_tp + total_tn) / total if total > 0 else 0
+    print(f"\n{dataset_name} GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | F1={g_f1:.3f} | Acc={g_acc:.3f}")
+    if len(by_act) > 0:
+        print_by_activity_table(by_act, dataset_name)
+
+    return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
+
+
+def evaluate_free_living(model, device, dataset_path=FREE_LIVING_PATH):
+    print("\n" + "=" * 60)
+    print(f"EVALUATING: {FREE_LIVING_DATASET_NAME}")
+    print("=" * 60)
+
+    results = []
+    total_tp = total_fp = total_fn = total_tn = 0
+    by_act = defaultdict(lambda: [0, 0, 0, 0])
+
+    if not os.path.isdir(dataset_path):
+        print(f"Path not found: {dataset_path}")
+        return results, {'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'accuracy': 0.0}
+
+    for fname in sorted(os.listdir(dataset_path)):
+        if not fname.endswith('_annotated.csv'):
+            continue
+
+        fpath = os.path.join(dataset_path, fname)
+        parts = fname.replace('_annotated.csv', '').split('_')
+        subject = parts[1] if len(parts) > 1 else fname
+
+        try:
+            raw = pd.read_csv(fpath)
+            raw['datetime'] = pd.to_datetime(raw['time'], format='%m/%d/%Y %H:%M:%S.%f', errors='coerce')
+            raw = raw.dropna(subset=['datetime']).reset_index(drop=True)
+
+            labels = pd.to_numeric(raw['Label'], errors='coerce').fillna(0).astype(int).values
+            acc = np.column_stack([
+                pd.to_numeric(raw['ax'], errors='coerce').values,
+                pd.to_numeric(raw['ay'], errors='coerce').values,
+                pd.to_numeric(raw['az'], errors='coerce').values,
+            ])
+            times = (raw['datetime'] - raw['datetime'].iloc[0]).dt.total_seconds().values
+
+            valid = np.isfinite(times) & np.isfinite(acc).all(axis=1)
+            times = times[valid]
+            acc = acc[valid]
+            labels = labels[valid]
+            activities = np.where(labels == 1, 'Gait', 'NonGait').astype(object)
+
+            wins_np, y_true, win_times, win_activities = extract_windows_with_gaps_and_activity(
+                times, acc, labels, activities
+            )
+            if wins_np is None:
+                print(f"  Skipping {fname}: no valid windows")
+                continue
+
+            probs = run_inference(model, wins_np, device)
+            y_pred = (probs > CONF_THRESH).astype(int)
+            update_activity_confusions(by_act, y_true, y_pred, win_activities)
+
+            prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
+            total_tn += cm[0, 0]
+            total_fp += cm[0, 1]
+            total_fn += cm[1, 0]
+            total_tp += cm[1, 1]
+
+            print(
+                f"  {fname:<35} | Prec={prec:.3f}  Rec={rec:.3f}  "
+                f"F1={f1:.3f}  Acc={acc_score:.3f}  [gait={y_true.sum()}/{len(y_true)} windows]"
+            )
+
+            results.append({
+                'subject': subject,
+                'dataset': FREE_LIVING_DATASET_NAME,
+                'activity': subject,
+                'wrist': 'left',
+                'precision': prec,
+                'recall': rec,
+                'f1': f1,
+                'accuracy': acc_score,
+                'confusion_matrix': cm.tolist(),
+                'probs': probs,
+                'y_true': y_true,
+                'y_pred': y_pred,
+                'win_times': win_times,
+                'win_activities': win_activities,
+            })
+
+        except Exception as e:
+            print(f"  Error in {fname}: {e}")
+
+    total = total_tp + total_tn + total_fp + total_fn
+    g_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    g_rec = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    g_f1 = 2 * g_prec * g_rec / (g_prec + g_rec) if (g_prec + g_rec) > 0 else 0
+    g_acc = (total_tp + total_tn) / total if total > 0 else 0
+    print(f"\n{FREE_LIVING_DATASET_NAME} GLOBAL: Prec={g_prec:.3f} | Rec={g_rec:.3f} | F1={g_f1:.3f} | Acc={g_acc:.3f}")
+    if len(by_act) > 0:
+        print_by_activity_table(by_act, FREE_LIVING_DATASET_NAME)
+
+    return results, {'precision': g_prec, 'recall': g_rec, 'f1': g_f1, 'accuracy': g_acc}
 
 
 # ============================================================
@@ -720,11 +1004,13 @@ def evaluate_bioclite(model, device):
                      'f1': g_f1,          'accuracy': g_acc}
 def plot_subject_timeline(results, plots_root_dir):
     os.makedirs(plots_root_dir, exist_ok=True)
+    name_counts = defaultdict(int)
 
     for r in results:
         dataset  = r['dataset']
         subject  = r['subject']
         wrist    = r.get('wrist', 'right')
+        activity = str(r.get('activity', '')).strip()
         probs    = r['probs']
         y_pred   = r['y_pred']
         y_true   = r['y_true']
@@ -738,10 +1024,16 @@ def plot_subject_timeline(results, plots_root_dir):
             xlabel = 'Window index'
 
         fig, axes = plt.subplots(3, 1, figsize=(16, 8), sharex=True)
-        fig.suptitle(f"{dataset} — {subject} ({wrist})", fontsize=14, fontweight='bold')
+        title = f"{dataset} — {subject} ({wrist})"
+        if activity:
+            title += f" | {activity}"
+        fig.suptitle(title, fontsize=14, fontweight='bold')
 
         # Activity transition markers for datasets with per-window activity labels.
-        if dataset in {'BIOCLITE', 'HMP', 'WearGait', 'WISDM'} and 'win_activities' in r and r['win_activities'] is not None:
+        if (
+            dataset in {'BIOCLITE', 'HMP', 'WearGait', 'WISDM', 'Free_living'}
+            or str(dataset).lower().startswith('qsense')
+        ) and 'win_activities' in r and r['win_activities'] is not None:
             win_acts = np.asarray(r['win_activities'])
             if len(win_acts) == len(x) and len(win_acts) > 0:
                 transition_idx = np.where(win_acts[1:] != win_acts[:-1])[0] + 1
@@ -759,6 +1051,12 @@ def plot_subject_timeline(results, plots_root_dir):
                     elif dataset == 'WISDM':
                         act_name = str(win_acts[idx])
                         is_gait = (act_name in WISDM_GAIT_ACTIVITIES)
+                    elif str(dataset).lower().startswith('qsense'):
+                        act_name = str(win_acts[idx])
+                        is_gait = any(tag in act_name.lower() for tag in QSENSE_GAIT_ACTIVITIES)
+                    elif str(dataset).lower() == FREE_LIVING_DATASET_NAME:
+                        act_name = str(win_acts[idx])
+                        is_gait = (act_name.lower() == 'gait')
                     else:
                         act_name = str(win_acts[idx])
                         is_gait = any(p in act_name.lower() for p in WEARGAIT_PATTERNS)
@@ -781,22 +1079,36 @@ def plot_subject_timeline(results, plots_root_dir):
                         alpha=0.9
                     )
 
+        x_plot = np.asarray(x, dtype=float)
+        probs_plot = np.asarray(probs, dtype=float)
+        y_true_plot = np.asarray(y_true, dtype=float)
+        y_pred_plot = np.asarray(y_pred, dtype=float)
+
+        # Break lines at discontinuities instead of drawing explicit gap markers.
+        if 'discontinuity_times' in r and r['discontinuity_times'] is not None:
+            x_plot, broken_series = insert_nan_breaks_at_discontinuities(
+                x_plot,
+                [probs_plot, y_true_plot, y_pred_plot],
+                r['discontinuity_times'],
+            )
+            probs_plot, y_true_plot, y_pred_plot = broken_series
+
         # --- Probability ---
-        axes[0].plot(x, probs, color='steelblue', linewidth=1.5, label='Gait probability')
+        axes[0].plot(x_plot, probs_plot, color='steelblue', linewidth=1.5, label='Gait probability')
         axes[0].axhline(CONF_THRESH, color='black', linestyle='--', linewidth=1,
                         label=f'Threshold = {CONF_THRESH}')
-        axes[0].fill_between(x, 0, probs, alpha=0.15, color='steelblue')
+        axes[0].fill_between(x_plot, 0, probs_plot, alpha=0.15, color='steelblue')
         axes[0].set_ylim(-0.05, 1.1)
         axes[0].set_ylabel('Probability', fontsize=11)
         axes[0].legend(fontsize=9, loc='upper right')
         axes[0].grid(True, alpha=0.3)
 
         # --- Prediction vs Ground Truth ---
-        axes[1].step(x, y_true, where='post', color='green',
+        axes[1].step(x_plot, y_true_plot, where='post', color='green',
                      linewidth=2, alpha=0.7, label='Ground truth')
-        axes[1].step(x, y_pred + 0.05, where='post', color='crimson',
+        axes[1].step(x_plot, y_pred_plot + 0.05, where='post', color='crimson',
                      linewidth=1.5, linestyle='--', label='Prediction')
-        axes[1].fill_between(x, 0, y_true, step='post',
+        axes[1].fill_between(x_plot, 0, y_true_plot, step='post',
                              alpha=0.15, color='green')
         axes[1].set_ylim(-0.15, 1.2)
         axes[1].set_ylabel('Gait (0/1)', fontsize=11)
@@ -804,19 +1116,18 @@ def plot_subject_timeline(results, plots_root_dir):
         axes[1].grid(True, alpha=0.3)
 
         # --- Agreement / Error ---
-        correct = (y_pred == y_true).astype(int)
-        tp_mask = (y_pred == 1) & (y_true == 1)
-        fp_mask = (y_pred == 1) & (y_true == 0)
-        fn_mask = (y_pred == 0) & (y_true == 1)
-        tn_mask = (y_pred == 0) & (y_true == 0)
+        tp_mask = ((y_pred_plot == 1) & (y_true_plot == 1)).astype(float)
+        fp_mask = ((y_pred_plot == 1) & (y_true_plot == 0)).astype(float)
+        fn_mask = ((y_pred_plot == 0) & (y_true_plot == 1)).astype(float)
+        tn_mask = ((y_pred_plot == 0) & (y_true_plot == 0)).astype(float)
 
-        axes[2].fill_between(x, 0, tp_mask.astype(float), step='post',
+        axes[2].fill_between(x_plot, 0, tp_mask, step='post',
                              color='green',  alpha=0.6, label='TP')
-        axes[2].fill_between(x, 0, tn_mask.astype(float), step='post',
+        axes[2].fill_between(x_plot, 0, tn_mask, step='post',
                              color='lightgrey', alpha=0.6, label='TN')
-        axes[2].fill_between(x, 0, fp_mask.astype(float), step='post',
+        axes[2].fill_between(x_plot, 0, fp_mask, step='post',
                              color='orange', alpha=0.8, label='FP')
-        axes[2].fill_between(x, 0, fn_mask.astype(float), step='post',
+        axes[2].fill_between(x_plot, 0, fn_mask, step='post',
                              color='crimson', alpha=0.8, label='FN')
         axes[2].set_ylim(-0.1, 1.2)
         axes[2].set_ylabel('Classification', fontsize=11)
@@ -826,66 +1137,21 @@ def plot_subject_timeline(results, plots_root_dir):
 
         plt.tight_layout()
         safe_subject = subject.replace('/', '_').replace(' ', '_')
+        safe_activity = activity.replace('/', '_').replace(' ', '_') if activity else ''
         dataset_safe = str(dataset).replace('/', '_').replace(' ', '_')
         dataset_plot_dir = os.path.join(plots_root_dir, dataset_safe, 'strokenet')
         os.makedirs(dataset_plot_dir, exist_ok=True)
-        save_path = os.path.join(dataset_plot_dir, f'{dataset_safe}_{safe_subject}_{wrist}.png')
+
+        base_name_parts = [dataset_safe]
+        if safe_activity:
+            base_name_parts.append(safe_activity)
+        base_name_parts.extend([safe_subject, wrist])
+        base_name = '_'.join(base_name_parts)
+
+        name_counts[base_name] += 1
+        suffix = '' if name_counts[base_name] == 1 else f"_{name_counts[base_name]}"
+        save_path = os.path.join(dataset_plot_dir, f'{base_name}{suffix}.png')
+
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  Saved: {save_path}")
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-def main():
-    import glob
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Running on: {device}")
-
-    model = load_finetuned_model(WEIGHTS_PATH).to(device)
-
-    # wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
-    # weargait_results, weargait_global = evaluate_weargait(model, device)
-    # hmp_results, hmp_global = evaluate_hmp(model, device)
-    # bioclite_results, bioclite_global = evaluate_bioclite(model, device)
-
-    # all_results = wisdm_results + weargait_results + hmp_results + bioclite_results
-    # plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
-
-    wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
-    plot_subject_timeline(wisdm_results, OUTPUT_PLOTS_DIR)
-
-    # # Save per-subject results
-    # all_rows = []
-    # for r in all_results:
-    #     all_rows.append({
-    #         'dataset':   r['dataset'],
-    #         'subject':   r['subject'],
-    #         'wrist':     r.get('wrist', 'N/A'),
-    #         'precision': r['precision'],
-    #         'recall':    r['recall'],
-    #         'f1':        r['f1'],
-    #         'accuracy':  r['accuracy']
-    #     })
-
-    # # Save global summary
-    # global_rows = [
-    #     {'dataset': 'WISDM',    **wisdm_global},
-    #     {'dataset': 'WearGait', **weargait_global},
-    #     {'dataset': 'HMP',      **hmp_global},
-    #     {'dataset': 'BIOCLITE', **bioclite_global},
-    # ]
-
-    # os.makedirs(RESULTS_DIR, exist_ok=True)
-    # per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
-    # global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
-    # pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
-    # pd.DataFrame(global_rows).to_csv(global_csv, index=False)
-    # print(f"\nSaved per-subject results : {per_subject_csv}")
-    # print(f"Saved global summary      : {global_csv}")
-
-
-if __name__ == '__main__':
-    main()
