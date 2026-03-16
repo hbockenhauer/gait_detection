@@ -7,18 +7,18 @@ from GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
 from GSD2a import HickeyGSD
-from singleGSD_robust import parse_time
+from singleGSD_robust import plot_results
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
-GSD_n = 2
+GSD_n = 3
 SAMPLING_RATE = 50
 DEBUG = False
 GAIT_CLASSES = {'walking', 'stairs'}
-SAVE_RESULTS = True
+SAVE_RESULTS = False
 PRINT_STATS = True
 
 
@@ -171,8 +171,10 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 )
                 output_name = 'HickeyGSD_Results.csv'
             case 3:
-                gsd = KheirkhahanGSD(cwb=False)
+                gsd = KheirkhahanGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                activity_counts = gsd.get_activity(imu_df, sampling_rate_hz=SAMPLING_RATE)
+                std_norm = gsd.get_std_norm(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 output_name = 'KheirkhahanGSD_Results.csv'
             case 4:
                 gsd = MacLeanGSD()
@@ -212,7 +214,7 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
             'FP': fp,
             'FN': fn,
             'TN': tn,
-        }, output_name
+        }, output_name, activity_counts, std_norm
 
     except Exception as e:
         print(f"  [ERROR] GSD failed on {label}: {e}")
@@ -250,7 +252,7 @@ def process_gait(imu_merged: pd.DataFrame,
         if result is None:
             continue
 
-        metrics, output_name = result
+        metrics, output_name, _, _ = result
         output_name = 'Results/Free_living_Results.csv'  
 
         results.append({

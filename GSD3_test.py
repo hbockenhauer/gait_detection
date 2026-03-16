@@ -58,7 +58,7 @@ class KheirkhahanGSD:
         self.upper_percentile = 90
         self.win_size_s = 9
         self.win_shift_s = 1
-        self.threshold = 0.58
+        self.threshold = 0.62
         self.cwb = cwb
         # self.visual = visual
 
@@ -177,17 +177,45 @@ class KheirkhahanGSD:
         inactivity_parameter = calc_activity_parameter(filtered_activity_counts)
         # inactivity_parameter has the size of the number of windows 
 
+        # ---------- ADDITION FROM HICKEY ---------------------------------------
+        # taking the std of the norm acc per window and make a threshold of how noisy the data needs to be        
+        win_num = len(windows) 
+        n = int(self.win_size_s * self.sampling_rate_hz)
+        shift_samples = int(self.win_shift_s * self.sampling_rate_hz)
+        # calculate std of each window 
+        std_acc = np.zeros(win_num)
+        # mean_acc = np.zeros(win_num)
+        for i in range(win_num):
+            start_idx = int(i * shift_samples)
+            end_idx = start_idx + n
 
+            # Ensure we don't exceed array bounds due to rounding
+            if end_idx > len(norm_acc):
+                end_idx = len(norm_acc)
+            
+            # Only calculate if we have data to avoid RuntimeWarnings
+            if len(norm_acc[start_idx:end_idx]) > 0:
+                std_acc[i] = np.std(norm_acc[start_idx:end_idx])
+            else:
+                std_acc[i] = 0
+
+        # print("last i", i)
+        # print("std_acc", std_acc)
+        # print("std_acc len", len(std_acc))
+
+        ThresholdStill = 0.06
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
-        walking_windows[inactivity_parameter < self.threshold] = 1
+        for i in range(win_num):
+            if std_acc[i] >= ThresholdStill and inactivity_parameter[i] <= self.threshold:
+                walking_windows[i] = 1
+
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
 
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
-
 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file
@@ -217,3 +245,50 @@ class KheirkhahanGSD:
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
                                                      sampling_rate=self.sampling_rate_hz).activity_counts_
         return activity_counts
+    
+    def get_std_norm(self, data, *, sampling_rate_hz: float = 100):
+        self.sampling_rate_hz = sampling_rate_hz
+        self.data = data
+        self.data_len = len(data)
+
+        # In the current implementation for wrist worn sensors we use the norm
+        acc = self.data.iloc[:, 0:3]
+        norm_acc = np.linalg.norm(acc, axis=1)
+
+        # Finds the activity counts per second
+        # turning acc to g-units for activity counts calculation
+        norm_acc = norm_acc / 9.81
+
+        activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
+                                                     sampling_rate=self.sampling_rate_hz).activity_counts_
+        
+        # Checks if activity counts are shorter than the window size
+        if len(activity_counts) < self.win_size_s:
+            raise ValueError(
+                'The provided data stream is too short. It must be at least {}s long'.format(self.win_size_s))
+
+        # Creates overlapping windows of activity counts data (activity counts are expressed in seconds)
+        windows = window(activity_counts, self.win_size_s, self.win_shift_s, copy=True)
+
+        # ---------- ADDITION FROM HICKEY ---------------------------------------
+        # taking the std of the norm acc per window and make a threshold of how noisy the data needs to be        
+        win_num = len(windows) 
+        n = int(self.win_size_s * self.sampling_rate_hz)
+        shift_samples = int(self.win_shift_s * self.sampling_rate_hz)
+        # calculate std of each window 
+        std_acc = np.zeros(win_num)
+        # mean_acc = np.zeros(win_num)
+        for i in range(win_num):
+            start_idx = int(i * shift_samples)
+            end_idx = start_idx + n
+
+            # Ensure we don't exceed array bounds due to rounding
+            if end_idx > len(norm_acc):
+                end_idx = len(norm_acc)
+            
+            # Only calculate if we have data to avoid RuntimeWarnings
+            if len(norm_acc[start_idx:end_idx]) > 0:
+                std_acc[i] = np.std(norm_acc[start_idx:end_idx])
+            else:
+                std_acc[i] = 0
+        return std_acc

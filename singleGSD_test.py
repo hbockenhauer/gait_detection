@@ -31,7 +31,7 @@ if __name__ == "__main__":
                         sep='\t',  # Use whitespace as separator (adjust if needed)
                         low_memory=False)
         
-        #### CLIPPING THE FIST 10 SECONDS
+        #### CLIPPING THE FIRST 10 SECONDS
         # df = df[500:]
 
         # 2. Identify and Rename Columns to Anatomical Labels
