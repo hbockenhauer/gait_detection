@@ -29,9 +29,9 @@ CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
 
 DEBUG = False
-PRINT_STATS = True 
+PRINT_STATS = False 
 
-SAVE_RESULTS = True 
+SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
 
 PLOT = False
@@ -526,7 +526,6 @@ def process_gait(rw_merged: pd.DataFrame,
             'Precision':    precision_av,
             'Recall':       recall_av,
             'F1':           f1_av,
-            #**{m: round(subset[m].mean(), 4) for m in METRIC_COLS},
             **{p: round(subset[p].sum(), 4) for p in VARIABLES}
         }
 
