@@ -64,6 +64,7 @@ function results = evaluate_qsense_group(projectRoot, outputsRoot)
         fullfile(projectRoot, 'Datasets', 'QSense_data')
         fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
         fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
+        fullfile(projectRoot, 'Datasets', 'QSense_data_clinic')
     };
 
     for i = 1:numel(candidates)
@@ -149,7 +150,9 @@ function results = evaluate_weargait_group(projectRoot, outputsRoot)
                     rec = make_weargait_record(wg.right, subject, 'Right');
                     fs = estimate_fs(rec.time, 100);
                     params = get_rt_params(datasetName, fs);
-                    row = run_record_and_plot(rec, datasetName, subject, 'Right', fs, params, plotPath);
+                    [actStarts, actLbls] = extract_activity_markers(rec.time, rec.activities);
+                    plotMeta = struct('activityStarts', actStarts, 'activityLabels', {actLbls});
+                    row = run_record_and_plot(rec, datasetName, subject, 'Right', fs, params, plotPath, plotMeta);
                     if ~isempty(row), results = [results; row]; end
                 end
 
@@ -157,7 +160,9 @@ function results = evaluate_weargait_group(projectRoot, outputsRoot)
                     rec = make_weargait_record(wg.left, subject, 'Left');
                     fs = estimate_fs(rec.time, 100);
                     params = get_rt_params(datasetName, fs);
-                    row = run_record_and_plot(rec, datasetName, subject, 'Left', fs, params, plotPath);
+                    [actStarts, actLbls] = extract_activity_markers(rec.time, rec.activities);
+                    plotMeta = struct('activityStarts', actStarts, 'activityLabels', {actLbls});
+                    row = run_record_and_plot(rec, datasetName, subject, 'Left', fs, params, plotPath, plotMeta);
                     if ~isempty(row), results = [results; row]; end
                 end
             catch ME
@@ -179,15 +184,24 @@ function results = evaluate_wisdm(projectRoot, outputsRoot)
     plotPath = ensure_sigpro_plot_dir(outputsRoot, datasetName);
     files = dir(fullfile(dataPath, '*.txt'));
 
+    wisdmActivityMap = containers.Map( ...
+        {'A','B','C','D','E','F','G','H','I','J','K','L','M','O','P','Q','R','S'}, ...
+        {'Walk','Jog','Stairs','Sit','Stand','Type','Teeth','Soup','Chips','Pasta', ...
+         'Drink','Sandwich','Kick','Catch','Dribble','Write','Clap','Fold'});
+
     for i = 1:numel(files)
         fpath = fullfile(files(i).folder, files(i).name);
         subject = erase(files(i).name, '.txt');
 
         try
             rec = load_wisdm_record(fpath);
+            actNames = cellfun(@(a) get_map_value(wisdmActivityMap, strtrim(a), strtrim(a)), ...
+                rec.activities, 'UniformOutput', false);
+            [activityStarts, activityLabels] = extract_activity_markers(rec.time, actNames);
+            plotMeta = struct('activityStarts', activityStarts, 'activityLabels', {activityLabels});
             fs = estimate_fs(rec.time, 20);
             params = get_rt_params(datasetName, fs);
-            row = run_record_and_plot(rec, datasetName, subject, 'Watch', fs, params, plotPath);
+            row = run_record_and_plot(rec, datasetName, subject, 'Watch', fs, params, plotPath, plotMeta);
             if ~isempty(row)
                 results = [results; row];
             end
@@ -376,7 +390,9 @@ function results = evaluate_bioclite(projectRoot, outputsRoot)
             rec = load_bioclite_trial(Data{i});
             fs = estimate_fs(rec.time, 50);
             params = get_rt_params(datasetName, fs);
-            row = run_record_and_plot(rec, datasetName, rec.subject, 'Preferred', fs, params, plotPath);
+            [actStarts, actLbls] = extract_activity_markers(rec.time, rec.activities);
+            plotMeta = struct('activityStarts', actStarts, 'activityLabels', {actLbls});
+            row = run_record_and_plot(rec, datasetName, rec.subject, 'Preferred', fs, params, plotPath, plotMeta);
             if ~isempty(row)
                 results = [results; row];
             end
@@ -766,6 +782,7 @@ function rec = make_weargait_record(sideStruct, subject, wrist)
     rec.y_true = double(yTrue(valid));
     rec.subject = subject;
     rec.wrist = wrist;
+    rec.activities = cellstr(labels(valid));
 end
 
 
@@ -785,7 +802,13 @@ function rec = load_wisdm_record(filePath)
     acts = string(T.Activity(valid));
     yTrue = ismember(acts, {'A', 'C'});
 
-    rec = struct('time', tt(valid), 'acc', [x(valid), y(valid), z(valid)], 'y_true', double(yTrue));
+    % Use synthetic monotonic time so all activity segments are appended
+    % without timestamp gaps between activities.
+    N = sum(valid);
+    tt_synth = (0:N-1)' / 20.0;  % WISDM watch = 20 Hz
+
+    rec = struct('time', tt_synth, 'acc', [x(valid), y(valid), z(valid)], ...
+        'y_true', double(yTrue), 'activities', {cellstr(acts)});
 end
 
 
@@ -797,6 +820,13 @@ function rec = load_hmp_record(filePath, isGait, activity)
     X = X(:, 1:3);
     valid = all(isfinite(X), 2);
     X = X(valid, :);
+
+    % HMP manual conversion: map [0..63] to [-14.709..+14.709], then median filter.
+    X = -14.709 + (X ./ 63) * (2 * 14.709);
+    n = 3;
+    X(:, 1) = medfilt1(X(:, 1), n);
+    X(:, 2) = medfilt1(X(:, 2), n);
+    X(:, 3) = medfilt1(X(:, 3), n);
 
     fs = 32;
     t = (0:size(X, 1)-1)' / fs;
@@ -942,11 +972,15 @@ function rec = load_bioclite_trial(trial)
     yTrue = double(labels == 6);
     valid = isfinite(t) & all(isfinite(acc), 2) & isfinite(yTrue);
 
+    biocliteNames = {'Transitions','Spiral','Typing','Sitting','Beating','Brushing','Walking'};
+    actNames = arrayfun(@(l) biocliteNames{min(max(round(l)+1, 1), 7)}, labels, 'UniformOutput', false);
+
     rec = struct();
     rec.time = t(valid);
     rec.acc = acc(valid, :);
     rec.y_true = yTrue(valid);
     rec.subject = sprintf('P%02d', max(1, round(participant)));
+    rec.activities = actNames(valid);
 end
 
 
@@ -1058,6 +1092,33 @@ function subject = parse_freeliving_subject(recId)
     parts = split(recId, '_');
     if numel(parts) >= 2
         subject = parts{2};
+    end
+end
+
+
+function [activityStarts, activityLabels] = extract_activity_markers(timeVec, activities)
+    % Returns start times and label names each time the activity label changes.
+    activityStarts = [];
+    activityLabels = {};
+    if isempty(activities) || isempty(timeVec)
+        return;
+    end
+    if ~iscell(activities)
+        activities = cellstr(activities);
+    end
+    n = numel(activities);
+    changes = [true; ~strcmp(activities(1:n-1), activities(2:n))];
+    idx = find(changes);
+    activityStarts = timeVec(idx);
+    activityLabels = activities(idx);
+end
+
+
+function v = get_map_value(m, k, default)
+    if isKey(m, k)
+        v = m(k);
+    else
+        v = default;
     end
 end
 

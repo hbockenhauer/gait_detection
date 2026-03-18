@@ -35,6 +35,7 @@ from config.paths import (
     QSENSE_DATA,
     QSENSE_EDGE,
     QSENSE_MIXED,
+    QSENSE_CLINIC,
     FREELIVING_PATH,
     BIOCLITE_PATH,
     ELDERNET_WEIGHTS,
@@ -53,7 +54,7 @@ from utils import plot_ROC_PR
 ADL_PATH = HMP_PATH
 WEARGAIT_PD_PATH = WEARGAIT_PD
 WEARGAIT_CTRL_PATH = WEARGAIT_CTRL
-QSENSE_PATHS = [QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED]
+QSENSE_PATHS = [QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED, QSENSE_CLINIC]
 FREE_LIVING_PATH = FREELIVING_PATH
 WEIGHTS_PATH = ELDERNET_WEIGHTS
 REPO_NAME = 'yonbrand/ElderNet'
@@ -540,12 +541,19 @@ def evaluate_hmp(model, device):
         for ts, cat, f in files_sorted:
             try:
                 raw = np.loadtxt(f)
+                raw = np.asarray(raw, dtype=float)
+                if raw.ndim == 1:
+                    raw = raw.reshape(-1, 3)
+                if raw.shape[1] < 3:
+                    continue
+                raw = raw[:, :3]
                 if len(raw) < 150:
                     continue
-                data = (raw.astype(float) - 32.0) * (1.5 / 32.0)
-                nyq = 0.5 * SOURCE_FS
-                b, a = signal.butter(4, 10.0 / nyq, btype='low')
-                data = signal.filtfilt(b, a, data, axis=0)
+
+                # HMP manual conversion: map [0..63] to [-14.709..+14.709], then median filter.
+                data = -14.709 + (raw / 63.0) * (2 * 14.709)
+                data = signal.medfilt(data, kernel_size=(3, 1))
+
                 new_len = int(len(data) * (TARGET_FS / SOURCE_FS))
                 data = signal.resample(data, new_len)
                 label = 1 if cat in HMP_GAIT_ACTIVITIES else 0

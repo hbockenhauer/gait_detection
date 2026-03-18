@@ -87,14 +87,18 @@ class HMPDatasetDebug(Dataset):
             for ts, cat, f in files_sorted:
                 try:
                     raw = np.loadtxt(f)
+                    raw = np.asarray(raw, dtype=float)
+                    if raw.ndim == 1:
+                        raw = raw.reshape(-1, 3)
+                    if raw.shape[1] < 3:
+                        continue
+                    raw = raw[:, :3]
                     if len(raw) < 150:
                         continue
                     
-                    # Unit Conversion & Filtering
-                    data = (raw.astype(float) - 32.0) * (1.5 / 32.0)
-                    nyq = 0.5 * 32.0
-                    b, a = signal.butter(4, 10.0/nyq, btype='low')
-                    data = signal.filtfilt(b, a, data, axis=0)
+                    # HMP manual conversion: map [0..63] to [-14.709..+14.709], then median filter.
+                    data = -14.709 + (raw / 63.0) * (2 * 14.709)
+                    data = signal.medfilt(data, kernel_size=(3, 1))
                     
                     # Resample 32Hz -> 30Hz
                     new_len = int(len(data) * (30 / 32))

@@ -78,11 +78,16 @@ class HMPLoader(GaitDataset):
             for f in glob.glob(os.path.join(folder_path, cat, '*.txt')):
                 try:
                     raw = np.loadtxt(f)
-                    data = (raw.astype(float) - 32.0) * (1.5 / 32.0)
-                    # Tight 5Hz filter to smooth 6-bit jaggedness
-                    nyq = 0.5 * 32.0
-                    b, a = signal.butter(4, 5.0/nyq, btype='low') 
-                    data = signal.filtfilt(b, a, data, axis=0)
+                    raw = np.asarray(raw, dtype=float)
+                    if raw.ndim == 1:
+                        raw = raw.reshape(-1, 3)
+                    if raw.shape[1] < 3:
+                        continue
+                    raw = raw[:, :3]
+
+                    # HMP manual conversion: map [0..63] to [-14.709..+14.709], then median filter.
+                    data = -14.709 + (raw / 63.0) * (2 * 14.709)
+                    data = signal.medfilt(data, kernel_size=(3, 1))
                     new_len = int(len(data) * (30 / 32))
                     data = signal.resample(data, new_len)
                     if len(data) < window_size:

@@ -10,6 +10,12 @@ import numpy as np
 import pandas as pd
 import torch
 import psutil
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from models.StrokeNet.strokenet_utils import (
     load_finetuned_model,
     evaluate_wisdm,
@@ -28,12 +34,6 @@ from config.paths import (
     RESULTS_DIR,
 )
 import utils.plot_ROC_PR as plot_ROC_PR
-
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
