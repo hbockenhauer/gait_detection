@@ -11,9 +11,10 @@ import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed", 
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic"
 ]
 GSD_n = 3
 SAMPLING_RATE = 50 
@@ -23,7 +24,7 @@ CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
 SAVE_RESULTS = True 
 PRINT_STATS = True 
 PLOT_SAVE_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Leg_comp"
-PLOT_PRED = False
+PLOT_PRED = True
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -33,7 +34,7 @@ def extract_condition(folder_name: str) -> str:
     return 'normal'
 
 def is_gait(folder_name: str, df:pd.DataFrame = None) -> int:
-    if 'test' in folder_name.lower():
+    if 'test' in folder_name.lower() or 'sub' in folder_name.lower():
         return df['Label']
     else:
         activity = folder_name.split('_')[0].lower()
