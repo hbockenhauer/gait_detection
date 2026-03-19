@@ -89,9 +89,9 @@ def load_csv(filepath: str):
         # imu_df['y_true'] = df['Label']
         # imu_df['yyyy-MM-dd'] = df['yyyy-MM-dd']
         # imu_df['HH:mm:ss.fff'] = df['HH:mm:ss.fff']
-        # imu_df.columns = ['yyyy-MM-dd', 'HH:mm:ss.fff', 'acc_pa', 'acc_ml', 'acc_is', 'segment', 'y_true']
+        # imu_df.columns = ['yyyy-MM-dd', 'HH:mm:ss.fff', 'acc_is', 'acc_ml', 'acc_pa', 'segment', 'y_true']
         imu_df = df[acc_cols[:3]].copy()
-        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is'] # Rename just the accels first
+        imu_df.columns = ['acc_is', 'acc_ml', 'acc_pa'] # Rename just the accels first
         imu_df = imu_df * 9.81
 
         imu_df['segment'] = df['segment']
@@ -115,7 +115,7 @@ def merge_csv(data_path: str, PRINT_STATS: bool = False) -> pd.DataFrame:
     Walk data_path, load every *_annotated.csv file, attach metadata,
     and return a single merged DataFrame.
 
-    Columns: subject | y_true | acc_pa | acc_ml | acc_is
+    Columns: subject | y_true | acc_is | acc_ml | acc_pa
     """
     imu_merged_chunks: list[pd.DataFrame] = []
 
@@ -143,7 +143,7 @@ def merge_csv(data_path: str, PRINT_STATS: bool = False) -> pd.DataFrame:
     if PRINT_STATS:
         print("-" * 50)
 
-    col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff','subject', 'segment', 'condition', 'y_true', 'acc_pa', 'acc_ml', 'acc_is']
+    col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff','subject', 'segment', 'condition', 'y_true', 'acc_is', 'acc_ml', 'acc_pa']
 
     imu_merged = (
         pd.concat(imu_merged_chunks, ignore_index=True)[col_order]
@@ -241,7 +241,7 @@ def process_gait(imu_merged: pd.DataFrame,
         print("No data — skipping.")
         return pd.DataFrame()
 
-    imu_cols = ['acc_pa', 'acc_ml', 'acc_is']
+    imu_cols = ['acc_is', 'acc_ml', 'acc_pa']
 
     for subject, grp in imu_merged.groupby('subject', sort=True):
         imu_df = grp[imu_cols].reset_index(drop=True)

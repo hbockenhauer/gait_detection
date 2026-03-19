@@ -6,6 +6,10 @@ from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_window
 from ActivityCounts import ActivityCounts
 # from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
+from mobgap.data_transform import (
+    chain_transformers,
+    ButterworthFilter
+)
 
 
 class KheirkhahanGSD:
@@ -62,13 +66,12 @@ class KheirkhahanGSD:
         self.cwb = cwb
         # self.visual = visual
 
-    '''def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
+    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
                                title: str = "3-Axis Acceleration", 
                                xaxis: str = None,
                                yaxis: str = None,
                                vertical_lines=None, 
-                               scale: float = 1.0, 
-                               switch_sampling_rate: float = None) -> None:
+                               scale: float = 1.0) -> None:
         """
         Plot 3-axis acceleration data over time.
 
@@ -85,6 +88,7 @@ class KheirkhahanGSD:
 
         time = np.arange(len(data)) / sampling_rate_hz
         cols = list(data.columns[:3])
+        print('cols', cols)
 
         fig, ax = plt.subplots(figsize=(10, 4))
         for col in cols:
@@ -96,12 +100,12 @@ class KheirkhahanGSD:
             ax.set_ylabel(yaxis)
         ax.set_title(title)
         ax.legend()
-        if self.switch is not None:
-            sr = switch_sampling_rate if switch_sampling_rate is not None else sampling_rate_hz
-            for sw in self.switch: 
-                if 0 <= sw < len(data) * (sr / sampling_rate_hz):  # bounds check in original samples
-                    time_of_change = sw / sr  # convert switch index (original samples) → seconds
-                    ax.axvline(x=time_of_change, color='red', linestyle='--', alpha=0.7, linewidth=1)
+        # if self.switch is not None:
+        #     sr = switch_sampling_rate if switch_sampling_rate is not None else sampling_rate_hz
+        #     for sw in self.switch: 
+        #         if 0 <= sw < len(data) * (sr / sampling_rate_hz):  # bounds check in original samples
+        #             time_of_change = sw / sr  # convert switch index (original samples) → seconds
+        #             ax.axvline(x=time_of_change, color='red', linestyle='--', alpha=0.7, linewidth=1)
 
 
         if vertical_lines is not None:
@@ -115,7 +119,7 @@ class KheirkhahanGSD:
         #print('plot done')
         fig.tight_layout()
         fig.show()
-        return fig'''
+        return fig
 
     def detect(self, data, *, sampling_rate_hz: float = 100) -> Self:
         """
@@ -145,6 +149,11 @@ class KheirkhahanGSD:
 
         # Finds the activity counts per second
         # turning acc to g-units for activity counts calculation
+        '''
+        ideas: 
+        - using a lowpass filter with cutoff of 0.25Hz was assumed to approximate the graity contribution from Hickey
+        - the output of that lowpass is the gravity, so the output of the highpass is the dynamic motion? 
+        '''
         norm_acc = norm_acc / 9.81
 
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
@@ -203,19 +212,22 @@ class KheirkhahanGSD:
         # print("std_acc", std_acc)
         # print("std_acc len", len(std_acc))
 
-        ThresholdStill = 0.06
+        ThresholdStill = 0.1
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
         for i in range(win_num):
             if std_acc[i] >= ThresholdStill and inactivity_parameter[i] <= self.threshold:
                 walking_windows[i] = 1
 
-
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
-
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
+        """
+        here the .astype(bool) taked any detected window to be true; 
+        could add a check of detected_walking needs to be >1 for example 
+        not sure if that makes sense ?
+        """
 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file
@@ -228,6 +240,108 @@ class KheirkhahanGSD:
         self.gs_list_ = gs
 
         return self
+
+
+    def filters(self, data, *, sampling_rate_hz: float = 100) -> Self:
+
+        self.sampling_rate_hz = sampling_rate_hz
+        self.data = data
+        self.data_len = len(data)
+
+        # In the current implementation for wrist worn sensors we use the norm
+        # from gsd 3 
+        acc = self.data.iloc[:, 0:3]
+        norm_acc = np.linalg.norm(acc, axis=1)
+        norm_acc = norm_acc / 9.81
+        ###############
+
+        # from gsd2 
+        cutoff = 0.25
+        # class instance
+        filter_chain = [("butter", ButterworthFilter(order=1, cutoff_freq_hz=cutoff, filter_type='lowpass'))]
+
+        acc_is = self.data.iloc[:, 0]
+        acc_ml = self.data.iloc[:, 1]
+        acc_pa = self.data.iloc[:, 2]
+        # application to all corrected axes
+        acc_is_filt = np.asarray(chain_transformers(acc_is, filter_chain, sampling_rate_hz=sampling_rate_hz))
+        acc_ml_filt = np.asarray(chain_transformers(acc_ml, filter_chain, sampling_rate_hz=sampling_rate_hz))
+        acc_pa_filt = np.asarray(chain_transformers(acc_pa, filter_chain, sampling_rate_hz=sampling_rate_hz))
+
+        acc_is_no_grav = self.data.iloc[:, 0] - acc_is_filt
+        acc_ml_no_grav = self.data.iloc[:, 1] - acc_ml_filt
+        acc_pa_no_grav = self.data.iloc[:, 2] - acc_pa_filt
+
+        acc_no_grav = pd.concat([acc_is_no_grav, acc_ml_no_grav, acc_pa_no_grav], axis=1)
+        acc_norm = np.linalg.norm(acc_no_grav, axis=1)
+
+    
+        time = np.arange(len(data)) / sampling_rate_hz
+        time_sec = np.arange(len(data)/ sampling_rate_hz)
+        # fig, ax = plt.subplots(figsize=(10, 4))
+        fig1, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 6), sharex=True)
+        ax1.plot(time, acc_is, label = 'acc_is')
+        ax1.plot(time, acc_ml, label = 'acc_ml')
+        ax1.plot(time, acc_pa, label = 'acc_pa')
+ 
+        ax1.set_ylabel("Raw acceleration")
+        ax1.set_title("Accelerations")
+        ax1.legend()
+        # ------------------------
+        ax2.plot(time, acc_is_filt, label = 'acc_is')
+        ax2.plot(time, acc_ml_filt, label = 'acc_ml')
+        ax2.plot(time, acc_pa_filt, label = 'acc_pa')
+ 
+        ax2.set_ylabel("Grav component")
+        ax2.legend()
+        # --------------------------------
+        ax3.plot(time, acc_is_no_grav, label = 'acc_is')
+        ax3.plot(time, acc_ml_no_grav, label = 'acc_ml')
+        ax3.plot(time, acc_pa_no_grav, label = 'acc_pa')
+ 
+        ax3.set_ylabel("No grav")
+        ax3.set_xlabel("Time(s)")
+        ax3.legend()
+
+        fig1.tight_layout()
+        fig1.show()
+
+        #####################################
+        fig2, ax = plt.subplots(1, 1, figsize=(10, 4), sharex=True)
+        ax.plot(time, acc_norm, label = 'norm from GSD2')
+        ax.plot(time, norm_acc, label = 'norm from GSD3')
+        ax.set_ylabel("acc norm")
+        ax.set_xlabel("Time(s)")
+        ax.legend()
+
+        fig2.tight_layout()
+        fig2.show()
+
+        activity_counts_3 = ActivityCounts().calculate(data=norm_acc.copy(),
+                                                     sampling_rate=self.sampling_rate_hz).activity_counts_
+        activity_counts_2 = ActivityCounts().calculate(data=acc_norm.copy(),
+                                                     sampling_rate=self.sampling_rate_hz).activity_counts_
+        
+        fig3, ax = plt.subplots(1, 1, figsize=(10, 4), sharex=True)
+        ax.plot(time_sec, activity_counts_2, label = 'Activity from GSD2')
+        ax.plot(time_sec, activity_counts_3, label = 'Activity from GSD3')
+        ax.set_ylabel("Activity count")
+        ax.set_xlabel("Time(s)")
+        ax.legend()
+
+        fig3.tight_layout()
+        fig3.show()
+
+
+
+        '''
+        ideas: 
+        - using a lowpass filter with cutoff of 0.25Hz was assumed to approximate the graity contribution from Hickey
+        - the output of that lowpass is the gravity, so the output of the highpass is the dynamic motion? 
+        '''
+
+        return self
+    
     
     def get_activity(self, data, *, sampling_rate_hz: float = 100):
         self.sampling_rate_hz = sampling_rate_hz
@@ -244,7 +358,38 @@ class KheirkhahanGSD:
 
         activity_counts = ActivityCounts().calculate(data=norm_acc.copy(),
                                                      sampling_rate=self.sampling_rate_hz).activity_counts_
-        return activity_counts
+
+        if len(activity_counts) < self.win_size_s:
+            raise ValueError(
+                'The provided data stream is too short. It must be at least {}s long'.format(self.win_size_s))
+
+        # Creates overlapping windows of activity counts data (activity counts are expressed in seconds)
+        windows = window(activity_counts, self.win_size_s, self.win_shift_s, copy=True)
+        # for 265 1s bin, windows are of size (257, 9) (265-9+1)
+
+
+        # Outlier removal only when window size is 5 or higher otherwise this method might remove regular values
+        if self.win_size_s > 4:
+            # Removes outliers from the windows, the limits are configurable
+            filtered_activity_counts = remove_outliers(windows.copy(), lower_percentile=self.lower_percentile, upper_percentile=self.upper_percentile)
+        else:
+            filtered_activity_counts = windows.copy()
+
+        # Calculates the ratio of inactive data in each window
+        inactivity_parameter = calc_activity_parameter(filtered_activity_counts)
+        # print()
+        # # print("inactivity_parameter is", inactivity_parameter)
+        # print("len inactivity_parameter of", len(inactivity_parameter))
+        # print()
+
+        # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
+        walking_windows = np.zeros(len(windows))
+        walking_windows[inactivity_parameter < self.threshold] = 1
+        detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
+        detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)) #.astype(bool)
+
+        
+        return activity_counts, walking_windows
     
     def get_std_norm(self, data, *, sampling_rate_hz: float = 100):
         self.sampling_rate_hz = sampling_rate_hz
@@ -292,3 +437,5 @@ class KheirkhahanGSD:
             else:
                 std_acc[i] = 0
         return std_acc
+
+    

@@ -15,12 +15,12 @@ import matplotlib.ticker as mticker
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\Walking_walker_Hendrik"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub2"
 file_name = "s1_1RW.txt" #"s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for 9s window 
-PLOT = True
+PLOT = False
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -36,7 +36,7 @@ def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
             rows = list(reader)
 
         # clip the first 10 seconds depending on the data path 
-        rows = rows if "mixed" in DATA_PATH else rows[500:]
+        rows = rows if ("mixed" or "clinic") in DATA_PATH else rows[500:]
         if DEBUG == True:
             print("Data taken fully.") if "mixed" in DATA_PATH else print("First 10s are clipped.")
 
@@ -101,19 +101,24 @@ def run_gsd_on_segment(grp) :
         print(f"{len(acc_cols)} columns found instead.")
     # rename the columns and run the gsd on them
     seg_imu = grp[acc_cols].copy().astype(float) 
-    seg_imu.columns = ['acc_pa', 'acc_ml', 'acc_is']
+    seg_imu.columns = ['acc_is', 'acc_ml', 'acc_pa']
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
     gsd = KheirkhahanGSD()
     seg_imu = pd.DataFrame(seg_imu)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
-    activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    activity_counts, walking_windows = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+
+    if plot_results == True:
+        gsd.filters(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+
     std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
-    return bout_result, activity_counts, grp_start_idx, std_norm
+    return bout_result, activity_counts, grp_start_idx, std_norm, walking_windows
 
 def plot_results(df: pd.DataFrame, activity_counts_timeline, 
-                 std_norm_timeline, y_pred, y_true, title,
+                 std_norm_timeline, walking_timeline,
+                 y_pred, y_true, title,
                  threshold: float = None):
     # Parse timestamps from df into timedeltas
     time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
@@ -130,6 +135,12 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     for sec_idx, val in std_norm_timeline.items():
         if sec_idx < total_seconds:
             std_plot[sec_idx] = val
+    
+    walking_plot = np.full(total_seconds, np.nan)
+    for sec_idx, val in walking_timeline.items():
+        if sec_idx < total_seconds:
+            walking_plot[sec_idx] = val
+
     all_segment_first_rows = df.groupby('segment').nth(0).index
     all_segment_last_rows = df.groupby('segment').nth(-1).index
     jump_row_indices = all_segment_first_rows[1:]
@@ -138,7 +149,7 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
 
     time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
     
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(13, 9), sharex=True)
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(13, 9), sharex=True)
 
     # ── figure 1: raw data ────────────────────────────────────────────────────
     ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
@@ -171,39 +182,54 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     ax2.set_xlabel('Time')
     ax2.set_ylabel('Activity count')
     ax2.legend(loc='upper left')
-
-    # ── figure 3: std norm ───────────────────────────────────────────────
+    # ── figure 2: activity counts ───────────────────────────────────────────────
     ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', label='Ground truth (walking)')
-    ax3.plot(time_per_second_sec, std_plot, label='std norm', alpha=0.8, 
+                    alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
+                    label='Ground truth (walking)')
+    ax3.plot(time_per_second_sec, walking_plot, label='walking windows', 
             linewidth=1, color='steelblue')
+
     for i, jt in enumerate(jump_times_sec):
         ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
                     label='Time gap' if i == 0 else None)
-    ax3.axhline(y=threshold, color='red', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='threshold')
-    ax3.set_ylim(-0.1, np.nanmax(std_plot)+0.1)
+
     ax3.set_xlabel('Time')
-    ax3.set_ylabel('Std of the norm')
+    ax3.set_ylabel('walking windows from activity')
     ax3.legend(loc='upper left')
 
-    # ── figure 4: y_pred and y_true ──────────────────────────────────────────────
+
+    # ── figure 3: std norm ───────────────────────────────────────────────
     ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', label='Ground truth (walking)')
-    ax4.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+    ax4.plot(time_per_second_sec, std_plot, label='std norm', alpha=0.8, 
             linewidth=1, color='steelblue')
-
     for i, jt in enumerate(jump_times_sec):
         ax4.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
                     label='Time gap' if i == 0 else None)
-
-    ax4.set_ylabel('Walking (1) / Not (0)')
+    ax4.axhline(y=threshold, color='red', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='threshold')
+    ax4.set_ylim(-0.1, np.nanmax(std_plot)+0.1)
+    ax4.set_xlabel('Time')
+    ax4.set_ylabel('Std of the norm')
     ax4.legend(loc='upper left')
-    ax4.set_ylim(-0.1, 1.4)
+
+    # ── figure 4: y_pred and y_true ──────────────────────────────────────────────
+    ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', label='Ground truth (walking)')
+    ax5.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax5.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax5.set_ylabel('Walking (1) / Not (0)')
+    ax5.legend(loc='upper left')
+    ax5.set_ylim(-0.1, 1.4)
     
 
     # Format x-axis as HH:MM:SS
-    ax4.xaxis.set_major_formatter(mticker.FuncFormatter(
+    ax5.xaxis.set_major_formatter(mticker.FuncFormatter(
         lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
     ))
     fig.autofmt_xdate()
@@ -224,20 +250,20 @@ if __name__ == "__main__":
         df = load_segmented(DATA_PATH, file_name)
 
         # 2. Identify and Rename Columns to Anatomical Labels
-        # The package requires: acc_pa, acc_ml, acc_is
+        # The package requires: 'acc_is', 'acc_ml', 'acc_pa'
         acc_cols = [c for c in df.columns if 'acc' in c]
         if len(acc_cols) < 3:
             print("Incorrect number of columns.")
             print(f"{len(acc_cols)} columns found instead.")
-        df[['acc_pa', 'acc_ml', 'acc_is']] = df[acc_cols[:3]].copy().astype(float) * 9.8
+        df[['acc_is', 'acc_ml', 'acc_pa']] = df[acc_cols[:3]].copy().astype(float) * 9.8
         # 3. Ground Truth
-        if 'test' in DATA_PATH:
+        if 'test' in DATA_PATH or 'clinic' in DATA_PATH:
             y_true = df['Label'].astype(int).to_numpy()
         else:
             y_true = np.ones(len(df))
         df['y_true'] = y_true
         col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff', 
-                 'acc_pa', 'acc_ml', 'acc_is', 
+                 'acc_is', 'acc_ml', 'acc_pa', 
                  'segment', 'y_true']
         df = df[col_order]
 
@@ -249,6 +275,7 @@ if __name__ == "__main__":
         y_pred = np.zeros(len(df))
         activity_counts_timeline = {}
         std_norm_timeline = {}
+        walking_timeline = {}
         skipped_seg = 0
         for segment, grp in df.groupby('segment', sort=True):
             # global_start_idx = grp.index[0]  # offset into the full df
@@ -261,16 +288,17 @@ if __name__ == "__main__":
                 skipped_seg += 1
                 continue
 
-            bout_result, activity_counts, global_start_idx, std_norm = run_gsd_on_segment(grp)
+            bout_result, activity_counts, global_start_idx, std_norm, walking_windows = run_gsd_on_segment(grp)
             # print("global_start_idx", global_start_idx)
             global_start_sec = global_start_idx // SAMPLING_RATE
             for i, val in enumerate(activity_counts):
                 activity_counts_timeline[global_start_sec + i] = val
-            # print("std_norm", std_norm)
-            # print("act len", len(activity_counts))
-            # print("is act and std_norm?", (len(activity_counts)==len(std_norm)))
+            
             for i, val in enumerate(std_norm):
                 std_norm_timeline[global_start_sec + i] = val
+            
+            for i, val in enumerate(walking_windows):
+                walking_timeline[global_start_sec + i] = val
 
             if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
                 for _, bout_row in bout_result.gs_list_.iterrows():
@@ -290,7 +318,8 @@ if __name__ == "__main__":
                 print("No walking bouts detected!")
         
         if PLOT == True: 
-            plot_results(df, activity_counts_timeline, std_norm_timeline, y_pred, y_true, file_name, threshold=0.1)
+            plot_results(df, activity_counts_timeline, std_norm_timeline, walking_timeline,
+                         y_pred, y_true, file_name, threshold=0.1)
 
 
         if DEBUG == True:

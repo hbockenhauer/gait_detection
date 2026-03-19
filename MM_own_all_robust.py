@@ -17,16 +17,18 @@ from free_living_test import merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
     r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
-    r"C:\Users\orlov\intern\gait_detection\Free_living"
+    # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
 GAIT_CLASSES = {'walking', 'stairs'}
-CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'limp', 'armfixed', 'stroke']
+CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
+                      'cane', 'limp', 'armfixed', 'stroke', 
+                      'sub1', 'sub2','sub3']
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
 
 DEBUG = False
@@ -115,12 +117,12 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     and return (rw_merged, lw_merged).
 
     Each returned DataFrame has columns:
-        subject | condition | y_true | acc_pa | acc_ml | acc_is
+        subject | condition | y_true | acc_is | acc_ml | acc_pa
     """
     rw_chunks: list[pd.DataFrame] = []
     lw_chunks: list[pd.DataFrame] = []
 
-    acc_col = ['acc_pa', 'acc_ml', 'acc_is']
+    acc_col = ['acc_is', 'acc_ml', 'acc_pa']
 
     if PRINT_STATS == True:
         print(f"Scanning: {data_path}\n")
@@ -192,7 +194,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         print("-" * 80)
 
     col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff', 
-                 'acc_pa', 'acc_ml', 'acc_is', 
+                 'acc_is', 'acc_ml', 'acc_pa', 
                  'segment', 'y_true', 'condition', 'subject']
 
     rw_merged = (pd.concat(rw_chunks, ignore_index=True)[col_order]
@@ -217,13 +219,13 @@ def run_gsd_on_segment(grp) :
         print(f"{len(acc_cols)} columns found instead.")
     # rename the columns and run the gsd on them
     seg_imu = grp[acc_cols].copy().astype(float) 
-    seg_imu.columns = ['acc_pa', 'acc_ml', 'acc_is']
+    seg_imu.columns = ['acc_is', 'acc_ml', 'acc_pa']
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
     
     gsd = KheirkhahanGSD()
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
-    activity_counts = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    activity_counts, _ = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
     return bout_result, activity_counts, std_norm, grp_start_idx
