@@ -65,7 +65,7 @@ class KheirkhahanGSD:
         self.threshold = 0.62
         self.cwb = cwb
         # self.visual = visual
-
+    '''
     def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
                                title: str = "3-Axis Acceleration", 
                                xaxis: str = None,
@@ -120,7 +120,7 @@ class KheirkhahanGSD:
         fig.tight_layout()
         fig.show()
         return fig
-
+    '''
     def detect(self, data, *, sampling_rate_hz: float = 100) -> Self:
         """
         Detect gait sequences in wrist-worn accelerometer data.
@@ -256,7 +256,7 @@ class KheirkhahanGSD:
         ###############
 
         # from gsd2 
-        cutoff = 0.25
+        cutoff = 1.75
         # class instance
         filter_chain = [("butter", ButterworthFilter(order=1, cutoff_freq_hz=cutoff, filter_type='lowpass'))]
 
@@ -306,7 +306,7 @@ class KheirkhahanGSD:
         fig1.tight_layout()
         fig1.show()
 
-        #####################################
+        ######################################
         fig2, ax = plt.subplots(1, 1, figsize=(10, 4), sharex=True)
         ax.plot(time, acc_norm, label = 'norm from GSD2')
         ax.plot(time, norm_acc, label = 'norm from GSD3')
@@ -317,6 +317,7 @@ class KheirkhahanGSD:
         fig2.tight_layout()
         fig2.show()
 
+        #######################################
         activity_counts_3 = ActivityCounts().calculate(data=norm_acc.copy(),
                                                      sampling_rate=self.sampling_rate_hz).activity_counts_
         activity_counts_2 = ActivityCounts().calculate(data=acc_norm.copy(),

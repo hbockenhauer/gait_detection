@@ -15,12 +15,12 @@ import matplotlib.ticker as mticker
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub2"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub3"
 file_name = "s1_1RW.txt" #"s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for 9s window 
-PLOT = False
+PLOT = True
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -109,7 +109,7 @@ def run_gsd_on_segment(grp) :
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts, walking_windows = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
-    if plot_results == True:
+    if PLOT == True:
         gsd.filters(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
     std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
@@ -149,7 +149,7 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
 
     time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
     
-    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(13, 9), sharex=True)
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(10, 8), sharex=True)
 
     # ── figure 1: raw data ────────────────────────────────────────────────────
     ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
@@ -257,7 +257,7 @@ if __name__ == "__main__":
             print(f"{len(acc_cols)} columns found instead.")
         df[['acc_is', 'acc_ml', 'acc_pa']] = df[acc_cols[:3]].copy().astype(float) * 9.8
         # 3. Ground Truth
-        if 'test' in DATA_PATH or 'clinic' in DATA_PATH:
+        if 'mixed' in DATA_PATH or 'clinic' in DATA_PATH:
             y_true = df['Label'].astype(int).to_numpy()
         else:
             y_true = np.ones(len(df))

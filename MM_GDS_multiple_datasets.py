@@ -9,7 +9,7 @@ from GSD2a import HickeyGSD
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 dataset = "WearGait"
-group = "healthy"
+group = "PD"
 
 match dataset:
     case "WearGait":
