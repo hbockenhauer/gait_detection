@@ -67,7 +67,54 @@ def main():
     plot_ROC_PR.plot_roc_curves(all_results, OUTPUT_PLOTS_DIR)
     plot_ROC_PR.plot_pr_curves(all_results, OUTPUT_PLOTS_DIR)
 
-    # Save per-subject results
+    # Save per-dataset results
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    
+    # WISDM
+    if wisdm_results:
+        wisdm_rows = [{
+            'subject': r['subject'], 'dataset': 'WISDM',
+            'precision': r['precision'], 'recall': r['recall'],
+            'f1': r['f1'], 'accuracy': r['accuracy']
+        } for r in wisdm_results]
+        wisdm_csv = os.path.join(RESULTS_DIR, 'strokenet_WISDM_subject_metrics.csv')
+        pd.DataFrame(wisdm_rows).to_csv(wisdm_csv, index=False)
+        print(f"Saved WISDM results: {wisdm_csv}")
+    
+    # WearGait
+    if weargait_results:
+        weargait_rows = [{
+            'subject': r['subject'], 'wrist': r.get('wrist', 'N/A'), 'dataset': 'WearGait',
+            'precision': r['precision'], 'recall': r['recall'],
+            'f1': r['f1'], 'accuracy': r['accuracy']
+        } for r in weargait_results]
+        weargait_csv = os.path.join(RESULTS_DIR, 'strokenet_WearGait_subject_metrics.csv')
+        pd.DataFrame(weargait_rows).to_csv(weargait_csv, index=False)
+        print(f"Saved WearGait results: {weargait_csv}")
+    
+    # HMP
+    if hmp_results:
+        hmp_rows = [{
+            'subject': r['subject'], 'dataset': 'HMP',
+            'precision': r['precision'], 'recall': r['recall'],
+            'f1': r['f1'], 'accuracy': r['accuracy']
+        } for r in hmp_results]
+        hmp_csv = os.path.join(RESULTS_DIR, 'strokenet_HMP_subject_metrics.csv')
+        pd.DataFrame(hmp_rows).to_csv(hmp_csv, index=False)
+        print(f"Saved HMP results: {hmp_csv}")
+    
+    # BIOCLITE
+    if bioclite_results:
+        bioclite_rows = [{
+            'subject': r['subject'], 'dataset': 'BIOCLITE',
+            'precision': r['precision'], 'recall': r['recall'],
+            'f1': r['f1'], 'accuracy': r['accuracy']
+        } for r in bioclite_results]
+        bioclite_csv = os.path.join(RESULTS_DIR, 'strokenet_BIOCLITE_subject_metrics.csv')
+        pd.DataFrame(bioclite_rows).to_csv(bioclite_csv, index=False)
+        print(f"Saved BIOCLITE results: {bioclite_csv}")
+
+    # Aggregated results for all datasets
     all_rows = []
     for r in all_results:
         all_rows.append({
@@ -90,13 +137,12 @@ def main():
         {'dataset': FREE_LIVING_DATASET_NAME, **free_global},
     ]
 
-    os.makedirs(RESULTS_DIR, exist_ok=True)
     per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
     global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
     pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
     pd.DataFrame(global_rows).to_csv(global_csv, index=False)
-    print(f"\nSaved per-subject results : {per_subject_csv}")
-    print(f"Saved global summary      : {global_csv}")
+    print(f"\nSaved aggregated per-subject results: {per_subject_csv}")
+    print(f"Saved aggregated global summary: {global_csv}")
 
 
 if __name__ == '__main__':

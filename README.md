@@ -22,6 +22,7 @@ gait_detection/
 ├── Datasets/                  # All training and evaluation data
 │   ├── HMP_Dataset/          # Fall detection dataset (32Hz)
 │   ├── QSense_data/          # Self-recorded data (50Hz)
+│   ├── QSense_data_clinic/   # Data recorded on stroke patients (50 Hz)
 │   ├── QSense_data_edge/     # Self-recorded edge cases (50 Hz)
 │   ├── QSense_data_mixed/    # Self-recorded mixed activity (50 Hz)
 │   ├── WearGait/             # Parkinson's and age-matched control patients (100 Hz)

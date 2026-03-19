@@ -1,4 +1,4 @@
- %% --- MStra RT Cross-Dataset Evaluation ---
+%% --- MStra RT Cross-Dataset Evaluation ---
 % Runs the real-time MStra method across multiple datasets and saves plots to:
 % outputs/plots/<dataset>/SigPro/
 
@@ -40,20 +40,29 @@ fprintf('\nSaved per-record results to: %s\n', resultsCsv);
 
 summaryTbl = compute_group_summary(allResults, {'Dataset'});
 subjectTbl = compute_group_summary(allResults, {'Dataset', 'Subject'});
+activityTbl = compute_dataset_activity_summary(allResults);
 
 summaryCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_summary.csv');
 subjectCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_by_subject.csv');
+activityCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_by_activity.csv');
 writetable(summaryTbl, summaryCsv);
 writetable(subjectTbl, subjectCsv);
+if ~isempty(activityTbl)
+    writetable(activityTbl, activityCsv);
+end
 
 fprintf('Saved dataset summary to: %s\n', summaryCsv);
 fprintf('Saved subject summary to: %s\n', subjectCsv);
-
-plot_dataset_roc_pr_curves(allResults, outputsRoot);
-fprintf('Saved ROC/PR curves to per-dataset SigPro folders.\n');
+if ~isempty(activityTbl)
+    fprintf('Saved per-activity summary to: %s\n', activityCsv);
+end
 
 fprintf('\n================ Dataset Summary ================\n');
 disp(summaryTbl(:, {'Dataset', 'Accuracy', 'Precision', 'Recall', 'F1', 'EvaluatedSamples'}));
+if ~isempty(activityTbl)
+    fprintf('\n================ By Activity (Per Dataset) ================\n');
+    disp(activityTbl(:, {'Dataset', 'Activity', 'Accuracy', 'Precision', 'Recall', 'F1', 'EvaluatedSamples'}));
+end
 
 
 %% ============================ DATASET EVALUATORS ============================
@@ -418,21 +427,19 @@ function row = run_record_and_plot(rec, datasetName, subject, wrist, fs, params,
     end
 
     vm = sqrt(rec.acc(:,1).^2 + rec.acc(:,2).^2 + rec.acc(:,3).^2);
-    [yPred, yScore, sampleValid, rt] = run_rt_sequence(vm, rec.time, fs, params);
+    [yPred, sampleValid, rt] = run_rt_sequence(vm, rec.time, fs, params);
 
     yTrue = rec.y_true(:);
     yPred = yPred(:);
-    yScore = yScore(:);
     sampleValid = sampleValid(:);
 
-    nMin = min([numel(yTrue), numel(yPred), numel(yScore), numel(sampleValid), numel(rec.time)]);
+    nMin = min([numel(yTrue), numel(yPred), numel(sampleValid), numel(rec.time)]);
     if nMin < max(10, round(2 * fs))
         return;
     end
 
     yTrue = yTrue(1:nMin);
     yPred = yPred(1:nMin);
-    yScore = yScore(1:nMin);
     sampleValid = sampleValid(1:nMin);
     t = rec.time(1:nMin);
 
@@ -440,26 +447,27 @@ function row = run_record_and_plot(rec, datasetName, subject, wrist, fs, params,
     if evalCount == 0
         return;
     end
-
     plotFile = save_rt_debug_plot(plotPath, datasetName, subject, wrist, t, yTrue, yPred, sampleValid, rt, params, acc, prec, recMetric, f1, plotMeta);
     stepCount = sum(diff([0; yPred == 1]) == 1);
-    evalIdx = sampleValid & isfinite(yTrue) & isfinite(yScore);
+    evalIdx = sampleValid & isfinite(yTrue);
     yTrueEval = double(yTrue(evalIdx));
-    yScoreEval = double(yScore(evalIdx));
+    yPredEval = double(yPred(evalIdx));
+    yActivityEval = infer_activity_series(rec, plotMeta, t, evalIdx);
+    dominantActivity = dominant_activity_label(yActivityEval);
 
-    row = table({datasetName}, {subject}, {wrist}, acc, prec, recMetric, f1, tp, tn, fp, fn, ...
-        nMin, evalCount, stepCount, {plotFile}, {yTrueEval}, {yScoreEval}, ...
-        'VariableNames', {'Dataset','Subject','Wrist','Accuracy','Precision','Recall','F1', ...
-                          'TP','TN','FP','FN','NumSamples','EvaluatedSamples','Steps','PlotFile','YTrueEval','YScoreEval'});
+    row = table({datasetName}, {subject}, {dominantActivity}, {wrist}, acc, prec, recMetric, f1, tp, tn, fp, fn, ...
+        nMin, evalCount, stepCount, {plotFile}, {yTrueEval}, {yPredEval}, {yActivityEval}, ...
+        'VariableNames', {'Dataset','Subject','Activity','Wrist','Accuracy','Precision','Recall','F1', ...
+                          'TP','TN','FP','FN','NumSamples','EvaluatedSamples','Steps','PlotFile', ...
+                          'YTrueEval','YPredEval','YActivityEval'});
 
     fprintf('  %-12s %-12s | Acc=%.3f Prec=%.3f Rec=%.3f F1=%.3f\n', datasetName, [subject '_' wrist], acc, prec, recMetric, f1);
 end
 
 
-function [yPred, yScore, sampleValid, rt] = run_rt_sequence(vm, timeVec, fs, params)
+function [yPred, sampleValid, rt] = run_rt_sequence(vm, timeVec, fs, params)
     n = numel(vm);
     yPred = zeros(n, 1);
-    yScore = zeros(n, 1);
 
     windowSize = max(4, round(2 * fs));
     stepSize = max(1, round(1 * fs));
@@ -491,11 +499,9 @@ function [yPred, yScore, sampleValid, rt] = run_rt_sequence(vm, timeVec, fs, par
             [isGait, newState, m] = run_mstra_rt(circularBuffer, fs, params.F_MIN, params.F_MAX, ...
                 params.P_MIN, params.P_MAX, params.A_MIN, params.A_MAX, detectionState);
             detectionState = newState;
-            confScore = compute_confidence_score(m, params);
 
             i1 = max(1, s - stepSize + 1);
             yPred(i1:s) = double(isGait);
-            yScore(i1:s) = confScore;
 
             rt.t(end+1,1) = timeVec(s);
             rt.peakF(end+1,1) = m.peakF;
@@ -637,67 +643,18 @@ function outFile = save_rt_debug_plot(plotPath, datasetName, subject, wrist, t, 
 end
 
 
-function params = get_rt_params(datasetName, fs)
+function params = get_rt_params(~, fs)
     params = struct();
-    params.F_MIN = 0.5;
-    params.F_MAX = 3.5;
-    params.P_MIN = 3.0;
-    params.P_MAX = inf;
-    params.A_MIN = 0.05;
-    params.A_MAX = inf;
-
-    d = lower(datasetName);
-    if contains(d, 'freeliving') || contains(d, 'free_living')
-        params.F_MIN = 0.96248;
-        params.F_MAX = 5.4359;
-        params.P_MIN = 0.78589;
-        params.P_MAX = 260.11;
-        params.A_MIN = 0.035257;
-        params.A_MAX = 0.12653;
-    end
+    params.F_MIN = 0.064251;
+    params.F_MAX = 5.7097;
+    params.P_MIN = 2.1705; 
+    params.P_MAX = 239.53;
+    params.A_MIN = 0.0051737; 
+    params.A_MAX = 1.0833;
 
     % Keep frequency upper bound below Nyquist when low sample-rate files are found.
     nyq = fs / 2;
     params.F_MAX = min(params.F_MAX, max(params.F_MIN + 0.1, nyq - 0.05));
-end
-
-
-function score = compute_confidence_score(metrics, params)
-    sFreq = bounded_score(metrics.peakF, params.F_MIN, params.F_MAX);
-    sPower = bounded_score(metrics.maxPk, params.P_MIN, params.P_MAX);
-    sAmp = bounded_score(metrics.ampVal, params.A_MIN, params.A_MAX);
-    score = max(0, min(1, (sFreq + sPower + sAmp) / 3));
-end
-
-
-function s = bounded_score(x, lo, hi)
-    x = double(x);
-    lo = double(lo);
-    hi = double(hi);
-
-    if ~isfinite(x)
-        s = 0;
-        return;
-    end
-
-    if isfinite(hi)
-        if x >= lo && x <= hi
-            s = 1;
-        elseif x < lo
-            span = max(lo, 1e-6);
-            s = max(0, 1 - (lo - x) / span);
-        else
-            span = max(hi, 1e-6);
-            s = max(0, 1 - (x - hi) / span);
-        end
-    else
-        if x >= lo
-            scale = max(lo, 1e-6);
-            s = min(1, 0.5 + 0.5 * (1 - exp(-(x - lo) / scale)));
-        else
-            s = max(0, x / max(lo, 1e-6));
-        end
-    end
 end
 
 
@@ -762,7 +719,9 @@ function rec = load_qsense_record(filePath, folderName)
         y(:) = double(gaitFolder);
     end
 
-    rec = struct('time', t(:), 'acc', acc, 'y_true', y(:));
+    folderParts = split(string(folderName), '_');
+    folderActivity = char(folderParts(1));
+    rec = struct('time', t(:), 'acc', acc, 'y_true', y(:), 'activity', folderActivity);
 end
 
 
@@ -772,6 +731,11 @@ function rec = make_weargait_record(sideStruct, subject, wrist)
     z = sideStruct.acc_z(:);
     t = sideStruct.time(:);
     labels = lower(string(sideStruct.labels(:)));
+
+    % Normalize m/s^2 to g
+    x = x / 9.81;
+    y = y / 9.81;
+    z = z / 9.81;
 
     yTrue = contains(labels, {'walk', 'jog', 'run', 'stair', 'climb', 'freewalk', 'gait'});
     valid = isfinite(x) & isfinite(y) & isfinite(z) & isfinite(t);
@@ -797,6 +761,11 @@ function rec = load_wisdm_record(filePath)
     x = T.Acc_X;
     y = T.Acc_Y;
     tt = (T.Time - T.Time(1)) / 1e9;
+
+    % Normalize m/s^2 to g
+    x = x / 9.81;
+    y = y / 9.81;
+    z = z / 9.81;
 
     valid = isfinite(x) & isfinite(y) & isfinite(z) & isfinite(tt);
     acts = string(T.Activity(valid));
@@ -954,7 +923,8 @@ function rec = load_freeliving_record(filePath)
     yTrue = double(yTrue > 0);
 
     valid = isfinite(ax) & isfinite(ay) & isfinite(az) & isfinite(t);
-    rec = struct('time', t(valid), 'acc', [ax(valid), ay(valid), az(valid)], 'y_true', yTrue(valid));
+    rec = struct('time', t(valid), 'acc', [ax(valid), ay(valid), az(valid)], ...
+        'y_true', yTrue(valid), 'activity', 'Free_living');
 end
 
 
@@ -967,6 +937,9 @@ function rec = load_bioclite_trial(trial)
     acc = double(trial(:, 2:4));
     participant = double(trial(1, 8));
     labels = double(trial(:, 9));
+
+    % Normalize m/s^2 to g
+    acc = acc / 9.81;
 
     t = (tsMs - tsMs(1)) / 1000.0;
     yTrue = double(labels == 6);
@@ -1144,6 +1117,193 @@ function [subjectId, ts] = extract_hmp_subject_id_and_timestamp(filename)
 end
 
 
+function yActivityEval = infer_activity_series(rec, plotMeta, tVec, evalIdx)
+    n = numel(tVec);
+    activities = repmat({'Unknown'}, n, 1);
+
+    if ~isempty(plotMeta) && isfield(plotMeta, 'activityStarts') && isfield(plotMeta, 'activityLabels')
+        starts = plotMeta.activityStarts(:);
+        labels = plotMeta.activityLabels;
+        if ~iscell(labels)
+            labels = cellstr(string(labels));
+        end
+
+        for i = 1:numel(starts)
+            iStart = find(tVec >= starts(i), 1, 'first');
+            if isempty(iStart)
+                continue;
+            end
+            if i < numel(starts)
+                iEnd = find(tVec < starts(i + 1), 1, 'last');
+                if isempty(iEnd)
+                    iEnd = n;
+                end
+            else
+                iEnd = n;
+            end
+            label = 'Unknown';
+            if i <= numel(labels)
+                label = strtrim(char(string(labels{i})));
+                if isempty(label)
+                    label = 'Unknown';
+                end
+            end
+            activities(iStart:iEnd) = {label};
+        end
+    elseif isfield(rec, 'activities') && ~isempty(rec.activities)
+        src = rec.activities;
+        if ~iscell(src)
+            src = cellstr(string(src));
+        end
+        m = min(numel(src), n);
+        for i = 1:m
+            label = strtrim(char(string(src{i})));
+            if isempty(label)
+                label = 'Unknown';
+            end
+            activities{i} = label;
+        end
+    elseif isfield(rec, 'activity') && ~isempty(rec.activity)
+        label = strtrim(char(string(rec.activity)));
+        if isempty(label)
+            label = 'Unknown';
+        end
+        activities(:) = {label};
+    end
+
+    yActivityEval = activities(evalIdx);
+    if isempty(yActivityEval)
+        yActivityEval = {'Unknown'};
+    end
+end
+
+
+function activity = dominant_activity_label(yActivityEval)
+    if isempty(yActivityEval)
+        activity = 'Unknown';
+        return;
+    end
+
+    labels = string(yActivityEval(:));
+    labels = strtrim(labels);
+    labels(labels == "") = "Unknown";
+    [u, ~, ic] = unique(labels, 'stable');
+    counts = accumarray(ic, 1);
+    [~, idx] = max(counts);
+    activity = char(u(idx));
+end
+
+
+function activityTbl = compute_dataset_activity_summary(T)
+    activityTbl = table();
+    if isempty(T)
+        return;
+    end
+    if ~ismember('YActivityEval', T.Properties.VariableNames)
+        return;
+    end
+
+    keyMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+    for i = 1:height(T)
+        ds = char(string(T.Dataset{i}));
+        yt = double(T.YTrueEval{i}(:));
+        yp = double(T.YPredEval{i}(:));
+        acts = T.YActivityEval{i};
+
+        if isempty(yt) || isempty(yp)
+            continue;
+        end
+
+        n = min(numel(yt), numel(yp));
+        yt = yt(1:n);
+        yp = yp(1:n);
+
+        if isempty(acts)
+            acts = repmat({'Unknown'}, n, 1);
+        elseif ~iscell(acts)
+            acts = cellstr(string(acts));
+        end
+
+        if numel(acts) < n
+            acts = [acts(:); repmat({'Unknown'}, n - numel(acts), 1)];
+        else
+            acts = acts(1:n);
+        end
+
+        acts = cellfun(@(a) normalize_activity_label(a), acts, 'UniformOutput', false);
+        uniqueActs = unique(acts, 'stable');
+
+        for a = 1:numel(uniqueActs)
+            act = uniqueActs{a};
+            mask = strcmp(acts, act);
+            if ~any(mask)
+                continue;
+            end
+
+            tp = sum(yt(mask) == 1 & yp(mask) == 1);
+            tn = sum(yt(mask) == 0 & yp(mask) == 0);
+            fp = sum(yt(mask) == 0 & yp(mask) == 1);
+            fn = sum(yt(mask) == 1 & yp(mask) == 0);
+            evalCount = sum(mask);
+
+            key = [ds '||' act];
+            if ~isKey(keyMap, key)
+                keyMap(key) = [tp, tn, fp, fn, evalCount];
+            else
+                accVals = keyMap(key);
+                keyMap(key) = accVals + [tp, tn, fp, fn, evalCount];
+            end
+        end
+    end
+
+    keysAll = keyMap.keys;
+    if isempty(keysAll)
+        return;
+    end
+
+    nRows = numel(keysAll);
+    dsCol = strings(nRows, 1);
+    actCol = strings(nRows, 1);
+    tpCol = zeros(nRows, 1);
+    tnCol = zeros(nRows, 1);
+    fpCol = zeros(nRows, 1);
+    fnCol = zeros(nRows, 1);
+    evalCol = zeros(nRows, 1);
+
+    for i = 1:nRows
+        key = keysAll{i};
+        parts = split(string(key), '||');
+        dsCol(i) = parts(1);
+        actCol(i) = parts(2);
+        vals = keyMap(key);
+        tpCol(i) = vals(1);
+        tnCol(i) = vals(2);
+        fpCol(i) = vals(3);
+        fnCol(i) = vals(4);
+        evalCol(i) = vals(5);
+    end
+
+    precision = tpCol ./ max(1, tpCol + fpCol);
+    recall = tpCol ./ max(1, tpCol + fnCol);
+    accuracy = (tpCol + tnCol) ./ max(1, tpCol + tnCol + fpCol + fnCol);
+    f1 = 2 .* (precision .* recall) ./ max(1e-9, precision + recall);
+
+    activityTbl = table(cellstr(dsCol), cellstr(actCol), accuracy, precision, recall, f1, evalCol, tpCol, tnCol, fpCol, fnCol, ...
+        'VariableNames', {'Dataset', 'Activity', 'Accuracy', 'Precision', 'Recall', 'F1', ...
+                          'EvaluatedSamples', 'TP', 'TN', 'FP', 'FN'});
+    activityTbl = sortrows(activityTbl, {'Dataset', 'Activity'});
+end
+
+
+function out = normalize_activity_label(in)
+    out = strtrim(char(string(in)));
+    if isempty(out)
+        out = 'Unknown';
+    end
+end
+
+
 function summaryTbl = compute_group_summary(T, groupVars)
     G = groupsummary(T, groupVars, 'sum', {'TP', 'TN', 'FP', 'FN', 'EvaluatedSamples'});
 
@@ -1163,117 +1323,6 @@ function summaryTbl = compute_group_summary(T, groupVars)
     summaryTbl.Recall = recall;
     summaryTbl.F1 = f1;
     summaryTbl.EvaluatedSamples = G.sum_EvaluatedSamples;
-end
-
-
-function plot_dataset_roc_pr_curves(T, outputsRoot)
-    if isempty(T)
-        return;
-    end
-
-    rocDir = fullfile(outputsRoot, 'plots', 'ROC', 'SigPro');
-    prDir = fullfile(outputsRoot, 'plots', 'PR', 'SigPro');
-    if ~ensure_dir_exists(rocDir, 'ROC')
-        return;
-    end
-    if ~ensure_dir_exists(prDir, 'PR')
-        return;
-    end
-
-    datasetNames = unique(string(T.Dataset), 'stable');
-
-    figRoc = figure('Visible', 'off', 'Color', 'w', 'Position', [60, 60, 700, 580]);
-    axRoc = axes(figRoc);
-    hold(axRoc, 'on');
-    hChance = plot(axRoc, [0 1], [0 1], 'k--', 'LineWidth', 1);
-
-    figPr = figure('Visible', 'off', 'Color', 'w', 'Position', [60, 60, 700, 580]);
-    axPr = axes(figPr);
-    hold(axPr, 'on');
-
-    rocHandles = hChance;
-    rocLabels  = {'Chance'};
-    prHandles  = gobjects(0);
-    prLabels   = {};
-
-    for i = 1:numel(datasetNames)
-        ds = datasetNames(i);
-        mask = string(T.Dataset) == ds;
-
-        yTrue = [];
-        yScore = [];
-        yTrueCells  = T.YTrueEval(mask);
-        yScoreCells = T.YScoreEval(mask);
-        for k = 1:numel(yTrueCells)
-            if isempty(yTrueCells{k}) || isempty(yScoreCells{k}), continue; end
-            yTrue  = [yTrue;  double(yTrueCells{k}(:))];
-            yScore = [yScore; double(yScoreCells{k}(:))];
-        end
-
-        valid  = isfinite(yTrue) & isfinite(yScore);
-        yTrue  = yTrue(valid);
-        yScore = yScore(valid);
-
-        if numel(yTrue) < 2 || numel(unique(yTrue)) < 2
-            fprintf('  Skipping ROC/PR for %s (need both classes present).\n', ds);
-            continue;
-        end
-
-        [fpr, tpr, aucVal, youdenThresh]            = compute_roc_points(yTrue, yScore);
-        [recall, precision, apVal, bestF1Thresh, bestF1Val] = compute_pr_points(yTrue, yScore);
-
-        fprintf('  ROC %-20s AUC=%.3f, best Youden threshold=%.3f\n', ds, aucVal, youdenThresh);
-        fprintf('  PR  %-20s AP=%.3f,  best F1=%.3f at threshold=%.3f\n', ds, apVal, bestF1Val, bestF1Thresh);
-
-        h1 = plot(axRoc, fpr, tpr, 'LineWidth', 2);
-        rocHandles(end+1) = h1; %#ok<AGROW>
-        rocLabels{end+1}  = sprintf('%s (AUC=%.3f)', ds, aucVal); %#ok<AGROW>
-
-        h2 = plot(axPr, recall, precision, 'LineWidth', 2);
-        prHandles(end+1) = h2; %#ok<AGROW>
-        prLabels{end+1}  = sprintf('%s (AP=%.3f)', ds, apVal); %#ok<AGROW>
-    end
-
-    % Finalise ROC subplot.
-    xlabel(axRoc, 'False Positive Rate');
-    ylabel(axRoc, 'True Positive Rate');
-    title(axRoc, 'ROC Curves (MStra RT)');
-    legend(axRoc, rocHandles, rocLabels, 'Location', 'southeast', 'Interpreter', 'none');
-    grid(axRoc, 'on');
-    axis(axRoc, [0 1 0 1]);
-
-    % Finalise PR subplot.
-    xlabel(axPr, 'Recall');
-    ylabel(axPr, 'Precision');
-    title(axPr, 'Precision-Recall Curves (MStra RT)');
-    if ~isempty(prHandles)
-        legend(axPr, prHandles, prLabels, 'Location', 'southwest', 'Interpreter', 'none');
-    end
-    grid(axPr, 'on');
-    axis(axPr, [0 1 0 1]);
-
-    rocFile = fullfile(rocDir, 'all_datasets_ROC.png');
-    prFile = fullfile(prDir, 'all_datasets_PR.png');
-    save_figure_png(figRoc, rocFile, 200);
-    save_figure_png(figPr, prFile, 200);
-    close(figRoc);
-    close(figPr);
-    fprintf('  Saved ROC figure: %s\n', rocFile);
-    fprintf('  Saved PR figure: %s\n', prFile);
-end
-
-
-function ok = ensure_dir_exists(dirPath, tag)
-    ok = true;
-    if exist(dirPath, 'dir')
-        return;
-    end
-
-    [mkOk, mkMsg] = mkdir(dirPath);
-    ok = mkOk;
-    if ~ok
-        fprintf('  [%s] Cannot create output directory "%s": %s\n', tag, dirPath, mkMsg);
-    end
 end
 
 
@@ -1309,76 +1358,6 @@ function save_figure_png(fig, outFile, resolution)
         error('Figure export failed for "%s" with no file created.', outFile);
     end
 end
-
-function [fpr, tpr, aucVal, youdenThresh] = compute_roc_points(yTrue, yScore)
-    [scores, idx] = sort(yScore(:), 'descend');
-    y = yTrue(idx) > 0;
-
-    tp = cumsum(y == 1);
-    fp = cumsum(y == 0);
-    P = sum(y == 1);
-    N = sum(y == 0);
-
-    tprInner = tp / max(P, 1);
-    fprInner = fp / max(N, 1);
-
-    % Best Youden index = TPR - FPR.
-    youden = tprInner - fprInner;
-    [~, bestIdx] = max(youden);
-    if ~isempty(bestIdx)
-        youdenThresh = scores(bestIdx(1));
-    else
-        youdenThresh = NaN;
-    end
-
-    tpr = [0; tprInner; 1];
-    fpr = [0; fprInner; 1];
-
-    [fpr, uniqIdx] = unique(fpr, 'stable');
-    tpr = tpr(uniqIdx);
-    aucVal = trapz(fpr, tpr);
-
-    if isempty(scores)
-        aucVal = 0;
-        youdenThresh = NaN;
-    end
-end
-
-
-function [recall, precision, apVal, bestF1Thresh, bestF1Val] = compute_pr_points(yTrue, yScore)
-    [scores, idx] = sort(yScore(:), 'descend');
-    y = yTrue(idx) > 0;
-
-    tp = cumsum(y == 1);
-    fp = cumsum(y == 0);
-    P = sum(y == 1);
-
-    recallInner = tp / max(P, 1);
-    precInner   = tp ./ max(tp + fp, 1);
-
-    % Best F1 over all thresholds.
-    denom = precInner + recallInner;
-    f1Inner = zeros(size(denom));
-    f1Inner(denom > 0) = 2 * precInner(denom > 0) .* recallInner(denom > 0) ./ denom(denom > 0);
-    [bestF1Val, bestIdx] = max(f1Inner);
-    if ~isempty(bestIdx)
-        bestF1Thresh = scores(bestIdx(1));
-    else
-        bestF1Thresh = NaN;
-        bestF1Val    = 0;
-    end
-
-    recall    = [0; recallInner; 1];
-    precision = [1; precInner;   precInner(end)];
-
-    % Make precision non-increasing (standard interpolation for AP).
-    for i = numel(precision)-1:-1:1
-        precision(i) = max(precision(i), precision(i+1));
-    end
-
-    apVal = trapz(recall, precision);
-end
-
 
 %% --- RT DETECTION FUNCTION (MStra_RT style) ---
 function [finalDecision, newState, metrics] = run_mstra_rt(winData, fs, fMin, fMax, pMin, pMax, aMin, aMax, prevState)

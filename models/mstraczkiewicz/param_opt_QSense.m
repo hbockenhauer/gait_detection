@@ -120,9 +120,9 @@ vars = [
     optimizableVariable('P_MIN', [0.1, 10.0], 'Transform', 'log'), 
     optimizableVariable('P_MAX', [10.0, 500.0], 'Transform', 'log'), 
     
-    % Amplitude (Energy) limits
-    optimizableVariable('A_MIN', [0.01*9.81^3, 0.2*9.81^3]), 
-    optimizableVariable('A_MAX', [0.2*9.81^3, 2.0*9.81^3]) 
+    % Amplitude limits (std over 2-second VM window)
+    optimizableVariable('A_MIN', [0.005, 2.0], 'Transform', 'log'), 
+    optimizableVariable('A_MAX', [0.05, 10.0], 'Transform', 'log') 
 ];
 
 % --- 4. RUN OPTIMIZATION ---
@@ -222,7 +222,6 @@ function dataset = pre_load_qsense_data(filesInfo)
 
             % --- STEP 6: EXTRACT SIGNALS ---
             s.vm     = sqrt(data{:,6}.^2 + data{:,7}.^2 + data{:,8}.^2);
-            s.energy = data{:,13};
 
             % --- STEP 7: EXTRACT LABELS ---
             labelIdx = find(strcmpi(data.Properties.VariableNames, 'Label'), 1);
@@ -241,9 +240,8 @@ function dataset = pre_load_qsense_data(filesInfo)
 
             % --- STEP 8: SANITY CHECK ---
             % Ensure all signals are the same length after cleaning
-            minLen = min([length(s.vm), length(s.energy), length(s.y_true)]);
+            minLen = min([length(s.vm), length(s.y_true)]);
             s.vm     = s.vm(1:minLen);
-            s.energy = s.energy(1:minLen);
             s.y_true = s.y_true(1:minLen);
             s.time_vec = s.time_vec(1:minLen);
 
@@ -289,7 +287,7 @@ function globalF1 = run_eval_iteration(p, dataset, fs)
             buffer = [buffer(2:end); d.vm(s)];
 
             if mod(s, step) == 0 && s >= winSize
-                ampVal = d.energy(s);
+                ampVal = std(buffer);
                 nfft   = 512;
                 w      = hann(winSize);
                 winProc = (buffer - mean(buffer)) .* w;
@@ -410,7 +408,7 @@ function diag = evaluate_single_file(p, d, fs)
         buffer = [buffer(2:end); d.vm(s)];
 
         if mod(s, step) == 0 && s >= winSize
-            ampVal = d.energy(s);
+            ampVal = std(buffer);
             nfft = 512;
             w = hann(winSize);
             winProc = (buffer - mean(buffer)) .* w;

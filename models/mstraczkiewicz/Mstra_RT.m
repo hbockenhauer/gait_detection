@@ -39,14 +39,14 @@ end
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
 qSenseCandidates = {
-    fullfile(projectRoot, 'QSense_data_mixed')
-    fullfile(projectRoot, 'QSense_data_edge')
-    fullfile(projectRoot, 'QSense_data')
-    fullfile(projectRoot, 'QSense_tests')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
-    fullfile(projectRoot, 'Datasets', 'QSense_data')
-    fullfile(projectRoot, 'Datasets', 'Qsense_tests')
+    % fullfile(projectRoot, 'QSense_data_mixed')
+    % fullfile(projectRoot, 'QSense_data_edge')
+    % fullfile(projectRoot, 'QSense_data')
+    fullfile(projectRoot, 'QSense_clinic')
+    % fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
+    % fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
+    % fullfile(projectRoot, 'Datasets', 'QSense_data')
+    fullfile(projectRoot, 'Datasets', 'Qsense_clinic')
 };
 
 dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
@@ -58,14 +58,14 @@ if isempty(dataPaths)
     for r = 1:length(rootCandidates)
         rootCandidate = rootCandidates{r};
         candidatePaths = {
-            fullfile(rootCandidate, 'QSense_data_mixed')
-            fullfile(rootCandidate, 'QSense_data_edge')
-            fullfile(rootCandidate, 'QSense_data')
-            fullfile(rootCandidate, 'QSense_tests')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data')
-            fullfile(rootCandidate, 'Datasets', 'Qsense_tests')
+            % fullfile(rootCandidate, 'QSense_data_mixed')
+            % fullfile(rootCandidate, 'QSense_data_edge')
+            % fullfile(rootCandidate, 'QSense_data')
+            fullfile(rootCandidate, 'QSense_clinic')
+            % fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+            % fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
+            % fullfile(rootCandidate, 'Datasets', 'QSense_data')
+            fullfile(rootCandidate, 'Datasets', 'Qsense_data_clinic')
         };
         existingPaths = candidatePaths(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths));
         if ~isempty(existingPaths)
@@ -123,7 +123,7 @@ for d = 1:length(dataPaths)
     for i = 1:length(subDirs)
         folderName = subDirs(i).name;
         folderPath = fullfile(dataPath, folderName);
-        targetFiles = {'s0_Hub.txt', 'Right'; 's2_2LW.txt', 'Left'};
+        targetFiles = {'s1_1RW.txt', 'Right'; 's2_2LW.txt', 'Left'};
         
         plotData = struct(); 
         for f = 1:size(targetFiles, 1)
@@ -300,16 +300,16 @@ for d = 1:length(dataPaths)
                     end
                 end
 
-                plotData.(sideLabel).T_vec = rt_T;
-                plotData.(sideLabel).peakF = rt_peakF;
-                plotData.(sideLabel).maxPk = rt_maxPk;
-                plotData.(sideLabel).ampVal = rt_ampVal;
-                plotData.(sideLabel).validWindow = rt_validWindow;
-                plotData.(sideLabel).time = time_vec;
-                plotData.(sideLabel).y_pred = y_pred_rt;
-                plotData.(sideLabel).y_true = y_true;
-                plotData.(sideLabel).time_diffs = diff(time_vec);
-                plotData.(sideLabel).time_for_diffs = time_vec(2:end);
+                % plotData.(sideLabel).T_vec = rt_T;
+                % plotData.(sideLabel).peakF = rt_peakF;
+                % plotData.(sideLabel).maxPk = rt_maxPk;
+                % plotData.(sideLabel).ampVal = rt_ampVal;
+                % plotData.(sideLabel).validWindow = rt_validWindow;
+                % plotData.(sideLabel).time = time_vec;
+                % plotData.(sideLabel).y_pred = y_pred_rt;
+                % plotData.(sideLabel).y_true = y_true;
+                % plotData.(sideLabel).time_diffs = diff(time_vec);
+                % plotData.(sideLabel).time_for_diffs = time_vec(2:end);
 
                 % Calculate Metrics
                 % Build per-sample valid mask for metric calculation
@@ -367,114 +367,114 @@ for d = 1:length(dataPaths)
             end
         end
 
-        % --- 4. PAIRED PLOTTING ---
-        if ~isempty(fieldnames(plotData))
-            try
-                fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
-                sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
-                colors = {'#0072BD', '#D95319'}; 
-                sides = fieldnames(plotData);
-                ax = zeros(5,1); 
+        % % --- 4. PAIRED PLOTTING ---
+        % if ~isempty(fieldnames(plotData))
+        %     try
+        %         fig = figure('Name', folderName, 'Position', [50, 50, 1100, 950], 'Visible', 'off', 'Color', 'w');
+        %         sgtitle(['RT Causal Debug: ', folderName], 'Interpreter', 'none');
+        %         colors = {'#0072BD', '#D95319'}; 
+        %         sides = fieldnames(plotData);
+        %         ax = zeros(5,1); 
+        % 
+        %         % Subplot 1: Timestamp gaps
+        %         ax(1) = subplot(5,1,1); hold on;
+        %         for si = 1:length(sides)
+        %             stem(plotData.(sides{si}).time_for_diffs, ...
+        %                  plotData.(sides{si}).time_diffs, ...
+        %                  'Color', colors{si}, 'MarkerSize', 1);
+        %         end
+        %         yline(maxGap, 'r--', 'Gap threshold');
+        %         ylabel('\Delta t (s)'); grid on; title('Timestamp Gaps (red = reset)');
+        % 
+        %         % Subplot 2: Frequency (NaN inserted at invalid windows to break the line)
+        %         ax(2) = subplot(5,1,2); hold on;
+        %         for si = 1:length(sides)
+        %             validMask = logical(plotData.(sides{si}).validWindow);
+        %             T_plot = plotData.(sides{si}).T_vec;
+        %             F_plot = plotData.(sides{si}).peakF;
+        %             T_plot(~validMask) = NaN;
+        %             F_plot(~validMask) = NaN;
+        %             plot(T_plot, F_plot, 'Color', colors{si}, 'LineWidth', 1.2);
+        %         end
+        %         yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
+        % 
+        %         % Subplot 3: Power (NaN inserted at invalid windows to break the line)
+        %         ax(3) = subplot(5,1,3); hold on;
+        %         for si = 1:length(sides)
+        %             validMask = logical(plotData.(sides{si}).validWindow);
+        %             T_plot = plotData.(sides{si}).T_vec;
+        %             P_plot = plotData.(sides{si}).maxPk;
+        %             T_plot(~validMask) = NaN;
+        %             P_plot(~validMask) = NaN;
+        %             plot(T_plot, P_plot, 'Color', colors{si});
+        %         end
+        %         yline([P_MIN, P_MAX], 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
+        % 
+        %         % Subplot 4: Amplitude (NaN inserted at invalid windows to break the line)
+        %         ax(4) = subplot(5,1,4); hold on;
+        %         for si = 1:length(sides)
+        %             validMask = logical(plotData.(sides{si}).validWindow);
+        %             T_plot = plotData.(sides{si}).T_vec;
+        %             A_plot = plotData.(sides{si}).ampVal;
+        %             T_plot(~validMask) = NaN;
+        %             A_plot(~validMask) = NaN;
+        %             plot(T_plot, A_plot, 'Color', colors{si});
+        %         end
+        %         yline([A_MIN, A_MAX], 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
+        % 
+        %         % Subplot 5: Detection
+        %         ax(5) = subplot(5,1,5); hold on;
+        %         h_leg = [];
+        %         for si = 1:length(sides)
+        %             y_true_plot = double(plotData.(sides{si}).y_true);
+        %             y_pred_plot = double(plotData.(sides{si}).y_pred);
+        % 
+        %             % Build per-sample valid mask from time_vec
+        %             t = plotData.(sides{si}).time;
+        %             dt = diff(t);
+        %             sCount = 0;
+        %             sampleValid = false(length(t), 1);
+        %             for k = 2:length(t)
+        %                 if dt(k-1) > maxGap
+        %                     sCount = 0;
+        %                 else
+        %                     sCount = sCount + 1;
+        %                 end
+        %                 sampleValid(k) = sCount >= windowSize;
+        %             end
+        %             y_true_plot(~sampleValid) = NaN;
+        %             y_pred_plot(~sampleValid) = NaN;
+        % 
+        %             a_h = area(t, y_true_plot, 'FaceColor', colors{si}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+        %             p_h = stairs(t, y_pred_plot, 'Color', colors{si}, 'LineWidth', 1.5);
+        %             h_leg = [h_leg, a_h, p_h];
+        %         end
+        % 
+        %         if length(sides) == 2
+        %             legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
+        %                 'Orientation', 'horizontal', 'Location', 'southoutside');
+        %         else
+        %             legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
+        %         end
+        %         ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
+        % 
+        %         linkaxes(ax, 'x'); 
+        %         if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
+        %             xlim(ax(1), [0 max(plotData.(sides{1}).time)]);
+        %         end
 
-                % Subplot 1: Timestamp gaps
-                ax(1) = subplot(5,1,1); hold on;
-                for si = 1:length(sides)
-                    stem(plotData.(sides{si}).time_for_diffs, ...
-                         plotData.(sides{si}).time_diffs, ...
-                         'Color', colors{si}, 'MarkerSize', 1);
-                end
-                yline(maxGap, 'r--', 'Gap threshold');
-                ylabel('\Delta t (s)'); grid on; title('Timestamp Gaps (red = reset)');
-
-                % Subplot 2: Frequency (NaN inserted at invalid windows to break the line)
-                ax(2) = subplot(5,1,2); hold on;
-                for si = 1:length(sides)
-                    validMask = logical(plotData.(sides{si}).validWindow);
-                    T_plot = plotData.(sides{si}).T_vec;
-                    F_plot = plotData.(sides{si}).peakF;
-                    T_plot(~validMask) = NaN;
-                    F_plot(~validMask) = NaN;
-                    plot(T_plot, F_plot, 'Color', colors{si}, 'LineWidth', 1.2);
-                end
-                yline([F_MIN, F_MAX], 'r--'); ylabel('Freq (Hz)'); grid on; title('Crit 1: Frequency');
-
-                % Subplot 3: Power (NaN inserted at invalid windows to break the line)
-                ax(3) = subplot(5,1,3); hold on;
-                for si = 1:length(sides)
-                    validMask = logical(plotData.(sides{si}).validWindow);
-                    T_plot = plotData.(sides{si}).T_vec;
-                    P_plot = plotData.(sides{si}).maxPk;
-                    T_plot(~validMask) = NaN;
-                    P_plot(~validMask) = NaN;
-                    plot(T_plot, P_plot, 'Color', colors{si});
-                end
-                yline([P_MIN, P_MAX], 'r--'); ylabel('Power'); grid on; title('Crit 2: Power');
-          
-                % Subplot 4: Amplitude (NaN inserted at invalid windows to break the line)
-                ax(4) = subplot(5,1,4); hold on;
-                for si = 1:length(sides)
-                    validMask = logical(plotData.(sides{si}).validWindow);
-                    T_plot = plotData.(sides{si}).T_vec;
-                    A_plot = plotData.(sides{si}).ampVal;
-                    T_plot(~validMask) = NaN;
-                    A_plot(~validMask) = NaN;
-                    plot(T_plot, A_plot, 'Color', colors{si});
-                end
-                yline([A_MIN, A_MAX], 'r--'); ylabel('StdDev'); grid on; title('Crit 3: Amplitude');
-
-                % Subplot 5: Detection
-                ax(5) = subplot(5,1,5); hold on;
-                h_leg = [];
-                for si = 1:length(sides)
-                    y_true_plot = double(plotData.(sides{si}).y_true);
-                    y_pred_plot = double(plotData.(sides{si}).y_pred);
-                
-                    % Build per-sample valid mask from time_vec
-                    t = plotData.(sides{si}).time;
-                    dt = diff(t);
-                    sCount = 0;
-                    sampleValid = false(length(t), 1);
-                    for k = 2:length(t)
-                        if dt(k-1) > maxGap
-                            sCount = 0;
-                        else
-                            sCount = sCount + 1;
-                        end
-                        sampleValid(k) = sCount >= windowSize;
-                    end
-                    y_true_plot(~sampleValid) = NaN;
-                    y_pred_plot(~sampleValid) = NaN;
-                
-                    a_h = area(t, y_true_plot, 'FaceColor', colors{si}, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
-                    p_h = stairs(t, y_pred_plot, 'Color', colors{si}, 'LineWidth', 1.5);
-                    h_leg = [h_leg, a_h, p_h];
-                end
-
-                if length(sides) == 2
-                    legend([h_leg(1), h_leg(2), h_leg(3), h_leg(4)], {'GT R','Pred R','GT L','Pred L'}, ...
-                        'Orientation', 'horizontal', 'Location', 'southoutside');
-                else
-                    legend({'GT','Pred'}, 'Orientation', 'horizontal', 'Location', 'southoutside');
-                end
-                ylabel('Gait (0/1)'); grid on; title('Final RT Decision');
-
-                linkaxes(ax, 'x'); 
-                if isfield(plotData.(sides{1}), 'T_vec') && ~isempty(plotData.(sides{1}).T_vec)
-                    xlim(ax(1), [0 max(plotData.(sides{1}).time)]);
-                end
-
-                drawnow;
-                savePath = fullfile(plotPath, [folderName, '_RT_Plot.png']);
-                saveas(fig, savePath);
-                fprintf('  --> Plot saved: %s\n', savePath);
-                close(fig);
-
-            catch ME_plot
-                fprintf('  !! PLOT ERROR for %s: %s\n', folderName, ME_plot.message);
-                fprintf('     Line: %d\n', ME_plot.stack(1).line);
-                if exist('fig','var') && ishandle(fig), close(fig); end
-            end
-        end
+            %     drawnow;
+            %     savePath = fullfile(plotPath, [folderName, '_RT_Plot.png']);
+            %     saveas(fig, savePath);
+            %     fprintf('  --> Plot saved: %s\n', savePath);
+            %     close(fig);
+            % 
+            % catch ME_plot
+            %     fprintf('  !! PLOT ERROR for %s: %s\n', folderName, ME_plot.message);
+            %     fprintf('     Line: %d\n', ME_plot.stack(1).line);
+            %     if exist('fig','var') && ishandle(fig), close(fig); end
+            % end
+        % end
     end
 end
 
