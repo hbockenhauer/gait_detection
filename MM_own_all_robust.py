@@ -20,6 +20,7 @@ DATA_PATHS = [
     r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
     r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
@@ -29,7 +30,7 @@ CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
 
 DEBUG = False
-PRINT_STATS = False 
+PRINT_STATS = True 
 
 SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
@@ -146,7 +147,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
             if rw_df is not None:
                 # assign true values 
-                if 'test' in folder.lower():
+                if 'test' in folder.lower() or 'sub' in folder.lower():
                     rw_df['y_true']    = rw_df['Label'].astype(int).to_numpy()
                 else:
                     activity = folder.split('_')[0].lower()
@@ -166,7 +167,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             lw_df = load_segmented(folder_path, 's2_2LW.txt')
             if lw_df is not None:
                 # print(" in folder:", folder)
-                if 'test' in folder.lower():
+                if 'test' in folder.lower() or 'sub' in folder.lower():
                     lw_df['y_true']    = lw_df['Label'].astype(int).to_numpy()
                 else: 
                     activity = folder.split('_')[0].lower()
