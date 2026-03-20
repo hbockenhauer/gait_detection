@@ -20,8 +20,8 @@ DATA_PATHS = [
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
-    # r"C:\Users\orlov\intern\gait_detection\Free_living"
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
+    r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
@@ -412,10 +412,9 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     plt.close(fig)
     print(f"Saved -> {out_path}")
 
-def process_gait(rw_merged: pd.DataFrame,
-                 lw_merged: pd.DataFrame,
+def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
                  fl_merged: pd.DataFrame, 
-                 save_results: bool = True) -> pd.DataFrame:
+                 save_results: bool = True, print_stats: bool = False) -> pd.DataFrame:
     """
     Run GSD on every (subject, wrist) segment inside the merged DataFrames.
     Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
@@ -490,7 +489,7 @@ def process_gait(rw_merged: pd.DataFrame,
                 'TN': np.sum((y_pred == 0) & (y_true == 0))
             })
 
-            if PRINT_STATS == True: 
+            if print_stats == True: 
                 print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
                       f"{acc:.2f}   | {prec:.2f}   | "
                       f"{rec:.2f}   | {f1:.2f}")    
@@ -574,7 +573,7 @@ def process_gait(rw_merged: pd.DataFrame,
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
 
     # Print summary to console
-    if PRINT_STATS: 
+    if print_stats: 
         print("-" * 90)
         _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
         _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
@@ -636,4 +635,4 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait(rw_merged, lw_merged, fl_merged, SAVE_RESULTS)
+    process_gait(rw_merged, lw_merged, fl_merged, PRINT_STATS, SAVE_RESULTS)

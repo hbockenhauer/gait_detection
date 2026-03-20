@@ -176,10 +176,18 @@ class ActivityCounts:
         self.sampling_rate = sampling_rate
         tmp = self.data.copy()
 
-        tmp = self._downsample(tmp, sampling_rate, 30)
-        tmp = self._aliasing_filter(tmp, 30)
-        tmp = self._actigraph_filter(tmp)
-        tmp = self._downsample(tmp, 30, 10)
+        if sampling_rate > 30:
+            tmp = self._downsample(tmp, sampling_rate, 30)
+            tmp = self._aliasing_filter(tmp, 30)
+            tmp = self._actigraph_filter(tmp)
+            tmp = self._downsample(tmp, 30, 10)
+        elif sampling_rate > 10:
+            tmp = self._aliasing_filter(tmp, sampling_rate)
+            tmp = self._actigraph_filter(tmp)
+            tmp = self._downsample(tmp, sampling_rate, 10)
+        else:
+            tmp = self._aliasing_filter(tmp, sampling_rate)
+            tmp = self._actigraph_filter(tmp)
         tmp = np.abs(tmp)
         tmp = self._truncate(tmp)
         tmp = self._digitize_8bit(tmp)

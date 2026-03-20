@@ -8,7 +8,7 @@ from GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-dataset = "WearGait"
+dataset = "HMP"
 group = "PD"
 
 match dataset:
@@ -72,14 +72,13 @@ def process_weargait():
                 label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
                 y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
 
-            # 4. Run Kheirkhahan GSD
-            #gsd = KheirkhahanGSD()
-            gsd = HickeyGSD()
-            # Note: KheirkhahanGSD in this package takes the DataFrame directly
-            # HickeyGSD
-            detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=100).detect_wrist()
+            # 4. Run Hickey GSD
+            # gsd = HickeyGSD()
+            # detected_bouts = gsd.preprocess(imu_df, sampling_rate_hz=100).detect_wrist()
+
             # KheirkhahanGSD
-            #detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
+            gsd = KheirkhahanGSD()
+            detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
             
             # 5. Convert Bout List to Binary Mask
             y_pred = np.zeros(len(df))
