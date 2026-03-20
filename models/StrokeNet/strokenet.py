@@ -1,7 +1,9 @@
 """Thin entrypoint for StrokeNet evaluation.
 
-All dataset evaluators and combined ROC/PR logic live in
-`strokenet_other_datasets.py` to avoid duplicated implementations.
+All dataset evaluators and plotting functions are implemented in `strokenet_utils.py` to keep this file 
+clean and focused on the overall evaluation flow. This also allows us to easily reuse the same 
+evaluation code for other datasets in the future by simply calling the relevant functions from
+ `strokenet_utils.py` without needing to modify this main script.
 """
 
 import os
