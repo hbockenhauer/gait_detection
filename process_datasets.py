@@ -69,11 +69,6 @@ def _pooled_metrics(subset: pd.DataFrame) -> tuple:
 
 def process_weargait(data_path: str, print_stats: bool = True, save_results: bool = False,
                      output_file: str = "Results/WearGait_Results.csv") -> pd.DataFrame:
-    """
-    Process all WearGait CSV files in data_path.
-    Each file is one subject; GSD is run on left and right wrist independently.
-    Returns a results DataFrame similar to process_gait().
-    """
     files = sorted([
         f for f in os.listdir(data_path)
         if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))
@@ -85,17 +80,14 @@ def process_weargait(data_path: str, print_stats: bool = True, save_results: boo
 
     if print_stats:
         print(f"Scanning: {data_path}\n")
-        print(f"{'File':<35} | {'Wrist':<5} | {'Cond':<10} | "
-              f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
-        print("-" * 90)
+        print(f"{'File':<35} | {'Wrist':<5} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+        print("-" * 75)
 
     results = []
 
     for file_name in files:
         filepath = os.path.join(data_path, file_name)
-        subject  = os.path.splitext(file_name)[0]     # e.g. "W001" or "N003"
-        # W = with PD, N = neurotypical — adjust to your dataset's convention
-        condition = 'PD' if file_name.startswith('W') else 'control'
+        subject  = os.path.splitext(file_name)[0]
 
         try:
             df = pd.read_csv(filepath, low_memory=False)
@@ -103,30 +95,27 @@ def process_weargait(data_path: str, print_stats: bool = True, save_results: boo
             print(f"{file_name[:25]:<25} | ERROR loading: {e}")
             continue
 
-        # Build y_true from the label column
         if 'GeneralEvent' not in df.columns:
             print(f"{file_name[:25]:<25} | ERROR: 'GeneralEvent' column not found, skipping.")
             continue
 
         pattern = '|'.join(WEARGAIT_GAIT_KEYWORDS)
-        y_true = df['GeneralEvent'].str.contains(pattern, case=False, na=False).astype(int).to_numpy()
+        y_true        = df['GeneralEvent'].str.contains(pattern, case=False, na=False).astype(int).to_numpy()
+        event_labels  = df['GeneralEvent'].fillna('unknown').to_numpy()
+        unique_events = sorted(df['GeneralEvent'].dropna().unique())
 
-        # Define both wrists as (label, x_col, y_col, z_col)
         wrist_configs = [
             ('LW', 'L_Wrist_Acc_X', 'L_Wrist_Acc_Y', 'L_Wrist_Acc_Z'),
             ('RW', 'R_Wrist_Acc_X', 'R_Wrist_Acc_Y', 'R_Wrist_Acc_Z'),
         ]
 
         for wrist_label, col_x, col_y, col_z in wrist_configs:
-            required_cols = [col_x, col_y, col_z]
-            if not all(c in df.columns for c in required_cols):
+            if not all(c in df.columns for c in [col_x, col_y, col_z]):
                 print(f"{file_name[:25]:<25} | {wrist_label} | missing acc columns, skipping.")
                 continue
 
             wrist_df = df[[col_x, col_y, col_z]].rename(columns={
-                col_x: 'acc_is',
-                col_y: 'acc_ml',
-                col_z: 'acc_pa',
+                col_x: 'acc_is', col_y: 'acc_ml', col_z: 'acc_pa',
             })
 
             y_pred = run_gsd_on_wrist(wrist_df, SAMPLING_RATE_WEARGATE)
@@ -147,69 +136,90 @@ def process_weargait(data_path: str, print_stats: bool = True, save_results: boo
             tn = int(np.sum((y_pred[valid_mask] == 0) & (y_true[valid_mask] == 0)))
 
             if print_stats:
-                print(f"{f'{subject}/{wrist_label}':<35} | {wrist_label:<5} | {condition:<10} | "
+                print(f"{f'{subject}/{wrist_label}':<35} | {wrist_label:<5} | "
                       f"{acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
+            # Overall result row for this subject/wrist
             results.append({
-                'row_type':  'result',
-                'Subject':   f"{subject}/{wrist_label}",
-                'Wrist':     wrist_label,
-                'Folder':    subject,
-                'Condition': condition,
-                'Accuracy':  acc,
-                'Precision': prec,
-                'Recall':    rec,
-                'F1':        f1,
+                'row_type': 'result',
+                'Subject':  f"{subject}/{wrist_label}",
+                'Wrist':    wrist_label,
+                'Folder':   subject,
+                'Activity': 'overall',
+                'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1,
                 'TP': tp, 'FP': fp, 'FN': fn, 'TN': tn,
             })
+
+            # Per-event breakdown for this subject/wrist
+            for event in unique_events:
+                event_mask = (event_labels == event) & valid_mask
+                if event_mask.sum() == 0:
+                    continue
+                results.append({
+                    'row_type': 'result_per_activity',
+                    'Subject':  f"{subject}/{wrist_label}",
+                    'Wrist':    wrist_label,
+                    'Folder':   subject,
+                    'Activity': event,
+                    'Accuracy':  accuracy_score (y_true[event_mask], y_pred[event_mask]),
+                    'Precision': precision_score(y_true[event_mask], y_pred[event_mask], zero_division=0),
+                    'Recall':    recall_score   (y_true[event_mask], y_pred[event_mask], zero_division=0),
+                    'F1':        f1_score       (y_true[event_mask], y_pred[event_mask], zero_division=0),
+                    'TP': int(np.sum((y_pred[event_mask] == 1) & (y_true[event_mask] == 1))),
+                    'FP': int(np.sum((y_pred[event_mask] == 1) & (y_true[event_mask] == 0))),
+                    'FN': int(np.sum((y_pred[event_mask] == 0) & (y_true[event_mask] == 1))),
+                    'TN': int(np.sum((y_pred[event_mask] == 0) & (y_true[event_mask] == 0))),
+                })
 
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
 
-    res_df = pd.DataFrame(results)
-
-    # ── Summary helper (same pooled-TP logic as process_gait) ──────────────
-
+    res_df     = pd.DataFrame(results)
+    overall_df = res_df[res_df['row_type'] == 'result']
+    per_act_df = res_df[res_df['row_type'] == 'result_per_activity']
 
     def _print_avg(label: str, subset: pd.DataFrame):
         if subset.empty:
             return
         acc_av, prec_av, rec_av, f1_av = _pooled_metrics(subset)
-        print(f"{label:<35} | {'':5} | {'':10} | "
+        print(f"{label:<40} | {'':5} | "
               f"{acc_av:.5f}   | {prec_av:.5f}   | {rec_av:.5f}   | {f1_av:.5f}")
 
-    def _avg_row(row_type, label, wrist, condition, subset) -> dict:
+    def _avg_row(row_type, label, wrist, activity, subset) -> dict:
         acc_av, prec_av, rec_av, f1_av = _pooled_metrics(subset)
         return {
-            'row_type':  row_type,
-            'Subject':   label,
-            'Wrist':     wrist,
-            'Folder':    '',
-            'Condition': condition,
-            'Accuracy':  acc_av, 'Precision': prec_av,
-            'Recall':    rec_av, 'F1':        f1_av,
+            'row_type': row_type, 'Subject': label,
+            'Wrist':    wrist,    'Folder':  '',
+            'Activity': activity,
+            'Accuracy': acc_av, 'Precision': prec_av,
+            'Recall':   rec_av, 'F1':        f1_av,
             'TP': subset['TP'].sum(), 'FP': subset['FP'].sum(),
             'FN': subset['FN'].sum(), 'TN': subset['TN'].sum(),
         }
 
     avg_rows = []
+    print("-" * 75)
 
-    print("-" * 90)
+    # Per-wrist averages (from overall rows)
     for wrist in ['RW', 'LW']:
-        sub = res_df[res_df['Wrist'] == wrist]
+        sub = overall_df[overall_df['Wrist'] == wrist]
         if not sub.empty:
             _print_avg(f"AVERAGE ({wrist})", sub)
             avg_rows.append(_avg_row('avg_wrist', f"{wrist} average", wrist, '', sub))
 
-    for cond in sorted(res_df['Condition'].unique()):
-        sub = res_df[res_df['Condition'] == cond]
-        _print_avg(f"AV(cond={cond})", sub)
-        avg_rows.append(_avg_row('avg_condition', f"Cond={cond} average", '', cond, sub))
+    print()
 
-    print("-" * 90)
-    _print_avg("AVERAGE (Overall)", res_df)
-    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
+    # Per-event averages (from per-activity rows, pooled across all subjects/wrists)
+    print("Per-event averages:")
+    for event in sorted(per_act_df['Activity'].unique()):
+        sub = per_act_df[per_act_df['Activity'] == event]
+        _print_avg(f"AV(event={event})", sub)
+        avg_rows.append(_avg_row('avg_activity', f"Event={event} average", '', event, sub))
+
+    print("-" * 75)
+    _print_avg("AVERAGE (Overall)", overall_df)
+    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', overall_df))
 
     if save_results:
         avg_df    = pd.DataFrame(avg_rows)
@@ -219,7 +229,7 @@ def process_weargait(data_path: str, print_stats: bool = True, save_results: boo
         csv_df.to_csv(output_file, index=False)
         print(f"\nSaved → {output_file}")
 
-    return res_df
+    return overall_df
 
 # --------------------------------------------------------------------------------
 #                                  WISDM dataset 
@@ -291,6 +301,14 @@ def process_wisdm(data_path: str, print_stats: bool = True,
     chunks = []
     for file_name in files:
         df = load_wismd_txt_file(os.path.join(data_path, file_name))
+        # i = 0
+        # if i < 1: 
+        #     print(df)
+
+        #     print()
+        #     print("df activity")
+        #     print(df['activity'])
+        #     i += 1 
         if df is not None:
             chunks.append(df)
 
@@ -304,7 +322,7 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         print(f"Scanning: {data_path}")
         print(f"Loaded {len(all_data)} rows from {len(chunks)} file(s).")
         print(f"Subjects found: {sorted(all_data['subject'].unique())}\n")
-        print(f"{'Subject':<20} | {'Cond':<10} | "
+        print(f"{'Subject':<20} | " # {'Cond':<10} | "
               f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
         print("-" * 70)
 
@@ -312,18 +330,19 @@ def process_wisdm(data_path: str, print_stats: bool = True,
 
     for subject, grp in all_data.groupby('subject', sort=True):
         grp = grp.reset_index(drop=True)
+        grp['activity'] = grp['activity'].map(ACTIVITY_MAP_WISM).fillna('unknown')
         y_true = grp['y_true'].to_numpy()
 
         # Identify condition from which activities are present
         activities_present = grp['activity'].unique()
-        has_gait     = any(a in GAIT_LABELS_WISM for a in activities_present)
-        has_non_gait = any(a not in GAIT_LABELS_WISM for a in activities_present)
-        if has_gait and has_non_gait:
-            condition = 'mixed'
-        elif has_gait:
-            condition = 'gait_only'
-        else:
-            condition = 'non_gait'
+        # has_gait     = any(a in GAIT_LABELS_WISM for a in activities_present)
+        # has_non_gait = any(a not in GAIT_LABELS_WISM for a in activities_present)
+        # if has_gait and has_non_gait:
+        #     condition = 'mixed'
+        # elif has_gait:
+        #     condition = 'gait_only'
+        # else:
+        #     condition = 'non_gait'
 
         imu_df = grp[['acc_is', 'acc_ml', 'acc_pa']]
         y_pred = run_gsd_on_wrist(imu_df, sampling_rate=SAMPLING_RATE_WISDM)
@@ -332,6 +351,10 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         if valid_mask.sum() == 0:
             print(f"{str(subject):<20} | too short, skipped.")
             continue
+        
+        # for i in activities_present: 
+        #     act_mask = (grp['activity']==i)
+        #     tp_per_ac = int(np.sum((y_pred[act_mask] == 1) & (y_true[act_mask] == 1)))
 
         acc  = accuracy_score (y_true[valid_mask], y_pred[valid_mask])
         prec = precision_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
@@ -344,37 +367,67 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         tn = int(np.sum((y_pred[valid_mask] == 0) & (y_true[valid_mask] == 0)))
 
         if print_stats:
-            print(f"{str(subject):<20} | {condition:<10} | "
+            print(f"{str(subject):<20} |" #  {condition:<10} | 
                   f"{acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
         results.append({
             'row_type':  'result',
             'Subject':   subject,
             'Folder':    subject,
-            'Condition': condition,
+            # 'Condition': condition,
             'Accuracy':  acc, 'Precision': prec, 'Recall': rec, 'F1': f1,
             'TP': tp,    'FP': fp,    'FN': fn,    'TN': tn,
         })
-
+        for act in activities_present:
+                    act_mask = (grp['activity'] == act).to_numpy() & valid_mask
+                    if act_mask.sum() == 0:
+                        continue
+                    results.append({
+                        'row_type':  'result_per_activity',
+                        'Subject':   subject,
+                        'Folder':    subject,
+                        # 'Condition': condition,
+                        'Activity':  act,
+                        'Accuracy':  accuracy_score (y_true[act_mask], y_pred[act_mask]),
+                        'Precision': precision_score(y_true[act_mask], y_pred[act_mask], zero_division=0),
+                        'Recall':    recall_score   (y_true[act_mask], y_pred[act_mask], zero_division=0),
+                        'F1':        f1_score       (y_true[act_mask], y_pred[act_mask], zero_division=0),
+                        'TP': int(np.sum((y_pred[act_mask] == 1) & (y_true[act_mask] == 1))),
+                        'FP': int(np.sum((y_pred[act_mask] == 1) & (y_true[act_mask] == 0))),
+                        'FN': int(np.sum((y_pred[act_mask] == 0) & (y_true[act_mask] == 1))),
+                        'TN': int(np.sum((y_pred[act_mask] == 0) & (y_true[act_mask] == 0))),
+                    })
+    
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
 
-    res_df = pd.DataFrame(results)
+    res_df        = pd.DataFrame(results)
+    overall_df    = res_df[res_df['row_type'] == 'result']
+    per_act_df    = res_df[res_df['row_type'] == 'result_per_activity']
 
+    avg_rows = []
+    print("-" * 70)
+
+    # print()
+    # print("res_df size", res_df.shape)
+    # print("res_df col", res_df.columns)
+    # res_df size (51, 12)
+    # res_df col Index(['row_type', 'Subject', 'Folder', 'Condition', 'Accuracy', 'Precision',
+    #        'Recall', 'F1', 'TP', 'FP', 'FN', 'TN']
     # ── Summary helpers ────────────────────────────────────────────────────────
     def _print_avg(label: str, subset: pd.DataFrame):
         if subset.empty:
             return
         acc_av, prec_av, rec_av, f1_av = _pooled_metrics(subset)
-        print(f"{label:<20} | {'':10} | "
+        print(f"{label:<20} |" # {'':10} | "
               f"{acc_av:.5f}   | {prec_av:.5f}   | {rec_av:.5f}   | {f1_av:.5f}")
 
-    def _avg_row(row_type, label, condition, subset) -> dict:
+    def _avg_row(row_type, label, subset) -> dict:
         acc_av, prec_av, rec_av, f1_av = _pooled_metrics(subset)
         return {
             'row_type':  row_type,  'Subject':   label,
-            'Folder':    '',        'Condition': condition,
+            'Folder':    '',     #   'Condition': condition,
             'Accuracy':  acc_av,    'Precision': prec_av,
             'Recall':    rec_av,    'F1':        f1_av,
             'TP': subset['TP'].sum(), 'FP': subset['FP'].sum(),
@@ -384,14 +437,24 @@ def process_wisdm(data_path: str, print_stats: bool = True,
     avg_rows = []
     print("-" * 70)
 
-    for cond in sorted(res_df['Condition'].unique()):
-        sub = res_df[res_df['Condition'] == cond]
-        _print_avg(f"AV(cond={cond})", sub)
-        avg_rows.append(_avg_row('avg_condition', f"Cond={cond} average", cond, sub))
+    # Per-activity pooled summary (uses per-activity rows)
+    print("Per-activity averages:")
+    for act in sorted(per_act_df['Activity'].unique()):
+        sub = per_act_df[per_act_df['Activity'] == act]
+        _print_avg(f"AV(activity={act})", sub)
+        avg_rows.append(_avg_row('avg_activity', f"Activity={act} average", sub))
+
+    print()
+
+    # Per-condition summary (uses overall rows)
+    # for cond in sorted(overall_df['Condition'].unique()):
+    #     sub = overall_df[overall_df['Condition'] == cond]
+    #     _print_avg(f"AV(cond={cond})", sub)
+    #     avg_rows.append(_avg_row('avg_condition', f"Cond={cond} average", cond, sub))
 
     print("-" * 70)
-    _print_avg("AVERAGE (Overall)", res_df)
-    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', res_df))
+    _print_avg("AVERAGE (Overall)", overall_df)
+    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', overall_df))
 
     if save_results:
         avg_df    = pd.DataFrame(avg_rows)
@@ -401,7 +464,9 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         csv_df.to_csv(output_file, index=False)
         print(f"\nSaved → {output_file}")
 
-    return res_df
+    return overall_df  # return only the subject-level rows, same as before
+    
+
 
 # --------------------------------------------------------------------------------
 #                                  HMP dataset 
@@ -616,19 +681,6 @@ BIOCLITE_LABEL_MAP  = {
 def process_bioclite(mat_path: str, print_stats: bool = True,
                      save_results: bool = False,
                      output_file: str = "Results/Bioclite_Results.csv") -> pd.DataFrame:
-    """
-    Process BIOCLITE .mat file (Data_plain format).
-
-    Data_plain is a (N,) array where each entry is one trial with columns:
-        0:      ts_ms         — timestamp in milliseconds
-        1:4     acc_x/y/z     — accelerometer (m/s², 50 Hz)
-        4:7     gyr_x/y/z     — gyroscope (not used here)
-        7:      participant   — participant ID
-        8:      activity      — activity label (see BIOCLITE_LABEL_MAP)
-
-    Gaps in the timestamp are detected and split into sub-segments,
-    matching the logic of the original evaluate_bioclite() code.
-    """
     if not os.path.exists(mat_path):
         raise FileNotFoundError(f"MAT file not found: {mat_path}")
 
@@ -638,37 +690,30 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
     print(f"Found {len(Data)} trial(s).\n")
 
     if print_stats:
-        print(f"{'Trial/Participant':<30} | {'Condition':<10} | "
-              f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
-        print("-" * 75)
+        print(f"{'Trial/Participant':<30} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+        print("-" * 65)
 
     results = []
 
     for i, trial in enumerate(Data):
         try:
-            ts_ms       = trial[:, 0].astype(float)
-            acc         = trial[:, 1:4].astype(float)   # x, y, z
+            acc         = trial[:, 1:4].astype(float)
             participant = int(trial[0, 7])
             act_labels  = trial[:, 8].astype(int)
         except Exception as e:
             print(f"  Trial {i+1:02d} | ERROR reading columns: {e}")
             continue
 
-        # From the Zenodo page: 24 PD patients + 16 healthy (40 total)
-        # Adjust this boundary once you know which IDs are which group
-        condition = 'PD' if participant <= 24 else 'healthy'
-        label     = f"trial{i+1:02d}/P{participant:02d}"
-
+        label  = f"trial{i+1:02d}/P{participant:02d}"
         y_true = (act_labels == BIOCLITE_GAIT_LABEL).astype(int)
 
-        # ── Single segment per trial ────────────────────────────────────────
         seg_imu = pd.DataFrame(acc, columns=['acc_is', 'acc_ml', 'acc_pa'])
         y_pred  = run_gsd_on_wrist(seg_imu, SAMPLING_RATE_BIOCLITE)
 
         valid_mask = ~np.isnan(y_pred)
         if valid_mask.sum() == 0:
             if print_stats:
-                print(f"{label:<30} | {condition:<10} | too short / no valid segments, skipped.")
+                print(f"{label:<30} | too short / no valid segments, skipped.")
             continue
 
         acc_sc = accuracy_score (y_true[valid_mask], y_pred[valid_mask])
@@ -682,54 +727,78 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
         tn = int(np.sum((y_pred[valid_mask] == 0) & (y_true[valid_mask] == 0)))
 
         if print_stats:
-            print(f"{label:<30} | {condition:<10} | "
-                  f"{acc_sc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
+            print(f"{label:<30} | {acc_sc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
+        # Overall result row for this trial
         results.append({
             'row_type':      'result',
             'Subject':       label,
             'Trial':         i + 1,
             'ParticipantID': participant,
-            'Condition':     condition,
+            'Activity':      'overall',
             'Accuracy':  acc_sc, 'Precision': prec, 'Recall': rec, 'F1': f1,
             'TP': tp, 'FP': fp, 'FN': fn, 'TN': tn,
         })
+
+        # Per-activity breakdown using act_labels
+        for act_code in np.unique(act_labels):
+            act_mask = (act_labels == act_code) & valid_mask
+            if act_mask.sum() == 0:
+                continue
+            act_name = BIOCLITE_LABEL_MAP.get(int(act_code), f'unknown_{act_code}')
+            results.append({
+                'row_type':      'result_per_activity',
+                'Subject':       label,
+                'Trial':         i + 1,
+                'ParticipantID': participant,
+                'Activity':      act_name,
+                'Accuracy':  accuracy_score (y_true[act_mask], y_pred[act_mask]),
+                'Precision': precision_score(y_true[act_mask], y_pred[act_mask], zero_division=0),
+                'Recall':    recall_score   (y_true[act_mask], y_pred[act_mask], zero_division=0),
+                'F1':        f1_score       (y_true[act_mask], y_pred[act_mask], zero_division=0),
+                'TP': int(np.sum((y_pred[act_mask] == 1) & (y_true[act_mask] == 1))),
+                'FP': int(np.sum((y_pred[act_mask] == 1) & (y_true[act_mask] == 0))),
+                'FN': int(np.sum((y_pred[act_mask] == 0) & (y_true[act_mask] == 1))),
+                'TN': int(np.sum((y_pred[act_mask] == 0) & (y_true[act_mask] == 0))),
+            })
 
     if not results:
         print("No results to summarise.")
         return pd.DataFrame()
 
-    res_df = pd.DataFrame(results)
+    res_df     = pd.DataFrame(results)
+    overall_df = res_df[res_df['row_type'] == 'result']
+    per_act_df = res_df[res_df['row_type'] == 'result_per_activity']
 
-    # ── Summary helpers ────────────────────────────────────────────────────────
     def _print_avg(label: str, subset: pd.DataFrame):
         if subset.empty:
             return
         a, p, r, f = _pooled_metrics(subset)
-        print(f"{label:<30} | {'':10} | "
-              f"{a:.5f}   | {p:.5f}   | {r:.5f}   | {f:.5f}")
+        print(f"{label:<40} | {a:.5f}   | {p:.5f}   | {r:.5f}   | {f:.5f}")
 
-    def _avg_row(row_type, label, condition, subset) -> dict:
+    def _avg_row(row_type, label, activity, subset) -> dict:
         a, p, r, f = _pooled_metrics(subset)
         return {
             'row_type': row_type, 'Subject': label,
-            'Trial': '', 'ParticipantID': '', 'Condition': condition,
+            'Trial': '', 'ParticipantID': '', 'Activity': activity,
             'Accuracy': a, 'Precision': p, 'Recall': r, 'F1': f,
             'TP': subset['TP'].sum(), 'FP': subset['FP'].sum(),
             'FN': subset['FN'].sum(), 'TN': subset['TN'].sum(),
         }
 
     avg_rows = []
-    print("-" * 75)
+    print("-" * 65)
 
-    for cond in sorted(res_df['Condition'].unique()):
-        sub = res_df[res_df['Condition'] == cond]
-        _print_avg(f"AV(cond={cond})", sub)
-        avg_rows.append(_avg_row('avg_condition', f"Cond={cond} average", cond, sub))
+    # Per-activity averages pooled across all trials
+    print("Per-activity averages:")
+    for act_name in sorted(per_act_df['Activity'].unique()):
+        sub = per_act_df[per_act_df['Activity'] == act_name]
+        _print_avg(f"AV(activity={act_name})", sub)
+        avg_rows.append(_avg_row('avg_activity', f"Activity={act_name} average", act_name, sub))
 
-    print("-" * 75)
-    _print_avg("AVERAGE (Overall)", res_df)
-    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', res_df))
+    print("-" * 65)
+    _print_avg("AVERAGE (Overall)", overall_df)
+    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', overall_df))
 
     if save_results:
         avg_df    = pd.DataFrame(avg_rows)
@@ -739,4 +808,6 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
         csv_df.to_csv(output_file, index=False)
         print(f"\nSaved → {output_file}")
 
-    return res_df
+    return overall_df
+
+

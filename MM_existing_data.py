@@ -19,15 +19,15 @@ from MM_own_all_robust import merge_all_wrists, process_gait
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
     # r"C:\Users\orlov\intern\gait_detection\Free_living",
     # r"C:\Users\orlov\intern\gait_detection\Datasets\WearGait-PD", 
     # r"C:\Users\orlov\intern\gait_detection\Datasets\wisdm-dataset\raw\watch\accel", 
     # r"C:\Users\orlov\intern\gait_detection\Datasets\HMP_Dataset", 
-    # r"C:\Users\orlov\intern\gait_detection\Datasets\Bioclite\data_6activities_plain.mat"
+    r"C:\Users\orlov\intern\gait_detection\Datasets\Bioclite\data_6activities_plain.mat"
 ]
 
 # SAMPLING_RATE = 50 
