@@ -17,11 +17,11 @@ from free_living_test import merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
-    r"C:\Users\orlov\intern\gait_detection\Free_living"
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
+    # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
 
 SAMPLING_RATE = 50 
@@ -344,8 +344,7 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
                     label='Ground truth (walking)')
     acc_cols = [c for c in df.columns if 'acc' in c]
     for acc in acc_cols:
-
-        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
+        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, marker='.', linestyle='None', markersize=3)
 
     for i, jt in enumerate(jump_times_sec):
         ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
@@ -635,4 +634,4 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait(rw_merged, lw_merged, fl_merged, PRINT_STATS, SAVE_RESULTS)
+    process_gait(rw_merged, lw_merged, fl_merged, print_stats=PRINT_STATS, save_results=SAVE_RESULTS)
