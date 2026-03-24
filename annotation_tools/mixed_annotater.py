@@ -14,13 +14,30 @@ from config.paths import QSENSE_MIXED, QSENSE_CLINIC, QSENSE_TEST
 
 # EDIT THIS BEFORE RUNNING
 # DATA_PATH = os.path.join(QSENSE_MIXED, 'Test2')
-DATA_PATH = os.path.join(QSENSE_TEST, 'orientation')
+DATA_PATH = os.path.join(QSENSE_TEST, 'Arm_use')
 #THRESHOLD = time(14, 57, 0)
 
 # The entire file for orientation is walking so label every timestamp as 1 (walk)
-LABELS = np.array([1]) # walk
-TIMESTAMPS = [] 
-TIME_RANGE = None
+LABELS = np.array([0, 
+                   1, 
+                   0, 
+                   2, 
+                   0, 
+                   1, 
+                   0, 
+                   2, 
+                   0, 
+                   1]) # walk
+TIMESTAMPS = [time(10, 38,  0),
+              time(10, 44,  0), 
+              time(11,  2,  0), 
+              time(11,  4,  0), 
+              time(11, 27, 50),
+              time(11, 35,  5), 
+              time(12,  3,  0), 
+              time(12,  5,  0),
+              time(12, 28, 35)] 
+TIME_RANGE = (time(10, 20, 50), time(12, 33, 35))
 
 def get_label(row_time, timestamps, labels):
     """
