@@ -33,9 +33,9 @@ CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker',
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
 
 DEBUG = False
-PRINT_STATS = True 
+PRINT_STATS = False 
 
-SAVE_RESULTS = True 
+SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wrist.csv"
 
 PLOT = False
@@ -255,109 +255,6 @@ def run_gsd_on_segment(grp) :
 
     return bout_result, activity_counts, std_norm, grp_start_idx
 
-def plot_results(df: pd.DataFrame, activity_counts_timeline, 
-                 std_norm_timeline, y_pred, y_true, title,
-                 threshold: float = None):
-    # Parse timestamps from df into timedeltas
-    time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
-    # Convert to total seconds (float) for plotting
-    time_per_second_sec = time_series.iloc[::SAMPLING_RATE].reset_index(drop=True).dt.total_seconds()
-
-    total_seconds = len(time_per_second_sec)
-    ac_plot = np.full(total_seconds, np.nan)
-    for sec_idx, val in activity_counts_timeline.items():
-        if sec_idx < total_seconds:
-            ac_plot[sec_idx] = val
-    
-    std_plot = np.full(total_seconds, np.nan)
-    for sec_idx, val in std_norm_timeline.items():
-        if sec_idx < total_seconds:
-            std_plot[sec_idx] = val
-
-    all_segment_first_rows = df.groupby('segment').nth(0).index
-    all_segment_last_rows = df.groupby('segment').nth(-1).index
-    jump_row_indices = all_segment_first_rows[1:]
-    jump_times_sec = [time_series.iloc[idx].total_seconds() for idx in jump_row_indices]
-
-
-    time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
-    
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(13, 9), sharex=True)
-
-    # ── figure 1: raw data ────────────────────────────────────────────────────
-    ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
-                    label='Ground truth (walking)')
-    acc_cols = [c for c in df.columns if 'acc' in c]
-    for acc in acc_cols:
-
-        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
-
-    for i, jt in enumerate(jump_times_sec):
-        ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
-
-    ax1.set_ylabel(f'Acceleration (m/s^{2})')
-    ax1.set_title(f'{title}')
-    ax1.legend(loc='upper left')
-
-    # ── figure 2: activity counts ───────────────────────────────────────────────
-    ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
-                    label='Ground truth (walking)')
-    ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
-            linewidth=1, color='steelblue')
-
-    for i, jt in enumerate(jump_times_sec):
-        ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
-
-    ax2.set_xlabel('Time')
-    ax2.set_ylabel('Activity count')
-    ax2.legend(loc='upper left')
-
-    # ── figure 3: std norm ───────────────────────────────────────────────
-    ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', label='Ground truth (walking)')
-    ax3.plot(time_per_second_sec, std_plot, label='std norm', alpha=0.8, 
-            linewidth=1, color='steelblue')
-    for i, jt in enumerate(jump_times_sec):
-        ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
-    ax3.axhline(y=threshold, color='red', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='threshold')
-    ax3.set_ylim(-0.1, np.nanmax(std_plot)+0.1)
-    ax3.set_xlabel('Time')
-    ax3.set_ylabel('Std of the norm')
-    ax3.legend(loc='upper left')
-
-    # ── figure 4: y_pred and y_true ──────────────────────────────────────────────
-    ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', label='Ground truth (walking)')
-    ax4.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
-            linewidth=1, color='steelblue')
-
-    for i, jt in enumerate(jump_times_sec):
-        ax4.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
-
-    ax4.set_ylabel('Walking (1) / Not (0)')
-    ax4.legend(loc='upper left')
-    ax4.set_ylim(-0.1, 1.4)
-    
-
-    # Format x-axis as HH:MM:SS
-    ax4.xaxis.set_major_formatter(mticker.FuncFormatter(
-        lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
-    ))
-    fig.autofmt_xdate()
-    plt.tight_layout()
-
-    out_path = os.path.join(OUT_FOLDER, f"{title}_predictions.png")
-    plt.savefig(out_path, dpi=150)
-    plt.close(fig)
-    print(f"Saved -> {out_path}")
-
 def process_gait(df_merged: pd.DataFrame, #lw_merged: pd.DataFrame,
                  save_results: bool = True, print_stats: bool = False) -> pd.DataFrame:
     """
@@ -372,24 +269,8 @@ def process_gait(df_merged: pd.DataFrame, #lw_merged: pd.DataFrame,
 
     # ────────── Process the data per wrist ────────────────────────────────────── 
     for subject, grp_sub in df_merged.groupby('subject', sort=True):
-        # print("the subject is")
-        # print(subject)
-        # print("with the df of ")
-        # print(grp_sub)
         
         for wrist_label, grp_wrist in grp_sub.groupby('wrist', sort=True):
-            # print("the wrist is")
-            # print(wrist_label)
-            # print("with the df of ")
-            # print(grp_wrist)
-    # for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged)]:
-    #     if merged_df.empty:
-    #         print(f"[{wrist_label}] No data — skipping.")
-    #         continue
-
-    #     # Process each recording (subject folder) separately so the GSD sees
-    #     # one continuous, coherent signal — not a mix of activities concatenated.
-    #     for subject, grp_sub in merged_df.groupby('subject', sort=True):
             grp_wrist = grp_wrist.reset_index(drop=True)
             y_true    = grp_wrist['y_true'].to_numpy()
             condition = grp_wrist['condition'].iloc[0]
@@ -428,10 +309,10 @@ def process_gait(df_merged: pd.DataFrame, #lw_merged: pd.DataFrame,
             rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
             f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
 
-            if PLOT == True: 
-                title = f"{subject}{wrist_label}"
-                # plot_predictions(grp_sub, activity_counts_timeline, y_pred, y_true, wrist_label, subject)
-                plot_results(grp_sub, activity_counts_timeline, std_timeline, y_pred, y_true, title, threshold=0.06)
+            # if PLOT == True: 
+            #     title = f"{subject}{wrist_label}"
+            #     # plot_predictions(grp_sub, activity_counts_timeline, y_pred, y_true, wrist_label, subject)
+            #     plot_results(grp_sub, activity_counts_timeline, std_timeline, y_pred, y_true, title, threshold=0.06)
 
             results.append({
                 'Subject':   label,
@@ -807,4 +688,4 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait_from_wrists(df_merged, SAVE_RESULTS, PRINT_STATS)
+    process_gait_from_wrists(df_merged, save_results=SAVE_RESULTS, print_stats=PRINT_STATS)
