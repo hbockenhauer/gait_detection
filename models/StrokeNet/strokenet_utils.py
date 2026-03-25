@@ -196,6 +196,28 @@ def insert_nan_breaks_at_discontinuities(x, y_values, discontinuity_times):
     return x_out, y_out
 
 
+def extract_label2_windows(times, original_labels):
+    """Extract windows that contain any label 2 (arm exercises) samples."""
+    dt      = np.diff(times)
+    gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
+    bounds  = np.concatenate([[0], gap_idx, [len(times)]])
+
+    win_has_label2 = []
+
+    for k in range(len(bounds) - 1):
+        seg_start = bounds[k]
+        seg_end   = bounds[k + 1]
+        if (seg_end - seg_start) < WINDOW_SIZE:
+            continue
+        for i in range(seg_start + WINDOW_SIZE, seg_end, STEP_SIZE):
+            lab_win = original_labels[i - WINDOW_SIZE:i]
+            # Check if ANY sample in window has label 2
+            has_label2 = int(np.any(lab_win == 2))
+            win_has_label2.append(has_label2)
+
+    return np.array(win_has_label2, dtype=int) if len(win_has_label2) > 0 else None
+
+
 def extract_windows_with_gaps_and_activity(times, acc_data, labels, activities):
     dt      = np.diff(times)
     gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
@@ -308,15 +330,24 @@ def _load_qsense_file(filepath, folder_name):
         is_gait_folder = any(tag in folder_lower for tag in QSENSE_GAIT_ACTIVITIES)
         label_series = np.ones(len(df), dtype=int) if is_gait_folder else np.zeros(len(df), dtype=int)
 
+    # Store original labels before conversion
+    original_labels = label_series.copy()
+
+    # For Arm_use activity: label 2 signifies arm exercises (not walking), convert to 0
+    folder_lower = folder_name.lower()
+    if 'arm' in folder_lower:
+        label_series = np.where(label_series >= 2, 0, label_series)
+
     times = df['time_sec'].values.astype(float)
     valid = np.isfinite(times) & np.isfinite(acc).all(axis=1)
     times = times[valid]
     acc = acc[valid]
     labels = label_series[valid]
+    original_labels = original_labels[valid]
 
     folder_activity = folder_name.split('_')[0]
     activities = np.array([folder_activity] * len(times), dtype=object)
-    return times, acc, labels, activities
+    return times, acc, labels, activities, original_labels
 
 
 def evaluate_qsense_dataset(model, device, dataset_path):
@@ -359,7 +390,7 @@ def evaluate_qsense_dataset(model, device, dataset_path):
                 continue
 
             try:
-                times, acc, y_binary, activities = _load_qsense_file(selected_path, folder)
+                times, acc, y_binary, activities, original_labels = _load_qsense_file(selected_path, folder)
                 discontinuity_times = get_discontinuity_times(times)
 
                 wins_np, y_true, win_times, win_activities = extract_windows_with_gaps_and_activity(
@@ -368,6 +399,9 @@ def evaluate_qsense_dataset(model, device, dataset_path):
                 if wins_np is None:
                     print(f"  Skipping {folder}/{os.path.basename(selected_path)}: no valid windows")
                     continue
+
+                # Extract which windows contain label 2 (arm exercises)
+                win_has_label2 = extract_label2_windows(times, original_labels)
 
                 probs = run_inference(model, wins_np, device)
                 y_pred = (probs > CONF_THRESH).astype(int)
@@ -399,6 +433,7 @@ def evaluate_qsense_dataset(model, device, dataset_path):
                     'y_pred': y_pred,
                     'win_times': win_times,
                     'win_activities': win_activities,
+                    'win_has_label2': win_has_label2,
                     'discontinuity_times': discontinuity_times,
                 })
 
@@ -1034,6 +1069,16 @@ def plot_subject_timeline(results, plots_root_dir):
             title += f" | {activity}"
         fig.suptitle(title, fontsize=14, fontweight='bold')
 
+        # Mark label 2 instances (arm exercises) for QSense Arm_use datasets
+        if 'win_has_label2' in r and r['win_has_label2'] is not None:
+            win_label2 = np.asarray(r['win_has_label2'], dtype=int)
+            if len(win_label2) == len(x) and np.any(win_label2 == 1):
+                label2_idx = np.where(win_label2 == 1)[0]
+                for idx in label2_idx:
+                    xv = x[idx]
+                    for ax in axes:
+                        ax.axvspan(xv - 0.5, xv + 0.5, alpha=0.15, color='purple', linewidth=0)
+
         # Activity transition markers for datasets with per-window activity labels.
         if (
             dataset in {'BIOCLITE', 'HMP', 'WearGait', 'WISDM', 'Free_living'}
@@ -1134,10 +1179,17 @@ def plot_subject_timeline(results, plots_root_dir):
                              color='orange', alpha=0.8, label='FP')
         axes[2].fill_between(x_plot, 0, fn_mask, step='post',
                              color='crimson', alpha=0.8, label='FN')
+        
+        # Add label 2 (arm exercises) to legend if present
+        if 'win_has_label2' in r and r['win_has_label2'] is not None:
+            win_label2 = np.asarray(r['win_has_label2'], dtype=int)
+            if len(win_label2) == len(x) and np.any(win_label2 == 1):
+                axes[2].fill_between([0], [0], [1], alpha=0.15, color='purple', label='Label 2 (Arm ex.)')
+        
         axes[2].set_ylim(-0.1, 1.2)
         axes[2].set_ylabel('Classification', fontsize=11)
         axes[2].set_xlabel(xlabel, fontsize=11)
-        axes[2].legend(fontsize=9, loc='upper right', ncol=4)
+        axes[2].legend(fontsize=9, loc='upper right', ncol=5)
         axes[2].grid(True, alpha=0.3)
 
         plt.tight_layout()
