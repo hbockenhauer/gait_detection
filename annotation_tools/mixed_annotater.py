@@ -14,7 +14,7 @@ from config.paths import QSENSE_MIXED, QSENSE_CLINIC, QSENSE_TEST
 
 # EDIT THIS BEFORE RUNNING
 # DATA_PATH = os.path.join(QSENSE_MIXED, 'Test2')
-DATA_PATH = os.path.join(QSENSE_TEST, 'Arm_use')
+DATA_PATH = os.path.join(QSENSE_TEST, 'Arm_use2')
 #THRESHOLD = time(14, 57, 0)
 
 # The entire file for orientation is walking so label every timestamp as 1 (walk)
@@ -27,17 +27,19 @@ LABELS = np.array([0,
                    0, 
                    2, 
                    0, 
-                   1]) # walk
-TIMESTAMPS = [time(10, 38,  0),
-              time(10, 44,  0), 
-              time(11,  2,  0), 
-              time(11,  4,  0), 
-              time(11, 27, 50),
-              time(11, 35,  5), 
-              time(12,  3,  0), 
-              time(12,  5,  0),
-              time(12, 28, 35)] 
-TIME_RANGE = (time(10, 20, 50), time(12, 33, 35))
+                   1, 
+                   0]) # walk
+TIMESTAMPS = [time(15, 30,  5),
+              time(15, 38, 50), 
+              time(15, 55,  0), 
+              time(15, 58, 10), 
+              time(16, 15, 30),
+              time(16, 22, 35), 
+              time(16, 39,  0), 
+              time(16, 41,  0),
+              time(16, 53,  0), 
+              time(16, 57, 25)] 
+TIME_RANGE = (time(15,  9,  0), time(17, 7, 0))
 
 def get_label(row_time, timestamps, labels):
     """
