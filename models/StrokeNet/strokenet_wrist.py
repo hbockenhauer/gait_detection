@@ -32,7 +32,7 @@ from config.paths import PLOTS_DIR, RESULTS_DIR, QSENSE_CLINIC
 import utils.plot_ROC_PR as plot_ROC_PR
 
 # Affected side per patient in QSense Clinic [sub1, sub2, sub3...]
-affected_wrist_patient = ['RW', 'LW', 'LW']
+affected_wrist_patient = ['RW', 'LW', 'LW', 'LW', 'LW']
 
 
 def get_wrist_file(folder_path, wrist_type):
@@ -55,7 +55,12 @@ def load_wrist_data(folder_path, wrist_type, folder_name):
         return None
     
     try:
-        times, acc, y_binary, activities = _load_qsense_file(fpath, folder_name)
+        loaded = _load_qsense_file(fpath, folder_name)
+        # Backward/forward compatible with helper returning either 4 or 5 values.
+        if len(loaded) == 5:
+            times, acc, y_binary, activities, _ = loaded
+        else:
+            times, acc, y_binary, activities = loaded
         return times, acc, y_binary, activities
     except Exception as e:
         print(f"    Error loading {wrist_type} wrist: {e}")
@@ -888,56 +893,83 @@ def evaluate_qsense_clinic_wrist_comparison(model, device, dataset_path):
         folder_path = os.path.join(dataset_path, folder)
         if not os.path.isdir(folder_path):
             continue
+
+        folder_lower = folder.lower()
+        if not folder_lower.startswith('sub'):
+            print(f"\nSkipping non-subject folder: {folder}")
+            continue
+
+        subject_digits = ''.join(ch for ch in folder if ch.isdigit())
+        if subject_digits == '':
+            print(f"\nSkipping folder with unrecognized subject id: {folder}")
+            continue
+
+        subject_num = int(subject_digits)
+
+        has_affected_mapping = 1 <= subject_num <= len(affected_wrist_patient)
+        if has_affected_mapping:
+            affected_wrist = affected_wrist_patient[subject_num - 1]
+            unaffected_wrist = 'LW' if affected_wrist == 'RW' else 'RW'
+            print(f"\n--- {folder} (Affected: {affected_wrist}, Unaffected: {unaffected_wrist}) ---")
+
+            first_wrist_name = 'right' if affected_wrist == 'RW' else 'left'
+            second_wrist_name = 'right' if unaffected_wrist == 'RW' else 'left'
+            first_label = 'affected'
+            second_label = 'unaffected'
+            first_condition = 'affected'
+            second_condition = 'unaffected'
+            affected_wrist_value = affected_wrist
+        else:
+            print(f"\n--- {folder} (Affected side unknown; evaluating right/left wrists) ---")
+            first_wrist_name = 'right'
+            second_wrist_name = 'left'
+            first_label = 'right'
+            second_label = 'left'
+            first_condition = 'right'
+            second_condition = 'left'
+            affected_wrist_value = 'Unknown'
+
+        # 1. Evaluate first wrist (affected if known, else right)
+        print(f"  Evaluating {first_wrist_name.upper()} wrist ({first_label})...")
+        first_result = evaluate_specific_wrist(model, device, folder_path, folder, first_wrist_name)
         
-        subject_num = int(folder.replace('sub', '')) if 'sub' in folder else subject_idx + 1
-        affected_wrist = affected_wrist_patient[subject_num - 1]
-        unaffected_wrist = 'LW' if affected_wrist == 'RW' else 'RW'
-        
-        print(f"\n--- {folder} (Affected: {affected_wrist}, Unaffected: {unaffected_wrist}) ---")
-        
-        # Map affected_wrist abbreviation to full name
-        affected_name = 'right' if affected_wrist == 'RW' else 'left'
-        unaffected_name = 'right' if unaffected_wrist == 'RW' else 'left'
-        
-        # 1. Evaluate affected wrist
-        print(f"  Evaluating {affected_name.upper()} wrist (affected)...")
-        affected_result = evaluate_specific_wrist(model, device, folder_path, folder, affected_name)
-        
-        if affected_result:
-            print(f"    Precision: {affected_result['precision']:.3f} | "
-                  f"Recall: {affected_result['recall']:.3f} | "
-                  f"F1: {affected_result['f1']:.3f} | "
-                  f"Accuracy: {affected_result['accuracy']:.3f}")
+        if first_result:
+            print(f"    Precision: {first_result['precision']:.3f} | "
+                  f"Recall: {first_result['recall']:.3f} | "
+                  f"F1: {first_result['f1']:.3f} | "
+                  f"Accuracy: {first_result['accuracy']:.3f}")
             results.append({
                 'subject': folder,
                 'subject_num': subject_num,
-                'condition': 'affected',
-                'affected_wrist': affected_wrist,
-                'wrist_name': affected_name,
-                **affected_result
+                'condition': first_condition,
+                'condition_name': first_label.capitalize(),
+                'affected_wrist': affected_wrist_value,
+                'wrist_name': first_wrist_name,
+                **first_result
             })
         else:
-            print(f"    Could not evaluate {affected_name} wrist")
+            print(f"    Could not evaluate {first_wrist_name} wrist")
         
-        # 2. Evaluate unaffected wrist
-        print(f"  Evaluating {unaffected_name.upper()} wrist (unaffected)...")
-        unaffected_result = evaluate_specific_wrist(model, device, folder_path, folder, unaffected_name)
+        # 2. Evaluate second wrist (unaffected if known, else left)
+        print(f"  Evaluating {second_wrist_name.upper()} wrist ({second_label})...")
+        second_result = evaluate_specific_wrist(model, device, folder_path, folder, second_wrist_name)
         
-        if unaffected_result:
-            print(f"    Precision: {unaffected_result['precision']:.3f} | "
-                  f"Recall: {unaffected_result['recall']:.3f} | "
-                  f"F1: {unaffected_result['f1']:.3f} | "
-                  f"Accuracy: {unaffected_result['accuracy']:.3f}")
+        if second_result:
+            print(f"    Precision: {second_result['precision']:.3f} | "
+                  f"Recall: {second_result['recall']:.3f} | "
+                  f"F1: {second_result['f1']:.3f} | "
+                  f"Accuracy: {second_result['accuracy']:.3f}")
             results.append({
                 'subject': folder,
                 'subject_num': subject_num,
-                'condition': 'unaffected',
-                'affected_wrist': affected_wrist,
-                'wrist_name': unaffected_name,
-                **unaffected_result
+                'condition': second_condition,
+                'condition_name': second_label.capitalize(),
+                'affected_wrist': affected_wrist_value,
+                'wrist_name': second_wrist_name,
+                **second_result
             })
         else:
-            print(f"    Could not evaluate {unaffected_name} wrist")
+            print(f"    Could not evaluate {second_wrist_name} wrist")
         
         # 3. Evaluate both wrists with different fusion strategies
         fusion_strategies = {
@@ -963,7 +995,7 @@ def evaluate_qsense_clinic_wrist_comparison(model, device, dataset_path):
                     'subject_num': subject_num,
                     'condition': strategy_key,
                     'condition_name': strategy_name,
-                    'affected_wrist': affected_wrist,
+                    'affected_wrist': affected_wrist_value,
                     'wrist_name': 'both',
                     **result
                 })
@@ -1010,7 +1042,7 @@ def create_comparison_plots(results, plots_dir):
     metrics = ['Precision', 'Recall', 'F1', 'Accuracy']
     
     # Separate single-wrist and fusion conditions
-    single_conditions = ['affected', 'unaffected']
+    single_conditions = ['affected', 'unaffected', 'right', 'left']
     fusion_conditions = ['averaged_acc', 'prob_average', 'prob_max', 'prob_min', 'voting_AND', 'voting_OR']
     
     # Plot 1: Detailed comparison with all conditions for each subject
@@ -1022,6 +1054,8 @@ def create_comparison_plots(results, plots_dir):
     color_map = {
         'affected': '#FF6B6B',
         'unaffected': '#4ECDC4',
+        'right': '#1F77B4',
+        'left': '#2CA02C',
         'averaged_acc': "#000000",
         'prob_average': "#1900FC",
         'prob_max': "#E6BB2C",
