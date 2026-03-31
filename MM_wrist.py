@@ -20,9 +20,9 @@ ONLY for running QSense files
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
     r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic"
 ]
 
@@ -31,9 +31,10 @@ GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
                       'cane', 'limp', 'armfixed', 'stroke']
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
+THRESHOLD_STILL = 0.1
 
 DEBUG = False
-PRINT_STATS = False 
+PRINT_STATS = True 
 
 SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wrist.csv"
@@ -248,7 +249,7 @@ def run_gsd_on_segment(grp) :
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
     
-    gsd = KheirkhahanGSD()
+    gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts, _ = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
@@ -548,7 +549,7 @@ def process_gait_from_wrists(df_merged: pd.DataFrame, #lw_merged: pd.DataFrame,
         })
 
         if print_stats:
-            print(f"{subject[:35]:<35} | {condition:<10} | "
+            print(f"{subject[:35]:<35} | {"fused":<5} | {condition:<10} | "
                   f"{acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
     # ── Everything below this line is unchanged ───────────────────────────────

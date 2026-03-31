@@ -15,12 +15,12 @@ import matplotlib.ticker as mticker
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-# DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub3"
-DATA_PATH = r"C:\Users\orlov\intern\gait_detection\Qsense_tests\Arm_use"
+DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub4"
 file_name = "s1_1RW.txt" #"s2_2LW.txt"
 SAMPLING_RATE = 50 
 DEBUG = True
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for 9s window 
+THRESHOLD_STILL = 0.1
 PLOT = True
 
 def parse_time(t_str):
@@ -105,7 +105,7 @@ def run_gsd_on_segment(grp) :
     seg_imu.columns = ['acc_is', 'acc_ml', 'acc_pa']
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
-    gsd = KheirkhahanGSD()
+    gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
     seg_imu = pd.DataFrame(seg_imu)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts, walking_windows = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
@@ -156,13 +156,14 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
                     label='Ground truth (walking)')
-    ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
-                    alpha=0.2, color='purple', transform=ax1.get_xaxis_transform(),
-                    label='Functional Arm use')
+    if 2 in y_true:
+        ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax1.get_xaxis_transform(),
+                        label='Functional Arm use')
     acc_cols = [c for c in df.columns if 'acc' in c]
     for acc in acc_cols:
 
-        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
+        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, marker='.', linestyle='None', markersize=3)
 
     for i, jt in enumerate(jump_times_sec):
         ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
@@ -176,9 +177,10 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
                     label='Ground truth (walking)')
-    ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
-                    alpha=0.2, color='purple', transform=ax2.get_xaxis_transform(),
-                    label='Functional Arm use')
+    if 2 in y_true:
+        ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax2.get_xaxis_transform(),
+                        label='Functional Arm use')
     
     ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
             linewidth=1, color='steelblue')
@@ -194,9 +196,10 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', transform=ax3.get_xaxis_transform(),
                     label='Ground truth (walking)')
-    ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
-                    alpha=0.2, color='purple', transform=ax3.get_xaxis_transform(),
-                    label='Functional Arm use')
+    if 2 in y_true:
+        ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax3.get_xaxis_transform(),
+                        label='Functional Arm use')
     ax3.plot(time_per_second_sec, walking_plot, label='walking windows', 
             linewidth=1, color='steelblue')
 
@@ -212,8 +215,9 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     # ── figure 4: std norm ───────────────────────────────────────────────
     ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', label='Ground truth (walking)')
-    ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
-                    alpha=0.2, color='purple', label='Functional Arm use')
+    if 2 in y_true:
+        ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', label='Functional Arm use')
     
     ax4.plot(time_per_second_sec, std_plot, label='std norm', alpha=0.8, 
             linewidth=1, color='steelblue')
@@ -230,8 +234,9 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     # ── figure 5: y_pred and y_true ──────────────────────────────────────────────
     ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', label='Ground truth (walking)')
-    ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
-                    alpha=0.2, color='purple', label='Functional Arm use')
+    if 2 in y_true:
+        ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', label='Functional Arm use')
     ax5.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
             linewidth=1, color='steelblue')
 

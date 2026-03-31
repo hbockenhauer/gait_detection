@@ -44,7 +44,7 @@ class KheirkhahanGSD:
     """
 
 
-    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True):
+    def __init__(self, *, version: Literal["wrist"] = "wrist", cwb: bool=True, threshold_still: float = 0.0):
         """
         Initialize the class.
 
@@ -65,6 +65,7 @@ class KheirkhahanGSD:
         self.threshold = 0.62
         self.cwb = cwb
         # self.visual = visual
+        self.threshold_still = threshold_still
     '''
     def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
                                title: str = "3-Axis Acceleration", 
@@ -212,11 +213,14 @@ class KheirkhahanGSD:
         # print("std_acc", std_acc)
         # print("std_acc len", len(std_acc))
 
-        ThresholdStill = 0.1
+        # self.threshold_still = 0.1
+        th3 = 0.45
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
         for i in range(win_num):
-            if std_acc[i] >= ThresholdStill and inactivity_parameter[i] <= self.threshold:
+            if std_acc[i] >= self.threshold_still \
+                and inactivity_parameter[i] <= self.threshold \
+                and inactivity_parameter[i] >= th3:
                 walking_windows[i] = 1
 
         # Shows how many times each second's activity counts are included in the moving window
@@ -227,8 +231,16 @@ class KheirkhahanGSD:
         here the .astype(bool) taked any detected window to be true; 
         could add a check of detected_walking needs to be >1 for example 
         not sure if that makes sense ?
-        """
 
+        didnt seem helpful i think? 
+        """
+        # print("len activity",len(activity_counts))
+        # print("len detected_walking",len(detected_walking))
+        # for i in range(activity_counts):
+            
+        #     if activity_counts[i] > 200:
+                
+        #         detected_walking[i] = 0 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file
         gs[['start', 'end']] = np.clip(gs[['start', 'end']], 0, len(self.data))
@@ -256,7 +268,7 @@ class KheirkhahanGSD:
         ###############
 
         # from gsd2 
-        cutoff = 1.75
+        cutoff = 1.75 #0.25
         # class instance
         filter_chain = [("butter", ButterworthFilter(order=1, cutoff_freq_hz=cutoff, filter_type='lowpass'))]
 
@@ -342,8 +354,7 @@ class KheirkhahanGSD:
         '''
 
         return self
-    
-    
+     
     def get_activity(self, data, *, sampling_rate_hz: float = 100):
         self.sampling_rate_hz = sampling_rate_hz
         self.data = data

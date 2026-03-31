@@ -17,9 +17,9 @@ from free_living_test import merge_csv
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
     r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
     # r"C:\Users\orlov\intern\gait_detection\Free_living"
 ]
@@ -28,8 +28,9 @@ SAMPLING_RATE = 50
 GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
                       'cane', 'limp', 'armfixed', 'stroke', 
-                      'sub1', 'sub2','sub3']
+                      'sub1', 'sub2','sub3', 'sub4', "sub5"]
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
+THRESHOLD_STILL = 0.1
 
 DEBUG = False
 PRINT_STATS = True 
@@ -37,8 +38,8 @@ PRINT_STATS = True
 SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
 
-PLOT = False
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\wHickey"
+PLOT = True
+OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\temp"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -223,95 +224,95 @@ def run_gsd_on_segment(grp) :
     # seg_imu.reset_index(drop=True)
     seg_imu = seg_imu.reset_index(drop=True)
     
-    gsd = KheirkhahanGSD()
+    gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     activity_counts, _ = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
     std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
 
     return bout_result, activity_counts, std_norm, grp_start_idx
 
-def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true, file_name, folder):
-    time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
-    # Convert to total seconds (float) for plotting
-    time_per_second_sec = time_series.iloc[::SAMPLING_RATE].reset_index(drop=True).dt.total_seconds()
+# def plot_predictions(df: pd.DataFrame, activity_counts_timeline, y_pred, y_true, file_name, folder):
+#     time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
+#     # Convert to total seconds (float) for plotting
+#     time_per_second_sec = time_series.iloc[::SAMPLING_RATE].reset_index(drop=True).dt.total_seconds()
 
-    total_seconds = len(time_per_second_sec)
-    ac_plot = np.full(total_seconds, np.nan)
-    for sec_idx, val in activity_counts_timeline.items():
-        if sec_idx < total_seconds:
-            ac_plot[sec_idx] = val
+#     total_seconds = len(time_per_second_sec)
+#     ac_plot = np.full(total_seconds, np.nan)
+#     for sec_idx, val in activity_counts_timeline.items():
+#         if sec_idx < total_seconds:
+#             ac_plot[sec_idx] = val
 
-    all_segment_first_rows = df.groupby('segment').nth(0).index
-    jump_row_indices = all_segment_first_rows[1:]
-    jump_times_sec = [time_series.iloc[idx].total_seconds() for idx in jump_row_indices]
+#     all_segment_first_rows = df.groupby('segment').nth(0).index
+#     jump_row_indices = all_segment_first_rows[1:]
+#     jump_times_sec = [time_series.iloc[idx].total_seconds() for idx in jump_row_indices]
 
 
-    time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
+#     time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
+#     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
 
-    # ── figure 1: raw data ────────────────────────────────────────────────────
-    ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                     alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
-                     label='Ground truth (walking)')
-    acc_cols = [c for c in df.columns if 'acc' in c]
-    for acc in acc_cols:
+#     # ── figure 1: raw data ────────────────────────────────────────────────────
+#     ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+#                      alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
+#                      label='Ground truth (walking)')
+#     acc_cols = [c for c in df.columns if 'acc' in c]
+#     for acc in acc_cols:
 
-        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
+#         ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, linewidth=1)
 
-    for i, jt in enumerate(jump_times_sec):
-        ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
+#     for i, jt in enumerate(jump_times_sec):
+#         ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+#                     label='Time gap' if i == 0 else None)
 
-    ax1.set_ylabel(f'Acceleration (m/s^{2})')
-    ax1.set_title(f'{folder}/{file_name}')
-    ax1.legend(loc='upper left')
+#     ax1.set_ylabel(f'Acceleration (m/s^{2})')
+#     ax1.set_title(f'{folder}/{file_name}')
+#     ax1.legend(loc='upper left')
 
-    # ── figure 2: activity counts ───────────────────────────────────────────────
-    ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
-                    label='Ground truth (walking)')
-    ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
-            linewidth=1, color='steelblue')
+#     # ── figure 2: activity counts ───────────────────────────────────────────────
+#     ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+#                     alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
+#                     label='Ground truth (walking)')
+#     ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
+#             linewidth=1, color='steelblue')
 
-    for i, jt in enumerate(jump_times_sec):
-        ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
+#     for i, jt in enumerate(jump_times_sec):
+#         ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+#                     label='Time gap' if i == 0 else None)
 
-    ax2.set_xlabel('Time')
-    ax2.set_ylabel('Activity count')
-    ax2.legend(loc='upper left')
+#     ax2.set_xlabel('Time')
+#     ax2.set_ylabel('Activity count')
+#     ax2.legend(loc='upper left')
 
-    # ── figure 3: y_pred and y_true ──────────────────────────────────────────────
-    ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
-                    alpha=0.2, color='green', label='Ground truth (walking)')
-    ax3.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
-            linewidth=1, color='steelblue')
+#     # ── figure 3: y_pred and y_true ──────────────────────────────────────────────
+#     ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+#                     alpha=0.2, color='green', label='Ground truth (walking)')
+#     ax3.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+#             linewidth=1, color='steelblue')
 
-    for i, jt in enumerate(jump_times_sec):
-        ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
-                    label='Time gap' if i == 0 else None)
+#     for i, jt in enumerate(jump_times_sec):
+#         ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+#                     label='Time gap' if i == 0 else None)
 
-    ax3.set_ylabel('Walking (1) / Not (0)')
-    ax3.legend(loc='upper left')
-    ax3.set_ylim(-0.1, 1.4)
+#     ax3.set_ylabel('Walking (1) / Not (0)')
+#     ax3.legend(loc='upper left')
+#     ax3.set_ylim(-0.1, 1.4)
 
-    # Format x-axis as HH:MM:SS
-    ax3.xaxis.set_major_formatter(mticker.FuncFormatter(
-        lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
-    ))
-    fig.autofmt_xdate()
-    plt.tight_layout()
+#     # Format x-axis as HH:MM:SS
+#     ax3.xaxis.set_major_formatter(mticker.FuncFormatter(
+#         lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+#     ))
+#     fig.autofmt_xdate()
+#     plt.tight_layout()
 
-    out_path = os.path.join(OUT_FOLDER, f"{folder}{file_name}_predictions.png")
-    plt.savefig(out_path, dpi=150)
-    plt.close(fig)
-    print(f"Saved -> {out_path}")
+#     out_path = os.path.join(OUT_FOLDER, f"{folder}{file_name}_predictions.png")
+#     plt.savefig(out_path, dpi=150)
+#     plt.close(fig)
+#     print(f"Saved -> {out_path}")
 
-    return 
+#     return 
 
 def plot_results(df: pd.DataFrame, activity_counts_timeline, 
                  std_norm_timeline, y_pred, y_true, title,
-                 threshold: float = None):
+                 threshold: float = THRESHOLD_STILL):
     # Parse timestamps from df into timedeltas
     time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
     # Convert to total seconds (float) for plotting
@@ -474,7 +475,7 @@ def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
             if PLOT == True: 
                 title = f"{subject}{wrist_label}"
                 # plot_predictions(grp_sub, activity_counts_timeline, y_pred, y_true, wrist_label, subject)
-                plot_results(grp_sub, activity_counts_timeline, std_timeline, y_pred, y_true, title, threshold=0.06)
+                plot_results(grp_sub, activity_counts_timeline, std_timeline, y_pred, y_true, title)
 
             results.append({
                 'Subject':   label,
@@ -573,13 +574,13 @@ def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
 
     # Print summary to console
     if print_stats: 
-        print("-" * 90)
+        print("-" * 100)
         _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
         _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
         print()
     for condition in sorted(res_df['Condition'].unique()):
         _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
-    print("-" * 90)
+    print("-" * 100)
     _print_avg("AVERAGE (Overall)", res_df)
 
     # Save the csv
