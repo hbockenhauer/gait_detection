@@ -35,6 +35,54 @@ import utils.plot_ROC_PR as plot_ROC_PR
 affected_wrist_patient = ['RW', 'LW', 'LW', 'LW', 'LW']
 
 
+def find_optimal_thresholds(y_true, probs, beta=1.0):
+    """
+    Compute threshold candidates from ROC and PR curves.
+    Returns best Youden J threshold (ROC) and best F-beta threshold (PR).
+    """
+    y_true = np.asarray(y_true).astype(int)
+    probs = np.asarray(probs).astype(float)
+
+    if len(y_true) == 0 or len(np.unique(y_true)) < 2:
+        return None
+
+    result = {}
+
+    # ROC: maximize Youden's J = TPR - FPR.
+    fpr, tpr, roc_thresholds = roc_curve(y_true, probs)
+    finite = np.isfinite(roc_thresholds)
+    if np.any(finite):
+        fpr_f = fpr[finite]
+        tpr_f = tpr[finite]
+        roc_thr_f = roc_thresholds[finite]
+        j_vals = tpr_f - fpr_f
+        best_j_idx = int(np.argmax(j_vals))
+        result['youden_j'] = {
+            'threshold': float(roc_thr_f[best_j_idx]),
+            'j_score': float(j_vals[best_j_idx]),
+            'fpr': float(fpr_f[best_j_idx]),
+            'tpr': float(tpr_f[best_j_idx]),
+        }
+
+    # PR: maximize F-beta.
+    precision, recall, pr_thresholds = precision_recall_curve(y_true, probs)
+    if len(pr_thresholds) > 0:
+        p = precision[:-1]
+        r = recall[:-1]
+        denom = (beta ** 2) * p + r
+        fbeta = np.where(denom > 0, (1 + beta ** 2) * p * r / denom, 0.0)
+        best_f_idx = int(np.argmax(fbeta))
+        result['f_beta'] = {
+            'threshold': float(pr_thresholds[best_f_idx]),
+            'f_beta': float(fbeta[best_f_idx]),
+            'beta': float(beta),
+            'precision': float(p[best_f_idx]),
+            'recall': float(r[best_f_idx]),
+        }
+
+    return result if result else None
+
+
 def get_wrist_file(folder_path, wrist_type):
     """Get the file path for a specific wrist. Returns None if not found."""
     if wrist_type == 'right':
@@ -1146,6 +1194,9 @@ def create_method_roc_pr_plots(results, plots_dir):
     os.makedirs(roc_dir, exist_ok=True)
     os.makedirs(pr_dir, exist_ok=True)
 
+    threshold_rows = []
+    threshold_by_method = {}
+
     # Combined ROC plot with one curve per method
     plt.figure(figsize=(10, 8))
     any_roc = False
@@ -1161,6 +1212,50 @@ def create_method_roc_pr_plots(results, plots_dir):
         fpr, tpr, thresholds = roc_curve(y_true, probs)
         roc_auc = auc(fpr, tpr)
         any_roc = True
+        threshold_info = find_optimal_thresholds(y_true, probs, beta=1.0)
+
+        youden_threshold = np.nan
+        youden_j = np.nan
+        youden_fpr = np.nan
+        youden_tpr = np.nan
+        f1_threshold = np.nan
+        f1_score = np.nan
+        f1_precision = np.nan
+        f1_recall = np.nan
+
+        if threshold_info is not None:
+            if 'youden_j' in threshold_info:
+                youden_threshold = threshold_info['youden_j']['threshold']
+                youden_j = threshold_info['youden_j']['j_score']
+                youden_fpr = threshold_info['youden_j']['fpr']
+                youden_tpr = threshold_info['youden_j']['tpr']
+            if 'f_beta' in threshold_info:
+                f1_threshold = threshold_info['f_beta']['threshold']
+                f1_score = threshold_info['f_beta']['f_beta']
+                f1_precision = threshold_info['f_beta']['precision']
+                f1_recall = threshold_info['f_beta']['recall']
+
+        threshold_rows.append({
+            'method': method,
+            'roc_auc': float(roc_auc),
+            'average_precision': np.nan,
+            'youden_threshold': youden_threshold,
+            'youden_j': youden_j,
+            'youden_fpr': youden_fpr,
+            'youden_tpr': youden_tpr,
+            'f1_threshold': f1_threshold,
+            'f1_score': f1_score,
+            'f1_precision': f1_precision,
+            'f1_recall': f1_recall,
+        })
+        threshold_by_method[method] = {
+            'youden_threshold': youden_threshold,
+            'youden_fpr': youden_fpr,
+            'youden_tpr': youden_tpr,
+            'f1_threshold': f1_threshold,
+            'f1_precision': f1_precision,
+            'f1_recall': f1_recall,
+        }
 
         safe_name = method.replace(' ', '_').replace('(', '').replace(')', '').lower()
         roc_points = pd.DataFrame({'fpr': fpr, 'tpr': tpr, 'threshold': thresholds})
@@ -1175,6 +1270,15 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.title(f'ROC - {method}')
+        if np.isfinite(youden_fpr) and np.isfinite(youden_tpr):
+            plt.scatter(
+                [youden_fpr],
+                [youden_tpr],
+                s=50,
+                color='red',
+                zorder=3,
+                label=f"Youden t={youden_threshold:.3f}",
+            )
         plt.legend(loc='lower right')
         plt.grid(alpha=0.3)
         plt.tight_layout()
@@ -1218,6 +1322,9 @@ def create_method_roc_pr_plots(results, plots_dir):
         ap = average_precision_score(y_true, probs)
         any_pr = True
 
+        if threshold_rows:
+            threshold_rows[-1]['average_precision'] = float(ap)
+
         safe_name = method.replace(' ', '_').replace('(', '').replace(')', '').lower()
         pr_points = pd.DataFrame({
             'precision': precision,
@@ -1234,6 +1341,19 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.xlabel('Recall')
         plt.ylabel('Precision')
         plt.title(f'PR - {method}')
+        method_thr = threshold_by_method.get(method, {})
+        method_f1_recall = method_thr.get('f1_recall', np.nan)
+        method_f1_precision = method_thr.get('f1_precision', np.nan)
+        method_f1_threshold = method_thr.get('f1_threshold', np.nan)
+        if np.isfinite(method_f1_recall) and np.isfinite(method_f1_precision):
+            plt.scatter(
+                [method_f1_recall],
+                [method_f1_precision],
+                s=50,
+                color='red',
+                zorder=3,
+                label=f"Best F1 t={method_f1_threshold:.3f}",
+            )
         plt.legend(loc='lower left')
         plt.grid(alpha=0.3)
         plt.tight_layout()
@@ -1259,6 +1379,12 @@ def create_method_roc_pr_plots(results, plots_dir):
     else:
         print('No PR curves generated (insufficient class variation).')
     plt.close('all')
+
+    if threshold_rows:
+        thresholds_df = pd.DataFrame(threshold_rows)
+        thresholds_csv = os.path.join(plots_dir, 'optimal_thresholds_by_method.csv')
+        thresholds_df.to_csv(thresholds_csv, index=False)
+        print(f"Saved threshold summary to {thresholds_csv}")
 
 
 def main():
