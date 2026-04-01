@@ -151,7 +151,6 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
     
     fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(10, 8), sharex=True)
-    print("in the plotsss")
     # ── figure 1: raw data ────────────────────────────────────────────────────
     ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
                     alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
@@ -383,11 +382,11 @@ if __name__ == "__main__":
         
         # Print RW.txt average
         if not rw_files.empty:
-            print(f"{'AVERAGE right wrist ':<25} | {rw_files['Accuracy'].mean():.2f}   | {rw_files['Precision'].mean():.2f}   | {rw_files['Recall'].mean():.2f}   | {rw_files['F1'].mean():.2f}")
+            print(f"{'AVERAGE right wrist ':<25} | {rw_files['Accuracy'].mean():.4f}   | {rw_files['Precision'].mean():.4f}   | {rw_files['Recall'].mean():.4f}   | {rw_files['F1'].mean():.4f}")
         
         # Print other files average
         if not other_files.empty:
-            print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.2f}   | {other_files['Precision'].mean():.2f}   | {other_files['Recall'].mean():.2f}   | {other_files['F1'].mean():.2f}")
+            print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.4f}   | {other_files['Precision'].mean():.4f}   | {other_files['Recall'].mean():.4f}   | {other_files['F1'].mean():.4f}")
         
         #res_df.to_csv('HickeyGSD_Results.csv', index=False)
         plt.show()
