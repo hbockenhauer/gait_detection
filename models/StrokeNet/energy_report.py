@@ -55,7 +55,7 @@ def get_affected_wrist_and_target():
         wrist_input = input("Enter affected wrist [right/left or r/l]: ").strip().lower()
         affected_wrist = wrist_map.get(wrist_input)
         if affected_wrist is None:
-            print("Invalid wrist. Please enter right/left (or RW/LW).")
+            print("Invalid wrist. Please enter right/left or r/l).")
 
     target_energy = None
     while target_energy is None:
@@ -144,7 +144,7 @@ def extract_windows_with_gaps(times, acc_data, energy):
 
 
             wins_acc.append(win_acc.T)
-            energies.append(float(np.mean(win_energy)))  #USE MEAN OR SUM?
+            energies.append(float(np.sum(win_energy)))  #USE MEAN OR SUM?
             win_times.append(times[i - 1])
 
     if len(wins_acc) == 0:
@@ -224,7 +224,7 @@ def run_subject(folder, folder_path, model, device, dataset_name):
         print(f"  No valid wrist data for {folder}, skipping.")
         return None
 
-    # ── Average probabilities ──────────────────────────────────────────────
+    # Average probabilities
     if R is not None and L is not None:
         df_merge = pd.merge_asof(
             pd.DataFrame({'time': R['win_times'], 'prob_R': R['probs']}).sort_values('time'),
@@ -246,7 +246,7 @@ def run_subject(folder, folder_path, model, device, dataset_name):
 
     y_pred = (avg_probs > CONF_THRESH).astype(int)
 
-    # ── Energy ratio (right / left) ────────────────────────────────────────
+    # Energy ratio (right / left) 
     ratio_df = None
     if R is not None and L is not None:
         df_R = pd.DataFrame({'real_time': R['real_win_times'], 'energy_R': R['energy']})
@@ -460,36 +460,27 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
         df_all = pd.concat(wrist_hourly.values(), axis=1).sort_index().fillna(0)
         df_all.columns = [c for c in wrist_hourly]  # 'right', 'left', or both
 
-        unaffected_wrist = 'left' if affected_wrist == 'right' else 'right'
-
-        if affected_wrist in df_all and unaffected_wrist in df_all:
-            affected_vals = df_all[affected_wrist].astype(float)
-            unaffected_vals = df_all[unaffected_wrist].astype(float)
-            valid = (affected_vals.abs() > 1e-6) & (unaffected_vals.abs() > 1e-6)
-            log2_ratio = pd.Series(np.nan, index=df_all.index, dtype=float)
-            log2_ratio.loc[valid] = np.log2(affected_vals.loc[valid] / unaffected_vals.loc[valid])
-            df_all['log2_ratio'] = log2_ratio
-        else:
-            df_all['log2_ratio'] = np.nan
+        wrist_cols = [w for w in ('right', 'left') if w in df_all.columns]
+        hourly_total = df_all[wrist_cols].sum(axis=1)
+        df_pct = pd.DataFrame(index=df_all.index)
+        valid_total = hourly_total.abs() > 1e-9
+        for wrist in wrist_cols:
+            pct_vals = pd.Series(0.0, index=df_all.index, dtype=float)
+            pct_vals.loc[valid_total] = (100.0 * df_all.loc[valid_total, wrist] / hourly_total.loc[valid_total])
+            df_pct[wrist] = pct_vals
 
         hours     = df_all.index  # DatetimeIndex of clock hours
         n_hours   = len(hours)
         has_both  = 'right' in df_all.columns and 'left' in df_all.columns
-        has_ratio = has_both and df_all['log2_ratio'].notna().any()
 
-        # ── Plot (top: energy, bottom: aligned ratio strip) ──────────────
-        fig, (ax0, ax_ratio) = plt.subplots(
-            2,
-            1,
-            figsize=(max(14, n_hours * 0.6), 7),
-            sharex=True,
-            gridspec_kw={'height_ratios': [4, 1.5]},
-        )
+        # ── Plot hourly bars with per-hour wrist contribution labels ──────
+        fig, ax0 = plt.subplots(figsize=(max(14, n_hours * 0.6), 9))
 
         x_hours = mdates.date2num(hours.to_pydatetime())
         hour_width_days = 1.0 / 24.0
-        slot_width = 0.22 * hour_width_days
-        bar_width = slot_width
+        slot_width = 0.36 * hour_width_days
+        # Keep bars wide, but narrower than center spacing to prevent overlap.
+        bar_width = slot_width * 1.
 
         if has_both:
             bar_offsets = {'right': -slot_width / 2, 'left': slot_width / 2}
@@ -500,12 +491,14 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
         line_colours = {'right': '#1B4F72', 'left': '#922B21'}
 
         legend_handles = []
+        max_cumulative = 0.0  # Track max cumulative value for y-axis
 
         for wrist in ('right', 'left'):
             if wrist not in df_all.columns:
                 continue
 
             vals = df_all[wrist].values.astype(float)
+            pct_vals = df_pct[wrist].values.astype(float)
             xpos = x_hours + (bar_offsets[wrist] if has_both else 0.0)
             ax0.bar(
                 xpos,
@@ -515,22 +508,37 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
                 alpha=0.65,
                 zorder=2,
             )
+            for x, y, pct in zip(xpos, vals, pct_vals):
+                if y <= 0 or not np.isfinite(y):
+                    continue
+                ax0.text(
+                    x,
+                    y,
+                    f"{pct:.0f}%",
+                    ha='center',
+                    va='bottom',
+                    fontsize=11,
+                    fontweight='bold',
+                    zorder=4,
+                )
             legend_handles.append(
                 Patch(facecolor=bar_colours[wrist], alpha=0.65,
                       label=f"{wrist.capitalize()}: hourly")
             )
 
             if wrist == affected_wrist and wrist in wrist_cumulative:
+                cum_vals = wrist_cumulative[wrist]['cum_energy'].values.astype(float)
+                max_cumulative = max(max_cumulative, float(np.nanmax(cum_vals)) if len(cum_vals) > 0 else 0.0)
                 ax0.plot(
                     wrist_cumulative[wrist]['time'],
-                    wrist_cumulative[wrist]['cum_energy'].values.astype(float),
+                    cum_vals,
                     color=line_colours[wrist],
-                    linewidth=2.0,
+                    linewidth=2.5,
                     alpha=0.95,
                     zorder=3,
                 )
                 legend_handles.append(
-                    plt.Line2D([0], [0], color=line_colours[wrist], linewidth=2.0,
+                    plt.Line2D([0], [0], color=line_colours[wrist], linewidth=2.5,
                                label=f"{wrist.capitalize()}: cumulative")
                 )
 
@@ -538,11 +546,11 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
             target_energy,
             color='darkgreen',
             linestyle='--',
-            linewidth=1.2,
+            linewidth=1.5,
             alpha=0.9,
         )
         legend_handles.append(
-            plt.Line2D([0], [0], color='darkgreen', linestyle='--', linewidth=1.2,
+            plt.Line2D([0], [0], color='darkgreen', linestyle='--', linewidth=1.5,
                        label=f"Cumulative Target")
         )
 
@@ -555,62 +563,30 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
 
         if plot_date is not None:
             plot_date_text = pd.to_datetime(plot_date).strftime('%d/%m/%Y')
-            title_text = f"{r['subject']} on {plot_date_text}: Hourly Non-walking Energy with affected cumulative and ratio (affected/unaffected)"
+            title_text = f"{r['subject']} on {plot_date_text}: Hourly Non-walking Energy with affected cumulative and per-hour wrist contribution"
         else:
-            title_text = f"{r['subject']}: Hourly Non-walking Energy with affected cumulative and ratio (affected/unaffected)"
+            title_text = f"{r['subject']}: Hourly Non-walking Energy with affected cumulative and per-hour wrist contribution"
 
-        ax0.set_title(title_text)
-        ax0.set_ylabel("Energy")
+        ax0.set_title(title_text, fontsize=13, fontweight='bold')
+        ax0.set_ylabel("Energy", fontsize=12)
         ax0.grid(axis='y', alpha=0.25)
-
-        ratio_handles = []
-        if has_ratio:
-            ratio_vals = df_all['log2_ratio'].values.astype(float)
-            valid = np.isfinite(ratio_vals)
-
-            ax_ratio.axhline(0.0, color='gray', linestyle='--', linewidth=0.9, alpha=0.8)
-
-            if np.any(valid):
-                ratio_times = hours[valid]
-                ratio_plot_vals = ratio_vals[valid]
-                ax_ratio.plot(
-                    ratio_times,
-                    ratio_plot_vals,
-                    color='mediumpurple',
-                    linewidth=1.6,
-                    marker='o',
-                    markersize=4,
-                    zorder=2,
-                )
-
-                # Keep the strip compact and avoid large vertical expansion from outliers.
-                data_min = float(np.nanmin(ratio_plot_vals))
-                data_max = float(np.nanmax(ratio_plot_vals))
-                y_low = max(-2.0, min(-0.2, data_min * 1.10))
-                y_high = min(0.6, max(0.2, data_max * 1.10))
-                ax_ratio.set_ylim(y_low, y_high)
-
-            ratio_handles.append(plt.Line2D([0], [0], color='mediumpurple', linewidth=1.6,
-                                            marker='o', markersize=4, label='Hourly Ratio log₂'))
-            ax_ratio.set_ylabel("Hourly Ratio log₂(Aff/Unaff)")
-        else:
-            ax_ratio.set_yticks([])
-            ax_ratio.set_ylabel('')
-            ax_ratio.text(0.5, 0.5, 'Ratio unavailable', transform=ax_ratio.transAxes,
-                          ha='center', va='center', fontsize=9, alpha=0.7)
-
-        ax_ratio.grid(axis='y', alpha=0.2)
-        ax_ratio.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=8, maxticks=16))
-        ax_ratio.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m %H:%M'))
-        ax_ratio.set_xlabel('Time')
+        # Show only hourly bin timestamps to avoid confusing intermediate ticks.
+        ax0.set_xticks(x_hours)
+        ax0.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m %H:%M'))
+        ax0.set_xlabel('Time', fontsize=12)
+        ax0.tick_params(axis='both', which='major', labelsize=10)
 
         # Expand x-limits to keep side-by-side bars fully visible.
         pad = 2.2 * slot_width
         ax0.set_xlim(x_hours[0] - pad, x_hours[-1] + pad)
 
-        ax0.legend(handles=legend_handles, fontsize='small', loc='upper left')
-        if ratio_handles:
-            ax_ratio.legend(handles=ratio_handles, fontsize='small', loc='upper left')
+        # Set y-axis limits to accommodate both bars and cumulative line
+        max_bar_val = max(float(df_all[w].max()) for w in wrist_cols) if wrist_cols else 0.0
+        max_y_val = max(max_bar_val, max_cumulative, target_energy)
+        if np.isfinite(max_y_val) and max_y_val > 0:
+            ax0.set_ylim(0.0, max_y_val * 1.15)
+
+        ax0.legend(handles=legend_handles, fontsize=11, loc='upper left')
         fig.autofmt_xdate(rotation=45, ha='right')
         plt.tight_layout()
         plot_path = os.path.join(output_dir, f"{r['subject']}_energy_bar.png")
@@ -688,7 +664,7 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
     R = r['right']
     L = r['left']
 
-    # ── Sheet 1: per-window data ───────────────────────────────────────────
+    # Sheet 1: per-window data
     def wrist_df(w, energy_col, prob_col):
         if w['energy'] is None:
             return None
@@ -778,7 +754,7 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
         'energy_R', 'energy_L', 'energy_total', 'ratio_R_L',
     ]]
 
-    # ── Sheet 2: summary statistics ────────────────────────────────────────
+    # Sheet 2: summary statistics
     non_walk = df_windows[df_windows['prediction'] != 1]
     walk     = df_windows[df_windows['prediction'] == 1]
 
@@ -884,7 +860,7 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
 
     df_summary = pd.DataFrame(summary_rows, columns=['Metric', 'Value'])
 
-    # ── Write both sheets ──────────────────────────────────────────────────
+    # Write both sheets
     xlsx_path = os.path.join(output_dir, f"{r['subject']}_energy.xlsx")
     with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
         df_windows.to_excel(writer, sheet_name='Per Window', index=False)
