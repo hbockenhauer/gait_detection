@@ -28,7 +28,12 @@ def parse_time(t_str):
     s, ms = s_ms.split('.')
     return time(int(h), int(m), int(s), int(ms) * 1000)
 
-def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
+def trim_to_multiple(group, factor=SAMPLING_RATE):
+    n = len(group)
+    trimmed = n - (n % factor)
+    return group.iloc[:trimmed]
+    
+def load_segmented(DATA_PATH, file_name, debug: bool = False) -> pd.DataFrame:
     try:
         # open the file 
         filepath = os.path.join(DATA_PATH, file_name)
@@ -37,9 +42,9 @@ def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
             rows = list(reader)
 
         # clip the first 10 seconds depending on the data path 
-        rows = rows if ("mixed" or "clinic") in DATA_PATH else rows[500:]
-        if DEBUG == True:
-            print("Data taken fully.") if "mixed" in DATA_PATH else print("First 10s are clipped.")
+        rows = rows if ("mixed" or "clinic") in str(DATA_PATH) else rows[500:]
+        if debug == True:
+            print("Data taken fully.") if ("mixed" or "clinic") in str(DATA_PATH) else print("First 10s are clipped.")
 
         clean_rows = []
         segments   = []
@@ -47,7 +52,6 @@ def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
         prev_time  = None
         segment_id = 0
         dropped_rows = 0
-        
 
         for row in rows:
             try:
@@ -71,8 +75,12 @@ def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
         df = pd.DataFrame(clean_rows)
         df = df.reset_index(drop=True)
         df['segment'] = segments
+        df = df.set_index('segment')
+        # clip the last samples to full seconds 
+        df = df.groupby('segment', group_keys=False).apply(trim_to_multiple, include_groups=False)
+        df = df.reset_index()
 
-        if DEBUG:
+        if debug:
             print(f"Dropped {dropped_rows} rows.")
             print(f"Found {segment_id+1} segments. ")
             print(f"Kept {len(clean_rows)} rows. \n")
@@ -267,7 +275,7 @@ if __name__ == "__main__":
     
     try:
         # 1. Load Data
-        df = load_segmented(DATA_PATH, file_name)
+        df = load_segmented(DATA_PATH, file_name, debug=DEBUG)
 
         # 2. Identify and Rename Columns to Anatomical Labels
         # The package requires: 'acc_is', 'acc_ml', 'acc_pa'
@@ -309,7 +317,11 @@ if __name__ == "__main__":
                 y_pred[grp.index] = np.nan
                 skipped_seg += 1
                 continue
-
+            # n = len(grp)
+            
+            # trimmed = n - (n % SAMPLING_RATE)
+            # print(f"cut of {n % SAMPLING_RATE} samples ")
+            # grp = grp.iloc[:trimmed]
             bout_result, activity_counts, global_start_idx, std_norm, walking_windows = run_gsd_on_segment(grp)
             # print("global_start_idx", global_start_idx)
             global_start_sec = global_start_idx // SAMPLING_RATE

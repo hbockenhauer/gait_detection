@@ -13,7 +13,7 @@ from datetime import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from free_living_test import merge_csv
-# from singleGSD_robust import plot_results
+from singleGSD_robust import load_segmented
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
@@ -38,7 +38,7 @@ PRINT_STATS = True
 SAVE_RESULTS = False 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
 
-PLOT = True
+PLOT = False
 OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\temp"
 
 def extract_condition(folder_name: str) -> str:
@@ -53,64 +53,65 @@ def parse_time(t_str):
     s, ms = s_ms.split('.')
     return time(int(h), int(m), int(s), int(ms) * 1000)
 
-def load_segmented(DATA_PATH, file_name) -> pd.DataFrame:
-    try:
-        # open the file 
-        filepath = os.path.join(DATA_PATH, file_name)
-        with open(filepath, newline='') as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            rows = list(reader)
 
-        # clip the first 10 seconds depending on the data path 
-        rows = rows if "mixed" in DATA_PATH else rows[500:]
-        if DEBUG == True:
-            print("Data taken fully.") if "mixed" in DATA_PATH else print("First 10s are clipped.")
+# def load_segmented(DATA_PATH, file_name, debug:bool = False) -> pd.DataFrame:
+#     try:
+#         # open the file 
+#         filepath = os.path.join(DATA_PATH, file_name)
+#         with open(filepath, newline='') as f:
+#             reader = csv.DictReader(f, delimiter='\t')
+#             rows = list(reader)
 
-        clean_rows = []
-        segments   = []
-        max_time   = None
-        prev_time  = None
-        segment_id = 0
-        dropped_rows = 0
+#         # clip the first 10 seconds depending on the data path 
+#         rows = rows if "mixed" in DATA_PATH else rows[500:]
+#         if debug == True:
+#             print("Data taken fully.") if "mixed" in DATA_PATH else print("First 10s are clipped.")
+
+#         clean_rows = []
+#         segments   = []
+#         max_time   = None
+#         prev_time  = None
+#         segment_id = 0
+#         dropped_rows = 0
         
 
-        for row in rows:
-            try:
-                t = parse_time(row['HH:mm:ss.fff'])
-            except Exception:
-                continue
+#         for row in rows:
+#             try:
+#                 t = parse_time(row['HH:mm:ss.fff'])
+#             except Exception:
+#                 continue
 
-            if max_time is None or t > max_time:
-                if prev_time is not None:
-                    # compute gap in ms (handles minute/hour rollover simply)
-                    gap_ms = (t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
-                              - prev_time.hour * 3600 - prev_time.minute * 60 - prev_time.second - prev_time.microsecond / 1e6) * 1000
-                    if gap_ms > ((1001/SAMPLING_RATE)):
-                        segment_id += 1
-                max_time  = t
-                prev_time = t           
-                clean_rows.append(row)
-                segments.append(segment_id)
-            else:
-                dropped_rows += 1
-        df = pd.DataFrame(clean_rows)
-        df = df.reset_index(drop=True)
-        df['segment'] = segments
+#             if max_time is None or t > max_time:
+#                 if prev_time is not None:
+#                     # compute gap in ms (handles minute/hour rollover simply)
+#                     gap_ms = (t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
+#                               - prev_time.hour * 3600 - prev_time.minute * 60 - prev_time.second - prev_time.microsecond / 1e6) * 1000
+#                     if gap_ms > ((1001/SAMPLING_RATE)):
+#                         segment_id += 1
+#                 max_time  = t
+#                 prev_time = t           
+#                 clean_rows.append(row)
+#                 segments.append(segment_id)
+#             else:
+#                 dropped_rows += 1
+#         df = pd.DataFrame(clean_rows)
+#         df = df.reset_index(drop=True)
+#         df['segment'] = segments
 
-        if DEBUG:
-            print(f"Dropped {dropped_rows} rows.")
-            print(f"Found {segment_id+1} segments. ")
-            print(f"Kept {len(clean_rows)} rows. \n")
+#         if debug:
+#             print(f"Dropped {dropped_rows} rows.")
+#             print(f"Found {segment_id+1} segments. ")
+#             print(f"Kept {len(clean_rows)} rows. \n")
 
-        # df.columns are now :
-        # ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
-        # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
-        # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
+#         # df.columns are now :
+#         # ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
+#         # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
+#         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
         
-    except Exception as e:
-        print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
+#     except Exception as e:
+#         print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
     
-    return df
+#     return df
 
 def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -144,7 +145,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         rw_rows = lw_rows = 0
 
         if os.path.exists(rw_path):
-            rw_df = load_segmented(folder_path, 's1_1RW.txt')
+            rw_df = load_segmented(folder_path, 's1_1RW.txt', DEBUG)
         #    ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
         # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
@@ -167,7 +168,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                 rw_chunks.append(rw_df)
                 rw_rows = len(rw_df)
         if os.path.exists(lw_path):
-            lw_df = load_segmented(folder_path, 's2_2LW.txt')
+            lw_df = load_segmented(folder_path, 's2_2LW.txt', DEBUG)
             if lw_df is not None:
                 # print(" in folder:", folder)
                 if 'test' in folder.lower() or 'sub' in folder.lower():
