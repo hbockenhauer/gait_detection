@@ -3,7 +3,7 @@ import pandas as pd
 import  numpy as np
 import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
-from ActivityCounts import ActivityCounts
+from realtime.ActivityCounts import ActivityCounts
 # from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
 from mobgap.data_transform import (
@@ -174,6 +174,7 @@ class KheirkhahanGSD:
         # Creates overlapping windows of activity counts data (activity counts are expressed in seconds)
         windows = window(activity_counts, self.win_size_s, self.win_shift_s, copy=True)
         # for 265 1s bin, windows are of size (257, 9) (265-9+1)
+        # for 9 1s bin, windows are of (1,9)
 
 
         # Outlier removal only when window size is 5 or higher otherwise this method might remove regular values
@@ -214,19 +215,21 @@ class KheirkhahanGSD:
         # print("std_acc len", len(std_acc))
 
         # self.threshold_still = 0.1
-        th3 = 0.45
+        # th3 = 0.45
         # Assigns 1 to the windows where the inactivity parameter is below the walking threshold
         walking_windows = np.zeros(len(windows))
         for i in range(win_num):
             if std_acc[i] >= self.threshold_still \
-                and inactivity_parameter[i] <= self.threshold \
-                and inactivity_parameter[i] >= th3:
+                and inactivity_parameter[i] <= self.threshold:
+                # and inactivity_parameter[i] >= th3:
                 walking_windows[i] = 1
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
+        # print("detected_walking 1", detected_walking)
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
+        # print("detected_walking 2", detected_walking)
         """
         here the .astype(bool) taked any detected window to be true; 
         could add a check of detected_walking needs to be >1 for example 
