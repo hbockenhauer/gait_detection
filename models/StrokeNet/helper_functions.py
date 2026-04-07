@@ -315,8 +315,14 @@ def run_subject(folder, folder_path, model, device, dataset_name):
         
     hub_times = load_hub_times(folder_path)
 
+    # Extract patient name and date from folder name (expects patientName_yyyymmdd)
+    date_str = folder.split('_')[-1] if '_' in folder else ''
+    subject  = folder.rsplit('_', 1)[0] if '_' in folder else folder
+
     return {
-        'subject':        folder,
+        'subject':        subject,
+        'day':            folder,
+        'date_str':       date_str,
         'dataset':        dataset_name,
         'start_dt':       start_dt,
         'win_times':      ref_times,
@@ -360,101 +366,8 @@ def qsense_energy(model, device, dataset_path):
             results.append(result)
     return results
 
-# Plot energy over time with walking periods shaded with R/L ratio subplot 
-def plot_energy_results_line(results, output_dir):
-    os.makedirs(output_dir, exist_ok=True)
 
-    for r in results:
-        has_ratio = r['ratio_df'] is not None
-        n_rows = 2 if has_ratio else 1
-        fig, axes = plt.subplots(n_rows, 1, figsize=(14, 5 * n_rows), sharex=True)
-        if n_rows == 1:
-            axes = [axes]  # always index as a list
-        ax0 = axes[0]
-
-        # Energy lines
-        colours = {'right': 'steelblue', 'left': 'tomato'}
-        energy_handles = []
-
-        for wrist, colour in colours.items():
-            w = r[wrist]
-            if w['energy'] is None:
-                continue
-
-            df_w = pd.DataFrame({
-                'time':   w['real_win_times'],
-                'energy': w['energy'].astype(float),
-            })
-            gap_rows = [
-                {'time': r['start_dt'] + pd.to_timedelta(dt, unit='s'), 'energy': np.nan}
-                for dt in w['discontinuity_times']
-            ]
-            if gap_rows:
-                df_w = (
-                    pd.concat([df_w, pd.DataFrame(gap_rows)], ignore_index=True)
-                    .sort_values('time')
-                    .reset_index(drop=True)
-                )
-            ax0.plot(df_w['time'], df_w['energy'], linewidth=0.8, color=colour)
-            energy_handles.append(
-                plt.Line2D([0], [0], color=colour, linewidth=1.5,
-                           label=f'Energy ({wrist.capitalize()})')
-            )
-
-        # Walking shading 
-        ref_times  = r['real_win_times']
-        in_walk    = False
-        walk_start = None
-        walk_spans = []  # collect spans first, apply after all axes exist
-
-        for t, pred in zip(ref_times, r['y_pred']):
-            if pred == 1 and not in_walk:
-                in_walk    = True
-                walk_start = t
-            elif pred != 1 and in_walk:
-                walk_spans.append((walk_start, t))
-                in_walk = False
-        if in_walk:
-            walk_spans.append((walk_start, ref_times[-1]))
-
-        # Ratio subplot
-        if has_ratio:
-            ax1 = axes[1]
-            ax1.plot(r['ratio_df']['real_time'], r['ratio_df']['log2_ratio'],
-                     linewidth=0.8, color='purple')
-            ax1.axhline(0.0, color='gray', linestyle='--', linewidth=0.9, alpha=0.8)
-            ax1.set_title("log₂(Right / Left) Energy Ratio")
-            ax1.set_ylabel("log₂(Energy Ratio)")
-            ax1.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=8, maxticks=16))
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%y %H:%M'))
-
-        # Apply spans to all axes now that they all exist
-        shade_axes = [ax0] + ([ax1] if has_ratio else [])
-        for span_start, span_end in walk_spans:
-            for ax in shade_axes:
-                ax.axvspan(span_start, span_end, color='yellow', alpha=0.4, linewidth=0)
-
-        # Legends
-        energy_handles.append(Patch(facecolor='yellow', alpha=0.4, label='Walking'))
-        ax0.legend(handles=energy_handles, fontsize='small')
-
-        if has_ratio:
-            ax1.legend(handles=[
-                plt.Line2D([0], [0], color='purple', linewidth=1.5, label='log₂(Right/Left)'),
-                plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=0.9, label='Equal energy (0)'),
-                Patch(facecolor='yellow', alpha=0.4, label='Walking'),
-            ], fontsize='small')
-
-        axes[-1].set_xlabel("Time")
-        fig.autofmt_xdate(rotation=45, ha='right')
-        plt.tight_layout()
-
-        plot_path = os.path.join(output_dir, f"{r['subject']}_energy.png")
-        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
-        plt.show()
-        plt.close()
-
-def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
+def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy, target_ratio):
     os.makedirs(output_dir, exist_ok=True)
     for r in results:
         # ── Build per-wrist hourly sums and per-window cumulative series ──
@@ -546,16 +459,13 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
             for x, y, pct in zip(xpos, vals, pct_vals):
                 if y <= 0 or not np.isfinite(y):
                     continue
-                ax0.text(
-                    x,
-                    y,
-                    f"{pct:.0f}%",
-                    ha='center',
-                    va='bottom',
-                    fontsize=11,
-                    fontweight='bold',
-                    zorder=4,
-                )
+                if wrist == affected_wrist and pct < target_ratio:
+                    ax0.text(x, y, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10, fontweight='bold', color='red', zorder=4,)
+                elif wrist == affected_wrist and pct >= target_ratio:
+                    ax0.text(x, y, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10,fontweight='bold',color='green', zorder=4,)
+                else: 
+                    ax0.text(x, y, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10, fontweight='bold', zorder=4,)
+                    
             legend_handles.append(
                 Patch(facecolor=bar_colours[wrist], alpha=0.65,
                       label=f"{wrist.capitalize()}: hourly")
@@ -577,15 +487,17 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
                                label=f"{wrist.capitalize()}: cumulative")
                 )
 
+                vals
+
         ax0.axhline(
             target_energy,
-            color='darkgreen',
+            color='purple',
             linestyle='--',
             linewidth=1.5,
             alpha=0.9,
         )
         legend_handles.append(
-            plt.Line2D([0], [0], color='darkgreen', linestyle='--', linewidth=1.5,
+            plt.Line2D([0], [0], color='purple', linestyle='--', linewidth=1.5,
                        label=f"Cumulative Target")
         )
 
@@ -621,11 +533,19 @@ def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
         if np.isfinite(max_y_val) and max_y_val > 0:
             ax0.set_ylim(0.0, max_y_val * 1.15)
 
+        # Target Ratio legend
+        legend_handles.append(
+            plt.Line2D([0], [0], color='none', label=f"Target Ratio ({target_ratio:.0f}%)")
+        )
+
         ax0.legend(handles=legend_handles, fontsize=11, loc='upper left')
         fig.autofmt_xdate(rotation=45, ha='right')
         plt.tight_layout()
-        plot_path = os.path.join(output_dir, f"{r['subject']}_energy_bar.png")
+        plot_path = os.path.join(output_dir, f"{r['subject']}_{r.get('date_str', r['day'])}.png")
         plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.show()
+        plt.close()
+        print(f"  Saved: {plot_path}")
 
 def load_hub_times(folder_path):
     """Load timestamps from the hub file (s0_Hub.txt), which is always correct."""
@@ -691,7 +611,7 @@ def find_missing_periods(wrist_real_win_times, hub_times, win_duration_sec, min_
 
     return gaps
 
-def save_subject_excel(r, output_dir, affected_wrist, target_energy):
+def save_subject_excel(r, output_dir, affected_wrist, target_energy, target_ratio):
     """Save one Excel file per subject with a per-window sheet and a summary sheet."""
     os.makedirs(output_dir, exist_ok=True)
     R = r['right']
@@ -810,8 +730,17 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
     walk_L = walk['energy_L'].sum(skipna=True)
 
     # Ratio stats
-    ratio_mean   = df_windows['ratio_R_L'].mean(skipna=True)
+    ratio_mean   = df_windows['ratio_R_L'].mean(skipna=True)    
     ratio_median = df_windows['ratio_R_L'].median(skipna=True)
+    
+    if affected_wrist == 'right':
+        ratio_pct_mean = (ratio_mean / (ratio_mean + 1 )) * 100
+        ratio_pct_median = (ratio_median / (ratio_median + 1)) * 100
+    else:
+        ratio_pct_mean = 100 - (ratio_mean / (ratio_mean + 1 )) * 100
+        ratio_pct_median = 100 - (ratio_median / (ratio_median + 1)) * 100
+    
+    target_r_achieved = bool(ratio_pct_mean >= target_ratio)
 
     # Hourly energy to find most/least intense hour
     df_windows['hour_bin'] = df_windows['real_timestamp'].dt.floor('h')
@@ -853,7 +782,10 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
         ('Affected wrist',                  affected_wrist.capitalize()),
         ('Target non-walk energy (affected)', f'{target_energy:.2f}'),
         ('Affected wrist non-walk energy',  f'{affected_nonwalk_total:.2f}' if np.isfinite(affected_nonwalk_total) else 'N/A'),
-        ('Target achieved',                 'Yes' if target_achieved is True else ('No' if target_achieved is False else 'N/A')),
+        ('Target energy achieved',          'Yes' if target_achieved is True else ('No' if target_achieved is False else 'N/A')),
+        ('Target Ratio (%)',                f'{target_ratio:.2f}'),
+        ('Achieved Mean Ratio',             f'{ratio_pct_mean:.2f}'),
+        ('Target ratio achieved',       'Yes' if target_r_achieved is True else ('No' if target_r_achieved is False else 'N/A')),
         ('',                                ''),
         ('Recording start',                 r['start_dt'].strftime('%d/%m/%Y %H:%M:%S')),
         ('Recording end',                   df_windows['real_timestamp'].max().strftime('%d/%m/%Y %H:%M:%S')),
@@ -872,9 +804,9 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
         ('Total energy Right (walk)',       f'{walk_R:.2f}'),
         ('Total energy Left (walk)',        f'{walk_L:.2f}'),
         ('',                                ''),
-        ('── Ratio R/L ──',                 ''),
-        ('Mean ratio R/L',                  f'{ratio_mean:.3f}'),
-        ('Median ratio R/L',                f'{ratio_median:.3f}'),
+        ('── Ratio (%) ──',                 ''),
+        ('Mean ratio R/L',                  f'{ratio_pct_mean:.3f}'),
+        ('Median ratio R/L',                f'{ratio_pct_median:.3f}'),
         ('',                                ''),
         ('── Hourly breakdown ──',          ''),
         ('Most energy-intense hour',        most_intense_hour.strftime('%d/%m/%Y %H:%M') if pd.notna(most_intense_hour) else 'N/A'),
@@ -894,10 +826,191 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy):
     df_summary = pd.DataFrame(summary_rows, columns=['Metric', 'Value'])
 
     # Write both sheets
-    xlsx_path = os.path.join(output_dir, f"{r['subject']}_energy.xlsx")
+    xlsx_path = os.path.join(output_dir, f"{r.get('day', r['subject'])}_energy.xlsx")
     with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
         df_windows.to_excel(writer, sheet_name='Per Window', index=False)
         df_summary.to_excel(writer, sheet_name='Summary',    index=False)
 
     print(f"  Saved: {xlsx_path} ({len(df_windows)} windows)")
 
+
+# ── Caching ────────────────────────────────────────────────────────────────
+import pickle
+
+def _cache_dir(patient_folder):
+    """Return path to the hidden cache directory for a patient."""
+    return os.path.join(patient_folder, '.cache')
+
+
+def save_day_cache(r, patient_folder, affected_wrist, target_energy):
+    """
+    Save a small summary of a processed day to disk so plot_multiday()
+    can load it instantly without reprocessing raw data.
+    Overwrites any existing cache entry for the same day.
+    """
+    cache_dir = _cache_dir(patient_folder)
+    os.makedirs(cache_dir, exist_ok=True)
+
+    def _nonwalk_total(wrist_key):
+        w = r[wrist_key]
+        if w['energy'] is None or w['y_pred'] is None:
+            return np.nan
+        return float(np.nansum(w['energy'][w['y_pred'] != 1]))
+
+    payload = {
+        'subject':        r['subject'],
+        'day':            r['day'],
+        'date_str':       r['date_str'],
+        'affected_wrist': affected_wrist,
+        'target_energy':  target_energy,
+        'energy_R':       _nonwalk_total('right'),
+        'energy_L':       _nonwalk_total('left'),
+    }
+
+    cache_path = os.path.join(cache_dir, f"{r['day']}.pkl")
+    with open(cache_path, 'wb') as f:
+        pickle.dump(payload, f)
+    print(f"  Cached: {cache_path}")
+    return payload
+
+
+def load_day_caches(patient_folder, n_days='all'):
+    """
+    Load cached day summaries for a patient, sorted oldest to newest.
+    n_days: int for most recent N, or 'all' for everything.
+    """
+    cache_dir = _cache_dir(patient_folder)
+    if not os.path.isdir(cache_dir):
+        return []
+
+    files = sorted([
+        f for f in os.listdir(cache_dir)
+        if f.endswith('.pkl') and not f.startswith('.')
+    ])
+
+    if n_days != 'all':
+        try:
+            files = files[-int(n_days):]
+        except (ValueError, TypeError):
+            pass
+
+    payloads = []
+    for fname in files:
+        try:
+            with open(os.path.join(cache_dir, fname), 'rb') as f:
+                payloads.append(pickle.load(f))
+        except Exception as e:
+            print(f"  Warning: could not load cache {fname}: {e}")
+
+    payloads.sort(key=lambda p: p.get('date_str', ''))
+    return payloads
+
+
+def plot_multiday(patient_folder, results_dir, n_days='all', target_ratio=50):
+    """
+    Bar chart with one bar group per day (right + left), ratio % labels,
+    and a target line. No cumulative line.
+    Reads entirely from cache — no raw data reprocessing.
+    results_dir: path to the shared Results folder (sibling of Data/).
+    """
+    payloads = load_day_caches(patient_folder, n_days)
+    if not payloads:
+        print("  No cached days found. Run at least one day first.")
+        return
+
+    affected_wrist = payloads[-1]['affected_wrist']
+    target_energy  = payloads[-1]['target_energy']
+
+    def fmt_date(s):
+        try:
+            return f"{s[6:8]}/{s[4:6]}/{s[:4]}"
+        except Exception:
+            return s
+
+    day_labels = [fmt_date(p['day'].split('_')[-1]) for p in payloads]
+    energy_R   = np.array([p['energy_R'] for p in payloads], dtype=float)
+    energy_L   = np.array([p['energy_L'] for p in payloads], dtype=float)
+
+    first_day = payloads[0]['date_str']
+    last_day = payloads[-1]['date_str']
+
+    n         = len(payloads)
+    x         = np.arange(n)
+    bar_width = 0.35
+    has_R     = not np.all(np.isnan(energy_R))
+    has_L     = not np.all(np.isnan(energy_L))
+    has_both  = has_R and has_L
+
+    bar_colours = {'right': 'steelblue', 'left': 'tomato'}
+    offsets     = {'right': -bar_width / 2, 'left': bar_width / 2} if has_both else {'right': 0.0, 'left': 0.0}
+
+    total_per_day = np.nansum(np.column_stack([
+        np.nan_to_num(energy_R) if has_R else np.zeros(n),
+        np.nan_to_num(energy_L) if has_L else np.zeros(n),
+    ]), axis=1)
+
+    fig, ax = plt.subplots(figsize=(max(10, n * 1.2), 7))
+    legend_handles = []
+
+    for wrist, energy_arr in (('right', energy_R), ('left', energy_L)):
+        if (wrist == 'right' and not has_R) or (wrist == 'left' and not has_L):
+            continue
+
+        xpos = x + offsets[wrist]
+        ax.bar(xpos, np.nan_to_num(energy_arr),
+               width=bar_width, color=bar_colours[wrist], alpha=0.65, zorder=2)
+        legend_handles.append(
+            Patch(facecolor=bar_colours[wrist], alpha=0.65,
+                  label=f"{wrist.capitalize()}: daily total")
+        )
+
+        # Ratio % labels on top of each bar
+        for xi, val, tot in zip(xpos, energy_arr, total_per_day):
+            if not np.isfinite(val) or val <= 0 or tot <= 0:
+                continue            
+            pct = 100 * val / tot
+            if wrist == affected_wrist and pct < target_ratio:
+                ax.text(xi, val, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10, fontweight='bold', color='red', zorder=4)
+            elif wrist == affected_wrist and pct >= target_ratio:
+                ax.text(xi, val, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10, fontweight='bold', color='green', zorder=4)
+            else:
+                ax.text(xi, val, f"{pct:.0f}%", ha='center', va='bottom', fontsize=10, fontweight='bold', zorder=4)
+                
+    # Target line
+    ax.axhline(target_energy, color='purple', linestyle='--',
+               linewidth=1.5, alpha=0.9, zorder=3)
+    legend_handles.append(
+        plt.Line2D([0], [0], color='purple', linestyle='--',
+                   linewidth=1.5, label=f"Target ({target_energy:.0f})")
+    )
+
+    # Target Ratio legend
+    legend_handles.append(
+        plt.Line2D([0], [0], color='none', label=f"Target Ratio ({target_ratio:.0f}%)")
+    )
+
+    subject    = payloads[-1]['subject']
+    window_str = f"last {n} days" if n_days != 'all' else "all days"
+    ax.set_xticks(x)
+    ax.set_xticklabels(day_labels, rotation=45, ha='right', fontsize=10)
+    ax.set_ylabel("Total non-walking energy", fontsize=12)
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_title(f"{subject}: Daily non-walking energy ({window_str})",
+                 fontsize=13, fontweight='bold')
+    ax.grid(axis='y', alpha=0.25)
+    ax.legend(handles=legend_handles, fontsize=10, loc='upper left')
+
+    max_val = max(
+        float(np.nanmax(np.nan_to_num(energy_R) + np.nan_to_num(energy_L))) if (has_R or has_L) else 0,
+        target_energy,
+    )
+    if np.isfinite(max_val) and max_val > 0:
+        ax.set_ylim(0, max_val * 1.15)
+
+    plt.tight_layout()
+    os.makedirs(results_dir, exist_ok=True)
+    plot_path = os.path.join(results_dir, f"{subject}_{first_day}-{last_day}.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.show()
+    plt.close()
+    print(f"  Saved: {plot_path}")

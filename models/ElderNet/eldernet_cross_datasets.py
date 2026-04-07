@@ -38,7 +38,6 @@ from config.paths import (
     QSENSE_CLINIC,
     FREELIVING_PATH,
     BIOCLITE_PATH,
-    ELDERNET_WEIGHTS,
     PLOTS_DIR as OUTPUT_PLOTS_DIR,
     RESULTS_DIR,
 )
@@ -56,7 +55,6 @@ WEARGAIT_PD_PATH = WEARGAIT_PD
 WEARGAIT_CTRL_PATH = WEARGAIT_CTRL
 QSENSE_PATHS = [QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED, QSENSE_CLINIC]
 FREE_LIVING_PATH = FREELIVING_PATH
-WEIGHTS_PATH = ELDERNET_WEIGHTS
 REPO_NAME = 'yonbrand/ElderNet'
 
 # ElderNet native parameters (pre-trained at 30 Hz with 300-sample windows)
@@ -96,15 +94,10 @@ ACTIVITY_MAP = {
 # MODEL LOADING
 # ============================================================
 
-def load_eldernet_model(weights_path=WEIGHTS_PATH):
-    """Load ElderNet from torch hub, optionally apply finetuned weights."""
+def load_eldernet_model():
+    """Load base ElderNet fine-tuned model from Torch Hub."""
     model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True)
     model.eval()
-    if weights_path and os.path.isfile(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location='cpu'))
-        print(f"Loaded finetuned ElderNet weights from {weights_path}")
-    else:
-        print("Using base pretrained ElderNet model (no local finetuned weights found)")
     return model
 
 
@@ -1057,7 +1050,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Running on: {device}")
 
-    model = load_eldernet_model(WEIGHTS_PATH).to(device)
+    model = load_eldernet_model().to(device)
 
     wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
     weargait_results, weargait_global = evaluate_weargait(model, device)

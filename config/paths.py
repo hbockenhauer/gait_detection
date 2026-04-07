@@ -39,8 +39,8 @@ STROKENET_DIR = os.path.join(MODELS_ROOT, 'StrokeNet')
 STRACZKIEWICZ_DIR = os.path.join(MODELS_ROOT, 'mstraczkiewicz')
 
 # Weights
-ELDERNET_WEIGHTS = os.path.join(ELDERNET_DIR, 'eldernet_finetuned.pth')
-STROKENET_WEIGHTS = os.path.join(STROKENET_DIR, 'eldernet_finetuned.pth')
+ELDERNET_WEIGHTS = None
+STROKENET_WEIGHTS = os.path.join(STROKENET_DIR, 'StrokeNet_weights.pth')
 
 # Dataset paths
 HMP_PATH = os.path.join(DATASETS_ROOT, 'HMP_Dataset')

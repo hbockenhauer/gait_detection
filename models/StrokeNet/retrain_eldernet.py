@@ -22,7 +22,7 @@ from utils.hub_utils import safe_hub_load
 
 QSENSE_MIXED_PATH = QSENSE_MIXED
 QSENSE_EDGE_PATH = QSENSE_EDGE
-SAVE_PATH = os.path.join(SCRIPT_DIR, 'eldernet_finetuned.pth')
+SAVE_PATH = os.path.join(SCRIPT_DIR, 'StrokeNet_weights.pth')
 
 WINDOW_SIZE    = 100    # 2s at 50Hz
 STEP_SIZE      = 50     # 1s stride
