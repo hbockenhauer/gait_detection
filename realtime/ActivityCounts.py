@@ -1,7 +1,6 @@
 from typing import Union
 import numpy as np
 from scipy import signal
-import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
 
@@ -192,93 +191,4 @@ class ActivityCounts:
         tmp = self._truncate(tmp)
         tmp = self._digitize_8bit(tmp)
         self.activity_counts_ = self._accumulate_second_bins(tmp)
-        return self
-    
-    def calculate_debug(self, data: np.ndarray, sampling_rate: Union[int, float],
-                        zoom_start: int = None, zoom_end: int = None, switch: np.ndarray = None) -> 'ActivityCounts':
-        self.data = data
-        self.sampling_rate = sampling_rate
-        tmp = self.data.copy()
-
-        steps = []
-        labels = []
-
-        # Step 0: Raw input
-        steps.append(tmp)
-        labels.append(f"0. Raw input\n(sr={sampling_rate} Hz, n={len(tmp)})")
-
-        # Step 1: Downsample to 30 Hz
-        tmp = self._downsample(tmp, sampling_rate, 30)
-        steps.append(tmp.copy())
-        labels.append(f"1. Downsample → 30 Hz\n(n={len(tmp)})")
-
-        # Step 2: Aliasing filter (bandpass 0.01–7 Hz)
-        tmp = self._aliasing_filter(tmp, 30)
-        steps.append(tmp.copy())
-        labels.append(f"2. Aliasing filter\n(bandpass 0.01–7 Hz) , n={len(tmp)})")
-
-        # Step 3: ActiGraph filter
-        tmp = self._actigraph_filter(tmp)
-        steps.append(tmp.copy())
-        labels.append(f"3. ActiGraph filter, n={len(tmp)})")
-
-        # Step 4: Downsample to 10 Hz
-        tmp = self._downsample(tmp, 30, 10)
-        steps.append(tmp.copy())
-        labels.append(f"4. Downsample → 10 Hz\n(n={len(tmp)})")
-
-        # Step 5: Absolute value
-        tmp = np.abs(tmp)
-        steps.append(tmp.copy())
-        labels.append(f"5. Absolute value, n={len(tmp)})")
-
-        # Step 6: Truncate (clip to [0.068, 2.13] g)
-        tmp = self._truncate(tmp)
-        steps.append(tmp.copy())
-        labels.append(f"6. Truncate\n([0.068, 2.13] g), n={len(tmp)})")
-
-        # Step 7: Digitize to 8-bit
-        tmp = self._digitize_8bit(tmp)
-        steps.append(tmp.copy())
-        labels.append(f"7. Digitize 8-bit, n={len(tmp)})")
-
-        # Step 8: Accumulate into 1s bins
-        activity_counts = self._accumulate_second_bins(tmp)
-        steps.append(activity_counts.copy())
-        labels.append(f"8. Accumulate 1s bins\n(activity counts, n={len(activity_counts)}), n={len(tmp)})")
-
-        # --- Plot all steps ---
-        n = len(steps)
-        fig, axes = plt.subplots(n, 1, figsize=(12, 2.5 * n))
-        if n == 1:
-            axes = [axes]
-        n_raw = len(steps[0])
-
-        for i, (ax, signal_data, label) in enumerate(zip(axes, steps, labels)):
-            ax.plot(signal_data, linewidth=0.8, color=plt.cm.viridis(i / n))
-            ax.set_title(label, fontsize=9, loc='left')
-            ax.set_ylabel("Amplitude")
-            ax.set_xlabel("Sample index")
-            ax.grid(True, alpha=0.3)
-            if switch is not None:
-                n_samples = len(signal_data)
-                scale = n_samples / n_raw
-                for sw in switch:
-                    scaled_idx = sw * scale
-                    ax.axvline(x=scaled_idx, color='red', linestyle='--', alpha=0.7, linewidth=1)
-
-        fig.suptitle("ActivityCounts Pipeline — tmp at each step", fontsize=12, fontweight='bold')
-        if zoom_start is not None or zoom_end is not None:
-            for i, ax in enumerate(axes):
-                # Scale x-limits to account for downsampling at each step
-                n_samples = len(steps[i])
-                scale = n_samples / n_raw
-
-                x_start = int((zoom_start or 0) * scale)
-                x_end = int((zoom_end or n_raw) * scale)
-                ax.set_xlim(x_start, x_end)
-        fig.tight_layout()
-        fig.show()
-
-        self.activity_counts_ = activity_counts
         return self

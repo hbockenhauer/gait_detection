@@ -6,6 +6,23 @@ To see the performance of the two methods, run the scripts `evaluate_per_wrist.p
 
 Both approaches address time discountinueties by segmenting the data at those discountinuities and ensuring that the windows are not passed over the junction of the segments. The discountinueties are found by only examining increasing timestamps and if the gap between the timestamps is sufficiently big, a new segment is assigned in the dataframe. 
 
+The main algorithm for both of the methods is provided in `GSD3.py` and it utilized `ActivityCounts.py` script. The method also builds upon the scripts provided in [multimob.GSD.utils](https://github.com/DMegaritis/multimobility_wrist/tree/main/multimob/GSD/utils). The following packages are used: 
+
+* pandas
+* numpy 
+* typing_extensions
+* typing
+* scipy
+* sys (for accessing the file)
+* os (for accessing the file)
+* csv (for accessing the file)
+* collections
+* datetime
+* warnings
+* matplotlib.pyplot (for plotting the results)
+* matplotlib.ticker (for plotting the results)
+* sklearn.metrics (assessing the metrics)
+
 ## Single wrist approach 
 To run the single wrist approach, run the following command where `PATH-TO-FIlE`should be replaced with the path to the txt file with the data to be evaluated:
 ```bash

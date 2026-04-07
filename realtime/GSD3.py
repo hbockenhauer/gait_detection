@@ -1,15 +1,9 @@
 from typing_extensions import Self, Literal
 import pandas as pd
 import  numpy as np
-import matplotlib.pyplot as plt
 from multimob.GSD.utils.GSD3_utils import window, sum_partial_overlapping_windows, remove_outliers, calc_activity_parameter, resample_to_orginal_data_length, generate_gs_list
 from ActivityCounts import ActivityCounts
-# from multimob.GSD.utils.ActivityCounts import ActivityCounts
 from multimob.GSD.utils.cwb import cwb
-from mobgap.data_transform import (
-    chain_transformers,
-    ButterworthFilter
-)
 
 
 class KheirkhahanGSD:
