@@ -6,11 +6,8 @@ import matplotlib.ticker as mticker
 import sys
 import os
 
-from detect_per_wrist  import simulate_realtime, load_segmented, SAMPLING_RATE, WINDOW_SIZE
-from detect_fused      import sync_wrists, fuse_predictions, FILE_NAME_R, FILE_NAME_L
+from detect_fused      import simulate_realtime, load_segmented, WINDOW_SIZE, sync_wrists, fuse_predictions, FILE_NAME_R, FILE_NAME_L
 
-
-# ── Metrics ───────────────────────────────────────────────────────────────────
 
 def print_metrics(y_true: np.ndarray, y_pred: np.ndarray, label: str) -> None:
     valid      = ~np.isnan(y_pred)
@@ -36,9 +33,6 @@ def print_metrics(y_true: np.ndarray, y_pred: np.ndarray, label: str) -> None:
     print(f"  False Negatives   : {int(np.sum((yp == 0) & (yt == 1)))}")
     print(f"  True  Negatives   : {int(np.sum((yp == 0) & (yt == 0)))}")
     print("=" * 60)
-
-
-# ── Plot ──────────────────────────────────────────────────────────────────────
 
 def plot_results_fused(df_sync: pd.DataFrame,
                        pred_r:  np.ndarray,
@@ -132,22 +126,15 @@ def plot_results_fused(df_sync: pd.DataFrame,
     fig.autofmt_xdate()
     plt.tight_layout()
 
-
-# ── True-label extraction ─────────────────────────────────────────────────────
-
 def extract_true_labels(df_sync: pd.DataFrame, data_path: str) -> np.ndarray:
     """
-    Prefer the Label column from R; fall back to L; fall back to path heuristic.
-    After merge_asof some rows may have NaN on one side, so we combine_first
-    across both suffix variants.
+    Initially look at the Label column from R; fall back to L.
     """
     label_r = df_sync.get("Label_r")
     label_l = df_sync.get("Label_l")
-    # Also handle case where merge produced a single un-suffixed Label column
-    label_plain = df_sync.get("Label")
 
     combined = None
-    for col in (label_r, label_plain, label_l):
+    for col in (label_r, label_l):
         if col is None:
             continue
         s = pd.to_numeric(col, errors="coerce")
@@ -156,13 +143,7 @@ def extract_true_labels(df_sync: pd.DataFrame, data_path: str) -> np.ndarray:
     if combined is not None and combined.notna().any():
         return combined.fillna(0).astype(int).to_numpy()
 
-    # Fallback: infer from path
-    if "walk" in str(data_path).lower():
-        return np.ones(len(df_sync), dtype=int)
     return np.zeros(len(df_sync), dtype=int)
-
-
-# ── Main evaluator ────────────────────────────────────────────────────────────
 
 def evaluate_fused(data_path: str) -> None:
     # 1. Load and scale both wrists

@@ -144,32 +144,6 @@ def simulate_realtime(df):
 
     return y_pred
 
-# def detect_fused(data_path):
-
-#     # 1. Load from both wrist 
-#     df_r = load_segmented(data_path, FILE_NAME_R)
-#     df_l = load_segmented(data_path, FILE_NAME_L)
-
-#     # 2. Build acc columns (×9.8 as in original)
-#     acc_cols = [c for c in df_r.columns if 'acc' in c.lower()]
-#     df_r[acc_cols] = df_r[acc_cols].astype(float) * 9.8
-#     df_l[acc_cols] = df_l[acc_cols].astype(float) * 9.8
-
-#     # 3. Simulate real-time processing
-#     y_pred = np.zeros(len(df_r))
-#     print(f"\nStarting real-time simulation  "
-#           f"(window={WINDOW_SIZE} samples, step={STEP_SIZE} samples) …\n")
-#     for _, grp_seg in df.groupby('segment', sort=True): 
-#                     if len(grp_seg) < WINDOW_SIZE:
-#                         y_pred[grp_seg.index] = np.nan
-#                         continue
-#                     seg_pred = simulate_realtime(grp_seg.reset_index(drop=True))
-#                     y_pred[grp_seg.index] = seg_pred
-#     if DEBUG: 
-#         print(f"Found {len(y_pred)} predictions")
-#     return y_pred
-    
-
 def sync_wrists(df_r: pd.DataFrame, df_l: pd.DataFrame) -> pd.DataFrame:
     """
     Outer-join the two DataFrames on HH:mm:ss.fff with a 20ms tolerance.
@@ -203,7 +177,6 @@ def sync_wrists(df_r: pd.DataFrame, df_l: pd.DataFrame) -> pd.DataFrame:
     merged = merged.drop(columns=["_ts"], errors="ignore")
 
     return merged
-
 
 def fuse_predictions(pred_r: np.ndarray, pred_l: np.ndarray) -> np.ndarray:
     """
