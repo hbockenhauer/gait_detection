@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
 from GSD3_test import KheirkhahanGSD
-from singleGSD_robust import load_segmented   
+from MM_own_all_robust import load_segmented   # reuse your existing loader
 
 import pandas as pd
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 
 # ── Config (mirror your original script) ─────────────────────────────────────
-DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub5"
-FILE_NAME      = "s2_2LW.txt"
+DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub4"
+FILE_NAME_R    = "s1_1RW.txt"
+FILE_NAME_L    = "s2_2LW.txt"
 SAMPLING_RATE  = 50
 WINDOW_SIZE    = 9 *SAMPLING_RATE   # 450 samples  — full buffer
 STEP_SIZE      = 1 * SAMPLING_RATE   # 50 samples   — shift per tick
@@ -37,8 +38,6 @@ def run_gsd_on_window(window_df: pd.DataFrame) -> np.ndarray:
 
     gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
     bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
-    activity_counts, _ = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
-    # print("activity_counts", activity_counts)
 
     y_window = np.zeros(len(seg_imu))
     if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
@@ -47,109 +46,66 @@ def run_gsd_on_window(window_df: pd.DataFrame) -> np.ndarray:
 
     return y_window
 
-# def simulate_realtime(df: pd.DataFrame) -> np.ndarray:
-#     """
-#     Slide a 9-second window over df one second at a time.
- 
-#     Each tick the GSD result is written across all 9s of the window.
-#     Positive detections (1) are sticky: a sample already labelled as
-#     walking cannot be overwritten by a later window's zero.
-#     Samples before the first full window get NaN.
-#     """
-#     n      = len(df)
-#     print()
-#     print("n is", n)
-#     print()
-#     y_pred = np.zeros(len(df))
-#     buffer = deque(maxlen=WINDOW_SIZE)   # rolling sample index buffer
-#     tick   = 0
-#     # j = 0 
-#     for sample_idx in range(n):
-#         buffer.append(sample_idx) # contraints window indices 
- 
-#         # Only act at each 1-second boundary
-#         if (sample_idx + 1) % STEP_SIZE != 0:
-#             continue
- 
-#         # Wait until we have a full 9-second window
-#         if len(buffer) < WINDOW_SIZE:
-#             # if DEBUG:
-#             #     print(f"  Tick {tick:>4d} | Waiting for 9s ({len(buffer)}/{WINDOW_SIZE} samples)")
-#             continue
- 
-#         window_indices = list(buffer)             # exactly WINDOW_SIZE indices
-#         window_df      = df.iloc[window_indices].copy()
- 
-#         # Run GSD on the full 9s window
-#         y_window = run_gsd_on_window(window_df)   # shape: (WINDOW_SIZE,)
-#         if  ~np.isnan(y_window).sum() == 0: 
-#             print("predictions missing?")
-        
-#         # Write predictions across the whole window.
-#         # Rule: only overwrite a sample with 0 if it hasn't been set to 1 yet.
-#         for local_i, global_i in enumerate(window_indices):
 
-#             new_label = y_window[local_i]
-#             if np.isnan(y_pred[global_i]) or (y_pred[global_i] == 0):
-#                 # First time this sample is seen — write unconditionally
-#                 y_pred[global_i] = new_label
-#                 if y_pred[global_i] == np.nan:
-#                     print("global_i of", global_i)
-#             # elif new_label == 1:
-#             #     # Walking detected — overwrite any previous 0
-#             #     y_pred[global_i] = 1
-#             # else: new_label == 0 and existing label is already 1 → keep 1
-#             # if j <5: 
-#             #     print("local_i", local_i)
-#             #     print("global_i", global_i)
-#             #     j += 1 
-#         # print("final global_i is", global_i)
-#         n_walking = int(y_window.sum())
-#         if n_walking != 0:
-#             if n_walking != 450:
-#                 print("n_walking", n_walking)
-#         # if DEBUG:    
-#         #     print(f"  Tick {tick:>4d} | window [{window_indices[0]:>5d}–{window_indices[-1]:>5d}] "
-#         #           f"→ {n_walking}/{WINDOW_SIZE} walking samples detected")
-#         tick += 1 
-#     # valid = ~np.isnan(y_pred)
-#     # print("valid:")
-#     # print(valid)
-#     # print(f"valid present {valid.sum()} \n")
-#     # print(f"y predict is :")
-#     # print(y_pred)
-#     print("sample_idx", sample_idx)
-#     return y_pred
-
-
-BUFFER_SIZE = 13 * SAMPLING_RATE   # 2s padding each side + 9s window
-TRUST_START = 2 * SAMPLING_RATE    # skip first 2s
-TRUST_END   = 11 * SAMPLING_RATE   # skip last 2s
-
-def simulate_realtime(df):
-    n = len(df)
+def simulate_realtime(df: pd.DataFrame) -> np.ndarray:
+    """
+    Slide a 9-second window over df one second at a time.
+ 
+    Each tick the GSD result is written across all 9s of the window.
+    Positive detections (1) are sticky: a sample already labelled as
+    walking cannot be overwritten by a later window's zero.
+    Samples before the first full window get NaN.
+    """
+    n      = len(df)
     y_pred = np.full(n, np.nan)
-    buffer = deque(maxlen=BUFFER_SIZE)
-
+    buffer = deque(maxlen=WINDOW_SIZE)   # rolling sample index buffer
+    tick   = 0
+ 
     for sample_idx in range(n):
         buffer.append(sample_idx)
-
+ 
+        # Only act at each 1-second boundary
         if (sample_idx + 1) % STEP_SIZE != 0:
             continue
-        if len(buffer) < BUFFER_SIZE:
+ 
+        tick += 1
+ 
+        # Wait until we have a full 9-second window
+        if len(buffer) < WINDOW_SIZE:
+            if DEBUG:
+                print(f"  Tick {tick:>4d} | Waiting for 9s ({len(buffer)}/{WINDOW_SIZE} samples)")
             continue
-
-        window_indices = list(buffer)
-        window_df = df.iloc[window_indices].copy()
-        y_window = run_gsd_on_window(window_df)   # length = BUFFER_SIZE
-
-        # Only trust the middle portion — skip the 2s edges
-        for local_i in range(TRUST_START, TRUST_END):
-            global_i = window_indices[local_i]
-            if np.isnan(y_pred[global_i]):
-                y_pred[global_i] = y_window[local_i]
-
+ 
+        window_indices = list(buffer)             # exactly WINDOW_SIZE indices
+        window_df      = df.iloc[window_indices].copy()
+ 
+        # Run GSD on the full 9s window
+        y_window = run_gsd_on_window(window_df)   # shape: (WINDOW_SIZE,)
+        # print()
+        # print("y_window", y_window)
+        # print()
+ 
+        # Write predictions across the whole window.
+        # Rule: only overwrite a sample with 0 if it hasn't been set to 1 yet.
+        for local_i, global_i in enumerate(window_indices):
+            # print("local_i", local_i)
+            # print("global_i", global_i)
+            new_label = y_window[local_i]
+            if np.isnan(y_pred[global_i]) or (y_pred[global_i] == 0):
+                # First time this sample is seen — write unconditionally
+                y_pred[global_i] = new_label
+            # elif new_label == 1:
+            #     # Walking detected — overwrite any previous 0
+            #     y_pred[global_i] = 1
+            # else: new_label == 0 and existing label is already 1 → keep 1
+ 
+        if DEBUG:
+            n_walking = int(y_window.sum())
+            print(f"  Tick {tick:>4d} | window [{window_indices[0]:>5d}–{window_indices[-1]:>5d}] "
+                  f"→ {n_walking}/{WINDOW_SIZE} walking samples detected")
+ 
     return y_pred
+
 
 def print_metrics(y_true: np.ndarray, y_pred: np.ndarray, file_name: str) -> None:
     """Compute and print classification metrics, ignoring NaN predictions."""
@@ -168,7 +124,7 @@ def print_metrics(y_true: np.ndarray, y_pred: np.ndarray, file_name: str) -> Non
     print("\n" + "=" * 60)
     print(f"Results for: {file_name}")
     print("=" * 60)
-    print(f"  Evaluated samples : {n_valid}  (skipped {n_skipped} due to the shift step)")
+    print(f"  Evaluated samples : {n_valid}  (skipped {n_skipped} pre-buffer samples)")
     print(f"  Accuracy          : {acc:.4f}")
     print(f"  Precision         : {prec:.4f}")
     print(f"  Recall            : {rec:.4f}")
@@ -249,48 +205,32 @@ def plot_results(df: pd.DataFrame,
 if __name__ == "__main__":
 
     # 1. Load data (reuse existing loader)
-    print(f"Loading {FILE_NAME} …")
-    df = load_segmented(DATA_PATH, FILE_NAME, debug=DEBUG)
+    print(f"Scanning {DATA_PATH} …")
+    df_r = load_segmented(DATA_PATH, FILE_NAME_R)
+    df_l = load_segmented(DATA_PATH, FILE_NAME_L)
+
 
     # 2. Build acc columns (×9.8 as in original)
-    acc_cols = [c for c in df.columns if 'acc' in c.lower()]
-    df[acc_cols] = df[acc_cols].astype(float) * 9.8
+    acc_cols = [c for c in df_r.columns if 'acc' in c.lower()]
+    df_r[acc_cols] = df_r[acc_cols].astype(float) * 9.8
+
+    # acc_cols = [c for c in df_r.columns if 'acc' in c.lower()]
+    df_l[acc_cols] = df_l[acc_cols].astype(float) * 9.8
 
     # 3. Ground truth
-    if 'Label' in df.columns:
-        y_true = df['Label'].astype(int).to_numpy()
-    elif 'walk' in str(DATA_PATH).lower():
-        y_true = np.ones(len(df), dtype=int) 
+    if 'Label' in df_r.columns:
+        y_true = df_r['Label'].astype(int).to_numpy()
     else:
-        y_true = np.zeros(len(df), dtype=int) 
+        y_true = np.ones(len(df_r), dtype=int) #### change this 
 
     # 4. Simulate real-time processing
-    y_pred = np.zeros(len(df))
-    # print(f"made y pred of {len(y_pred)}")
-    skipped_seg = 0 # might not to necessary 
     print(f"\nStarting real-time simulation  "
           f"(window={WINDOW_SIZE} samples, step={STEP_SIZE} samples) …\n")
-    for seg, grp_seg in df.groupby('segment', sort=True): 
-                    if len(grp_seg) < WINDOW_SIZE:
-                        if DEBUG:
-                            print(f"Segment {seg} is too short at {len(grp_seg)} samples.")
-                        y_pred[grp_seg.index] = np.nan
-                        # y_true[grp_seg.index] = np.nan
-                        skipped_seg += 1
-                        continue
-                    seg_pred = simulate_realtime(grp_seg.reset_index(drop=True))
-                    y_pred[grp_seg.index] = seg_pred
-    
-    if DEBUG: 
-        print(f"Found {len(y_pred)} predictions")
-        print(f"with {len(y_true)} annotations")
-        valid = ~np.isnan(y_pred)
-        print(f"valid present full {valid.sum()}")
-
-
+    y_pred_r = simulate_realtime(df_r)
+    y_pred_l = simulate_realtime(df_l)
 
     # 5. Print metrics
-    print_metrics(y_true, y_pred, FILE_NAME)
+    print_metrics(y_true, y_pred_r, DATA_PATH)
 
-    plot_results(df=df, y_pred=y_pred, y_true=y_true, title="Real-time simulation")
+    plot_results(df=df_r, y_pred=y_pred_r, y_true=y_true, title="Real-time simulation")
     plt.show()

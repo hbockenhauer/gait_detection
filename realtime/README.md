@@ -9,7 +9,7 @@ Both approaches address time discountinueties by segmenting the data at those di
 ## Single wrist approach 
 To run the single wrist approach, run the following command where `PATH-TO-FIlE`should be replaced with the path to the txt file with the data to be evaluated:
 ```bash
-evaluate_per_wrist.py PATH-TO-FILE
+python evaluate_per_wrist.py PATH-TO-FILE
 ```
 The following steps are made in the script:
 
@@ -23,3 +23,17 @@ Some of the funtions are taken from `detect_per_wrist.py` file, which aims to ru
 
 
 ## Fused wrist approach 
+
+To run the fused approach, execute the commanf in the same way but with the provided path, `PATH-TO-FOLDER`, leading to the directory containing both files for the right and the left wirst. The file names of those files are expected to be `s1_1RW.txt` and `s2_2LW.txt`. 
+```bash 
+python evaluate_per_wrist.py PATH-TO-FOLDER
+```
+For this approach the following steps are taken: 
+
+* The data from both wrist files is loaded in the same way as before. The acceleration values are again translated to m/s<sup>2</sup>. 
+* The two data frames are fused into one. 
+* Both of the files are simulated in "real-time" manner, with taking 13s at a time to evaluate. 
+* The gait is detected if both wrists show that it is present. In cases where the data is absent (NaN) in one of the wrists, the prediction is taken from one wrist only. 
+* The metrics and the plot are present in the manner similar to the first approach. 
+
+The file `detect_fused.py` again provides only the functions that do not rely on the knowledge of the annotations. 
