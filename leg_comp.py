@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATHS = [
     # r"C:\Users\orlov\intern\gait_detection\QSense_data",
     # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed", 
+    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed", 
     r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic"
 ]
 GSD_n = 3
