@@ -1,0 +1,41 @@
+{
+  "device": "cpu",
+  "input_shape": [
+    3,
+    100
+  ],
+  "weights_path": "c:\\Users\\hendr\\OneDrive\\Documents\\TU Delft\\MSc Robotics\\Internship at Erasmus MC\\gait_detection\\models\\StrokeNet\\StrokeNet_weights.pth",
+  "complexity": {
+    "macs": "96.81 MMac",
+    "params": "11.13 M"
+  },
+  "benchmarks": [
+    {
+      "batch_size": 1,
+      "iterations": 50,
+      "mean_latency_ms": 12.993712001480162,
+      "p50_latency_ms": 11.428700003307313,
+      "p95_latency_ms": 20.1641283929348,
+      "throughput_windows_per_s": 76.96030202039927,
+      "power": null
+    },
+    {
+      "batch_size": 16,
+      "iterations": 50,
+      "mean_latency_ms": 46.61908799549565,
+      "p50_latency_ms": 42.35479998169467,
+      "p95_latency_ms": 67.64670461416245,
+      "throughput_windows_per_s": 343.20705719395295,
+      "power": null
+    }
+  ],
+  "settings": {
+    "warmup": 10,
+    "iterations": 50,
+    "batch_sizes": [
+      1,
+      16
+    ],
+    "requested_device": "cpu"
+  }
+}

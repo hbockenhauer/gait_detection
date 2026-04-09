@@ -51,10 +51,10 @@ STEP_SIZE     = 50     # 1s stride
 GAP_THRESHOLD = 0.1
 CONF_THRESH   = 0.5
 
-WISDM_GAIT_CODES  = {'A', 'C'}   # Walk, Stairs
+WISDM_GAIT_CODES  = {'A', 'B', 'C'}   # Walk, Jog, Stairs
 WEARGAIT_PATTERNS = ['walk', 'jog', 'run', 'stair', 'climb', 'freewalk', 'gait']
 HMP_GAIT_ACTIVITIES = {'Walk', 'Climb_stairs', 'Descend_stairs'}
-WISDM_GAIT_ACTIVITIES = {'Walk', 'Stairs'}
+WISDM_GAIT_ACTIVITIES = {'Walk', 'Jog', 'Stairs'}
 QSENSE_GAIT_ACTIVITIES = {'walking', 'stairs'}
 FREE_LIVING_DATASET_NAME = 'free_living'
 

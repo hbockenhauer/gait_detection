@@ -769,7 +769,7 @@ function rec = load_wisdm_record(filePath)
 
     valid = isfinite(x) & isfinite(y) & isfinite(z) & isfinite(tt);
     acts = string(T.Activity(valid));
-    yTrue = ismember(acts, {'A', 'C'});
+    yTrue = ismember(acts, {'A', 'B', 'C'});
 
     % Use synthetic monotonic time so all activity segments are appended
     % without timestamp gaps between activities.
@@ -791,7 +791,8 @@ function rec = load_hmp_record(filePath, isGait, activity)
     X = X(valid, :);
 
     % HMP manual conversion: map [0..63] to [-14.709..+14.709], then median filter.
-    X = -14.709 + (X ./ 63) * (2 * 14.709);
+    % X = -14.709 + (X ./ 63) * (2 * 14.709);
+    X = -1.5 + (X ./ 63) * 3.0;  % output in g, consistent with all other loaders
     n = 3;
     X(:, 1) = medfilt1(X(:, 1), n);
     X(:, 2) = medfilt1(X(:, 2), n);

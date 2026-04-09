@@ -463,232 +463,10 @@ def evaluate_both_wrists_prob_average(model, device, folder_path, folder_name):
     }
 
 
-def evaluate_both_wrists_prob_max(model, device, folder_path, folder_name):
-    """
-    Evaluate both wrists by taking the maximum probability.
-    Run inference separately on each wrist, use the higher confidence prediction.
-    Fall back to single wrist if one is missing data.
-    """
-    rw_data = load_wrist_data(folder_path, 'right', folder_name)
-    lw_data = load_wrist_data(folder_path, 'left', folder_name)
-    
-    if rw_data is None or lw_data is None:
-        return None
-    
-    times_rw, acc_rw, y_binary_rw, activities_rw = rw_data
-    times_lw, acc_lw, y_binary_lw, activities_lw = lw_data
-    
-    # Extract windows from both wrists (full data, no trimming)
-    wins_rw, y_true_rw, win_times_rw, win_activities_rw = extract_windows_with_gaps_and_activity(
-        times_rw, acc_rw, y_binary_rw, activities_rw
-    )
-    
-    wins_lw, y_true_lw, win_times_lw, win_activities_lw = extract_windows_with_gaps_and_activity(
-        times_lw, acc_lw, y_binary_lw, activities_lw
-    )
-    
-    if wins_rw is None and wins_lw is None:
-        return None
-    
-    # If only one wrist has data, use that
-    if wins_rw is None:
-        probs = run_inference(model, wins_lw, device)
-        y_pred = (probs > CONF_THRESH).astype(int)
-        discontinuity_times = get_discontinuity_times(times_lw)
-        prec, rec, f1, acc_score, cm = compute_metrics(y_true_lw, y_pred)
-        return {
-            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
-            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_lw, 'y_pred': y_pred,
-            'win_times': win_times_lw, 'win_activities': win_activities_lw,
-            'discontinuity_times': discontinuity_times,
-        }
-    
-    if wins_lw is None:
-        probs = run_inference(model, wins_rw, device)
-        y_pred = (probs > CONF_THRESH).astype(int)
-        discontinuity_times = get_discontinuity_times(times_rw)
-        prec, rec, f1, acc_score, cm = compute_metrics(y_true_rw, y_pred)
-        return {
-            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
-            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_rw, 'y_pred': y_pred,
-            'win_times': win_times_rw, 'win_activities': win_activities_rw,
-            'discontinuity_times': discontinuity_times,
-        }
-    
-    # Match windows by time
-    matches, unmatched_rw, unmatched_lw = match_windows_by_time(win_times_rw, win_times_lw)
-    
-    # Build combined results
-    probs_combined = []
-    y_true_combined = []
-    win_times_combined = []
-    win_activities_combined = []
-    
-    # Run inference
-    probs_rw = run_inference(model, wins_rw, device)
-    probs_lw = run_inference(model, wins_lw, device)
-    
-    # Process matched windows (take maximum)
-    for idx_rw, idx_lw in matches:
-        probs_combined.append(np.maximum(probs_rw[idx_rw], probs_lw[idx_lw]))
-        y_true_combined.append(y_true_rw[idx_rw])
-        win_times_combined.append(win_times_rw[idx_rw])
-        win_activities_combined.append(win_activities_rw[idx_rw])
-    
-    # Process unmatched right wrist windows
-    for idx_rw in unmatched_rw:
-        probs_combined.append(probs_rw[idx_rw])
-        y_true_combined.append(y_true_rw[idx_rw])
-        win_times_combined.append(win_times_rw[idx_rw])
-        win_activities_combined.append(win_activities_rw[idx_rw])
-    
-    # Process unmatched left wrist windows
-    for idx_lw in unmatched_lw:
-        probs_combined.append(probs_lw[idx_lw])
-        y_true_combined.append(y_true_lw[idx_lw])
-        win_times_combined.append(win_times_lw[idx_lw])
-        win_activities_combined.append(win_activities_lw[idx_lw])
-    
-    if len(probs_combined) == 0:
-        return None
-    
-    probs = np.array(probs_combined)
-    y_true = np.array(y_true_combined)
-    y_pred = (probs > CONF_THRESH).astype(int)
-    discontinuity_times = get_discontinuity_times(times_rw)
-    
-    prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
-    
-    return {
-        'precision': prec,
-        'recall': rec,
-        'f1': f1,
-        'accuracy': acc_score,
-        'confusion_matrix': cm,
-        'probs': probs,
-        'y_true': y_true,
-        'y_pred': y_pred,
-        'win_times': np.array(win_times_combined),
-        'win_activities': np.array(win_activities_combined),
-        'discontinuity_times': discontinuity_times,
-    }
-
-
-def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
-    """
-    Evaluate both wrists by taking the minimum probability (consensus).
-    Run inference separately on each wrist, use the more conservative prediction.
-    Fall back to single wrist if one is missing data.
-    """
-    rw_data = load_wrist_data(folder_path, 'right', folder_name)
-    lw_data = load_wrist_data(folder_path, 'left', folder_name)
-    
-    if rw_data is None or lw_data is None:
-        return None
-    
-    times_rw, acc_rw, y_binary_rw, activities_rw = rw_data
-    times_lw, acc_lw, y_binary_lw, activities_lw = lw_data
-    
-    # Extract windows from both wrists (full data, no trimming)
-    wins_rw, y_true_rw, win_times_rw, win_activities_rw = extract_windows_with_gaps_and_activity(
-        times_rw, acc_rw, y_binary_rw, activities_rw
-    )
-    
-    wins_lw, y_true_lw, win_times_lw, win_activities_lw = extract_windows_with_gaps_and_activity(
-        times_lw, acc_lw, y_binary_lw, activities_lw
-    )
-    
-    if wins_rw is None and wins_lw is None:
-        return None
-    
-    # If only one wrist has data, use that
-    if wins_rw is None:
-        probs = run_inference(model, wins_lw, device)
-        y_pred = (probs > CONF_THRESH).astype(int)
-        discontinuity_times = get_discontinuity_times(times_lw)
-        prec, rec, f1, acc_score, cm = compute_metrics(y_true_lw, y_pred)
-        return {
-            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
-            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_lw, 'y_pred': y_pred,
-            'win_times': win_times_lw, 'win_activities': win_activities_lw,
-            'discontinuity_times': discontinuity_times,
-        }
-    
-    if wins_lw is None:
-        probs = run_inference(model, wins_rw, device)
-        y_pred = (probs > CONF_THRESH).astype(int)
-        discontinuity_times = get_discontinuity_times(times_rw)
-        prec, rec, f1, acc_score, cm = compute_metrics(y_true_rw, y_pred)
-        return {
-            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
-            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_rw, 'y_pred': y_pred,
-            'win_times': win_times_rw, 'win_activities': win_activities_rw,
-            'discontinuity_times': discontinuity_times,
-        }
-    
-    # Match windows by time
-    matches, unmatched_rw, unmatched_lw = match_windows_by_time(win_times_rw, win_times_lw)
-    
-    # Build combined results
-    probs_combined = []
-    y_true_combined = []
-    win_times_combined = []
-    win_activities_combined = []
-    
-    # Run inference
-    probs_rw = run_inference(model, wins_rw, device)
-    probs_lw = run_inference(model, wins_lw, device)
-    
-    # Process matched windows (take minimum for consensus)
-    for idx_rw, idx_lw in matches:
-        probs_combined.append(np.minimum(probs_rw[idx_rw], probs_lw[idx_lw]))
-        y_true_combined.append(y_true_rw[idx_rw])
-        win_times_combined.append(win_times_rw[idx_rw])
-        win_activities_combined.append(win_activities_rw[idx_rw])
-    
-    # Process unmatched right wrist windows (use single prediction)
-    for idx_rw in unmatched_rw:
-        probs_combined.append(probs_rw[idx_rw])
-        y_true_combined.append(y_true_rw[idx_rw])
-        win_times_combined.append(win_times_rw[idx_rw])
-        win_activities_combined.append(win_activities_rw[idx_rw])
-    
-    # Process unmatched left wrist windows (use single prediction)
-    for idx_lw in unmatched_lw:
-        probs_combined.append(probs_lw[idx_lw])
-        y_true_combined.append(y_true_lw[idx_lw])
-        win_times_combined.append(win_times_lw[idx_lw])
-        win_activities_combined.append(win_activities_lw[idx_lw])
-    
-    if len(probs_combined) == 0:
-        return None
-    
-    probs = np.array(probs_combined)
-    y_true = np.array(y_true_combined)
-    y_pred = (probs > CONF_THRESH).astype(int)
-    discontinuity_times = get_discontinuity_times(times_rw)
-    
-    prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
-    
-    return {
-        'precision': prec,
-        'recall': rec,
-        'f1': f1,
-        'accuracy': acc_score,
-        'confusion_matrix': cm,
-        'probs': probs,
-        'y_true': y_true,
-        'y_pred': y_pred,
-        'win_times': np.array(win_times_combined),
-        'win_activities': np.array(win_activities_combined),
-        'discontinuity_times': discontinuity_times,
-    }
-
-
-# def evaluate_both_wrists_voting_AND(model, device, folder_path, folder_name):
+# def evaluate_both_wrists_prob_max(model, device, folder_path, folder_name):
 #     """
-#     Evaluate both wrists using majority voting (AND logic). if both wrists predict gait, then combined prediction is gait. Otherwise non-gait.
-#     Run inference separately on each wrist, combine predictions via voting.
+#     Evaluate both wrists by taking the maximum probability.
+#     Run inference separately on each wrist, use the higher confidence prediction.
 #     Fall back to single wrist if one is missing data.
 #     """
 #     rw_data = load_wrist_data(folder_path, 'right', folder_name)
@@ -742,7 +520,6 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
     
 #     # Build combined results
 #     probs_combined = []
-#     y_pred_combined = []
 #     y_true_combined = []
 #     win_times_combined = []
 #     win_activities_combined = []
@@ -750,30 +527,24 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #     # Run inference
 #     probs_rw = run_inference(model, wins_rw, device)
 #     probs_lw = run_inference(model, wins_lw, device)
-#     y_pred_rw = (probs_rw > CONF_THRESH).astype(int)
-#     y_pred_lw = (probs_lw > CONF_THRESH).astype(int)
     
-#     # Process matched windows (voting: AND logic)
+#     # Process matched windows (take maximum)
 #     for idx_rw, idx_lw in matches:
-#         # AND voting: both must agree on gait
-#         vote = ((y_pred_rw[idx_rw] + y_pred_lw[idx_lw]) >= 2)
-#         probs_combined.append(min(probs_rw[idx_rw], probs_lw[idx_lw]))  # Use minimum probability for conservative estimate
-#         y_pred_combined.append(int(vote))
+#         probs_combined.append(np.maximum(probs_rw[idx_rw], probs_lw[idx_lw]))
 #         y_true_combined.append(y_true_rw[idx_rw])
 #         win_times_combined.append(win_times_rw[idx_rw])
 #         win_activities_combined.append(win_activities_rw[idx_rw])
     
-#     # Process unmatched windows (use single wrist prediction)
+#     # Process unmatched right wrist windows
 #     for idx_rw in unmatched_rw:
 #         probs_combined.append(probs_rw[idx_rw])
-#         y_pred_combined.append(y_pred_rw[idx_rw])
 #         y_true_combined.append(y_true_rw[idx_rw])
 #         win_times_combined.append(win_times_rw[idx_rw])
 #         win_activities_combined.append(win_activities_rw[idx_rw])
     
+#     # Process unmatched left wrist windows
 #     for idx_lw in unmatched_lw:
 #         probs_combined.append(probs_lw[idx_lw])
-#         y_pred_combined.append(y_pred_lw[idx_lw])
 #         y_true_combined.append(y_true_lw[idx_lw])
 #         win_times_combined.append(win_times_lw[idx_lw])
 #         win_activities_combined.append(win_activities_lw[idx_lw])
@@ -782,8 +553,8 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #         return None
     
 #     probs = np.array(probs_combined)
-#     y_pred = np.array(y_pred_combined)
 #     y_true = np.array(y_true_combined)
+#     y_pred = (probs > CONF_THRESH).astype(int)
 #     discontinuity_times = get_discontinuity_times(times_rw)
     
 #     prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
@@ -802,10 +573,11 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #         'discontinuity_times': discontinuity_times,
 #     }
 
-# def evaluate_both_wrists_voting_OR(model, device, folder_path, folder_name):
+
+# def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #     """
-#     Evaluate both wrists using majority voting (OR logic). if either wrist predicts gait, then combined prediction is gait. Otherwise non-gait.
-#     Run inference separately on each wrist, combine predictions via voting.
+#     Evaluate both wrists by taking the minimum probability (consensus).
+#     Run inference separately on each wrist, use the more conservative prediction.
 #     Fall back to single wrist if one is missing data.
 #     """
 #     rw_data = load_wrist_data(folder_path, 'right', folder_name)
@@ -859,7 +631,6 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
     
 #     # Build combined results
 #     probs_combined = []
-#     y_pred_combined = []
 #     y_true_combined = []
 #     win_times_combined = []
 #     win_activities_combined = []
@@ -867,30 +638,24 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #     # Run inference
 #     probs_rw = run_inference(model, wins_rw, device)
 #     probs_lw = run_inference(model, wins_lw, device)
-#     y_pred_rw = (probs_rw > CONF_THRESH).astype(int)
-#     y_pred_lw = (probs_lw > CONF_THRESH).astype(int)
     
-#     # Process matched windows (voting: AND logic)
+#     # Process matched windows (take minimum for consensus)
 #     for idx_rw, idx_lw in matches:
-#         # OR voting: either must agree on gait
-#         vote = ((y_pred_rw[idx_rw] + y_pred_lw[idx_lw]) >= 1)
-#         probs_combined.append(max(probs_rw[idx_rw], probs_lw[idx_lw]))  # Use maximum probability for optimistic estimate
-#         y_pred_combined.append(int(vote))
+#         probs_combined.append(np.minimum(probs_rw[idx_rw], probs_lw[idx_lw]))
 #         y_true_combined.append(y_true_rw[idx_rw])
 #         win_times_combined.append(win_times_rw[idx_rw])
 #         win_activities_combined.append(win_activities_rw[idx_rw])
     
-#     # Process unmatched windows (use single wrist prediction)
+#     # Process unmatched right wrist windows (use single prediction)
 #     for idx_rw in unmatched_rw:
 #         probs_combined.append(probs_rw[idx_rw])
-#         y_pred_combined.append(y_pred_rw[idx_rw])
 #         y_true_combined.append(y_true_rw[idx_rw])
 #         win_times_combined.append(win_times_rw[idx_rw])
 #         win_activities_combined.append(win_activities_rw[idx_rw])
     
+#     # Process unmatched left wrist windows (use single prediction)
 #     for idx_lw in unmatched_lw:
 #         probs_combined.append(probs_lw[idx_lw])
-#         y_pred_combined.append(y_pred_lw[idx_lw])
 #         y_true_combined.append(y_true_lw[idx_lw])
 #         win_times_combined.append(win_times_lw[idx_lw])
 #         win_activities_combined.append(win_activities_lw[idx_lw])
@@ -899,8 +664,8 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #         return None
     
 #     probs = np.array(probs_combined)
-#     y_pred = np.array(y_pred_combined)
 #     y_true = np.array(y_true_combined)
+#     y_pred = (probs > CONF_THRESH).astype(int)
 #     discontinuity_times = get_discontinuity_times(times_rw)
     
 #     prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
@@ -918,6 +683,241 @@ def evaluate_both_wrists_prob_min(model, device, folder_path, folder_name):
 #         'win_activities': np.array(win_activities_combined),
 #         'discontinuity_times': discontinuity_times,
 #     }
+
+
+def evaluate_both_wrists_voting_AND(model, device, folder_path, folder_name):
+    """
+    Evaluate both wrists using majority voting (AND logic). if both wrists predict gait, then combined prediction is gait. Otherwise non-gait.
+    Run inference separately on each wrist, combine predictions via voting.
+    Fall back to single wrist if one is missing data.
+    """
+    rw_data = load_wrist_data(folder_path, 'right', folder_name)
+    lw_data = load_wrist_data(folder_path, 'left', folder_name)
+    
+    if rw_data is None or lw_data is None:
+        return None
+    
+    times_rw, acc_rw, y_binary_rw, activities_rw = rw_data
+    times_lw, acc_lw, y_binary_lw, activities_lw = lw_data
+    
+    # Extract windows from both wrists (full data, no trimming)
+    wins_rw, y_true_rw, win_times_rw, win_activities_rw = extract_windows_with_gaps_and_activity(
+        times_rw, acc_rw, y_binary_rw, activities_rw
+    )
+    
+    wins_lw, y_true_lw, win_times_lw, win_activities_lw = extract_windows_with_gaps_and_activity(
+        times_lw, acc_lw, y_binary_lw, activities_lw
+    )
+    
+    if wins_rw is None and wins_lw is None:
+        return None
+    
+    # If only one wrist has data, use that
+    if wins_rw is None:
+        probs = run_inference(model, wins_lw, device)
+        y_pred = (probs > CONF_THRESH).astype(int)
+        discontinuity_times = get_discontinuity_times(times_lw)
+        prec, rec, f1, acc_score, cm = compute_metrics(y_true_lw, y_pred)
+        return {
+            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
+            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_lw, 'y_pred': y_pred,
+            'win_times': win_times_lw, 'win_activities': win_activities_lw,
+            'discontinuity_times': discontinuity_times,
+        }
+    
+    if wins_lw is None:
+        probs = run_inference(model, wins_rw, device)
+        y_pred = (probs > CONF_THRESH).astype(int)
+        discontinuity_times = get_discontinuity_times(times_rw)
+        prec, rec, f1, acc_score, cm = compute_metrics(y_true_rw, y_pred)
+        return {
+            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
+            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_rw, 'y_pred': y_pred,
+            'win_times': win_times_rw, 'win_activities': win_activities_rw,
+            'discontinuity_times': discontinuity_times,
+        }
+    
+    # Match windows by time
+    matches, unmatched_rw, unmatched_lw = match_windows_by_time(win_times_rw, win_times_lw)
+    
+    # Build combined results
+    probs_combined = []
+    y_pred_combined = []
+    y_true_combined = []
+    win_times_combined = []
+    win_activities_combined = []
+    
+    # Run inference
+    probs_rw = run_inference(model, wins_rw, device)
+    probs_lw = run_inference(model, wins_lw, device)
+    y_pred_rw = (probs_rw > CONF_THRESH).astype(int)
+    y_pred_lw = (probs_lw > CONF_THRESH).astype(int)
+    
+    # Process matched windows (voting: AND logic)
+    for idx_rw, idx_lw in matches:
+        # AND voting: both must agree on gait
+        vote = ((y_pred_rw[idx_rw] + y_pred_lw[idx_lw]) >= 2)
+        probs_combined.append(min(probs_rw[idx_rw], probs_lw[idx_lw]))  # Use minimum probability for conservative estimate
+        y_pred_combined.append(int(vote))
+        y_true_combined.append(y_true_rw[idx_rw])
+        win_times_combined.append(win_times_rw[idx_rw])
+        win_activities_combined.append(win_activities_rw[idx_rw])
+    
+    # Process unmatched windows (use single wrist prediction)
+    for idx_rw in unmatched_rw:
+        probs_combined.append(probs_rw[idx_rw])
+        y_pred_combined.append(y_pred_rw[idx_rw])
+        y_true_combined.append(y_true_rw[idx_rw])
+        win_times_combined.append(win_times_rw[idx_rw])
+        win_activities_combined.append(win_activities_rw[idx_rw])
+    
+    for idx_lw in unmatched_lw:
+        probs_combined.append(probs_lw[idx_lw])
+        y_pred_combined.append(y_pred_lw[idx_lw])
+        y_true_combined.append(y_true_lw[idx_lw])
+        win_times_combined.append(win_times_lw[idx_lw])
+        win_activities_combined.append(win_activities_lw[idx_lw])
+    
+    if len(probs_combined) == 0:
+        return None
+    
+    probs = np.array(probs_combined)
+    y_pred = np.array(y_pred_combined)
+    y_true = np.array(y_true_combined)
+    discontinuity_times = get_discontinuity_times(times_rw)
+    
+    prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
+    
+    return {
+        'precision': prec,
+        'recall': rec,
+        'f1': f1,
+        'accuracy': acc_score,
+        'confusion_matrix': cm,
+        'probs': probs,
+        'y_true': y_true,
+        'y_pred': y_pred,
+        'win_times': np.array(win_times_combined),
+        'win_activities': np.array(win_activities_combined),
+        'discontinuity_times': discontinuity_times,
+    }
+
+def evaluate_both_wrists_voting_OR(model, device, folder_path, folder_name):
+    """
+    Evaluate both wrists using majority voting (OR logic). if either wrist predicts gait, then combined prediction is gait. Otherwise non-gait.
+    Run inference separately on each wrist, combine predictions via voting.
+    Fall back to single wrist if one is missing data.
+    """
+    rw_data = load_wrist_data(folder_path, 'right', folder_name)
+    lw_data = load_wrist_data(folder_path, 'left', folder_name)
+    
+    if rw_data is None or lw_data is None:
+        return None
+    
+    times_rw, acc_rw, y_binary_rw, activities_rw = rw_data
+    times_lw, acc_lw, y_binary_lw, activities_lw = lw_data
+    
+    # Extract windows from both wrists (full data, no trimming)
+    wins_rw, y_true_rw, win_times_rw, win_activities_rw = extract_windows_with_gaps_and_activity(
+        times_rw, acc_rw, y_binary_rw, activities_rw
+    )
+    
+    wins_lw, y_true_lw, win_times_lw, win_activities_lw = extract_windows_with_gaps_and_activity(
+        times_lw, acc_lw, y_binary_lw, activities_lw
+    )
+    
+    if wins_rw is None and wins_lw is None:
+        return None
+    
+    # If only one wrist has data, use that
+    if wins_rw is None:
+        probs = run_inference(model, wins_lw, device)
+        y_pred = (probs > CONF_THRESH).astype(int)
+        discontinuity_times = get_discontinuity_times(times_lw)
+        prec, rec, f1, acc_score, cm = compute_metrics(y_true_lw, y_pred)
+        return {
+            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
+            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_lw, 'y_pred': y_pred,
+            'win_times': win_times_lw, 'win_activities': win_activities_lw,
+            'discontinuity_times': discontinuity_times,
+        }
+    
+    if wins_lw is None:
+        probs = run_inference(model, wins_rw, device)
+        y_pred = (probs > CONF_THRESH).astype(int)
+        discontinuity_times = get_discontinuity_times(times_rw)
+        prec, rec, f1, acc_score, cm = compute_metrics(y_true_rw, y_pred)
+        return {
+            'precision': prec, 'recall': rec, 'f1': f1, 'accuracy': acc_score,
+            'confusion_matrix': cm, 'probs': probs, 'y_true': y_true_rw, 'y_pred': y_pred,
+            'win_times': win_times_rw, 'win_activities': win_activities_rw,
+            'discontinuity_times': discontinuity_times,
+        }
+    
+    # Match windows by time
+    matches, unmatched_rw, unmatched_lw = match_windows_by_time(win_times_rw, win_times_lw)
+    
+    # Build combined results
+    probs_combined = []
+    y_pred_combined = []
+    y_true_combined = []
+    win_times_combined = []
+    win_activities_combined = []
+    
+    # Run inference
+    probs_rw = run_inference(model, wins_rw, device)
+    probs_lw = run_inference(model, wins_lw, device)
+    y_pred_rw = (probs_rw > CONF_THRESH).astype(int)
+    y_pred_lw = (probs_lw > CONF_THRESH).astype(int)
+    
+    # Process matched windows (voting: AND logic)
+    for idx_rw, idx_lw in matches:
+        # OR voting: either must agree on gait
+        vote = ((y_pred_rw[idx_rw] + y_pred_lw[idx_lw]) >= 1)
+        probs_combined.append(max(probs_rw[idx_rw], probs_lw[idx_lw]))  # Use maximum probability for optimistic estimate
+        y_pred_combined.append(int(vote))
+        y_true_combined.append(y_true_rw[idx_rw])
+        win_times_combined.append(win_times_rw[idx_rw])
+        win_activities_combined.append(win_activities_rw[idx_rw])
+    
+    # Process unmatched windows (use single wrist prediction)
+    for idx_rw in unmatched_rw:
+        probs_combined.append(probs_rw[idx_rw])
+        y_pred_combined.append(y_pred_rw[idx_rw])
+        y_true_combined.append(y_true_rw[idx_rw])
+        win_times_combined.append(win_times_rw[idx_rw])
+        win_activities_combined.append(win_activities_rw[idx_rw])
+    
+    for idx_lw in unmatched_lw:
+        probs_combined.append(probs_lw[idx_lw])
+        y_pred_combined.append(y_pred_lw[idx_lw])
+        y_true_combined.append(y_true_lw[idx_lw])
+        win_times_combined.append(win_times_lw[idx_lw])
+        win_activities_combined.append(win_activities_lw[idx_lw])
+    
+    if len(probs_combined) == 0:
+        return None
+    
+    probs = np.array(probs_combined)
+    y_pred = np.array(y_pred_combined)
+    y_true = np.array(y_true_combined)
+    discontinuity_times = get_discontinuity_times(times_rw)
+    
+    prec, rec, f1, acc_score, cm = compute_metrics(y_true, y_pred)
+    
+    return {
+        'precision': prec,
+        'recall': rec,
+        'f1': f1,
+        'accuracy': acc_score,
+        'confusion_matrix': cm,
+        'probs': probs,
+        'y_true': y_true,
+        'y_pred': y_pred,
+        'win_times': np.array(win_times_combined),
+        'win_activities': np.array(win_activities_combined),
+        'discontinuity_times': discontinuity_times,
+    }
 
 def evaluate_qsense_clinic_wrist_comparison(model, device, dataset_path):
     """
@@ -1023,10 +1023,10 @@ def evaluate_qsense_clinic_wrist_comparison(model, device, dataset_path):
         fusion_strategies = {
             'averaged_acc': ('ACC averaged', evaluate_both_wrists),
             'prob_average': ('Probability averaged', evaluate_both_wrists_prob_average),
-            'prob_max': ('Probability max', evaluate_both_wrists_prob_max),
-            'prob_min': ('Probability min', evaluate_both_wrists_prob_min),
-            # 'voting_AND': ('Voting (AND)', evaluate_both_wrists_voting_AND),
-            # 'voting_OR': ('Voting (OR)', evaluate_both_wrists_voting_OR),
+            # 'prob_max': ('Probability max', evaluate_both_wrists_prob_max),
+            # 'prob_min': ('Probability min', evaluate_both_wrists_prob_min),
+            'voting_AND': ('Voting (AND)', evaluate_both_wrists_voting_AND),
+            'voting_OR': ('Voting (OR)', evaluate_both_wrists_voting_OR),
         }
         
         for strategy_key, (strategy_name, strategy_func) in fusion_strategies.items():
@@ -1106,10 +1106,10 @@ def create_comparison_plots(results, plots_dir):
         'left': '#2CA02C',
         'averaged_acc': "#000000",
         'prob_average': "#1900FC",
-        'prob_max': "#E6BB2C",
-        'prob_min': '#DFE6E9',
-        # 'voting_AND': '#A29BFE',
-        # 'voting_OR': "#FF9D00",
+        # 'prob_max': "#E6BB2C",
+        # 'prob_min': '#DFE6E9',
+        'voting_AND': '#A29BFE',
+        'voting_OR': "#FF9D00",
     }
     
     for sub_idx, subject in enumerate(subjects):
@@ -1295,7 +1295,7 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.ylim([0.0, 1.0])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.title('ROC Curves by Method')
+        plt.title('ROC Curves for QSense_data_clinic using StrokeNet with varying wrist fusion strategies')
         plt.legend(loc='lower right', fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()
@@ -1369,7 +1369,7 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.ylim([0.0, 1.0])
         plt.xlabel('Recall')
         plt.ylabel('Precision')
-        plt.title('Precision-Recall Curves by Method')
+        plt.title('Precision-Recall Curves for QSense_data_clinic using StrokeNet with varying wrist fusion strategies')
         plt.legend(loc='lower left', fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()

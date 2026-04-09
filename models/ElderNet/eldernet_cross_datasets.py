@@ -65,10 +65,10 @@ GAP_THRESHOLD = 0.1    # seconds — time-domain gap detection
 
 CONF_THRESH = 0.65
 
-WISDM_GAIT_CODES = {'A', 'C'}
+WISDM_GAIT_CODES = {'A', 'B', 'C'}
 WEARGAIT_PATTERNS = ['walk', 'jog', 'run', 'stair', 'climb', 'freewalk', 'gait']
 HMP_GAIT_ACTIVITIES = {'Walk', 'Climb_stairs', 'Descend_stairs'}
-WISDM_GAIT_ACTIVITIES = {'Walk', 'Stairs'}
+WISDM_GAIT_ACTIVITIES = {'Walk', 'Jog', 'Stairs'}
 QSENSE_GAIT_ACTIVITIES = {'walking', 'stairs'}
 FREE_LIVING_DATASET_NAME = 'free_living'
 
@@ -1052,10 +1052,10 @@ def main():
 
     model = load_eldernet_model().to(device)
 
-    wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
-    weargait_results, weargait_global = evaluate_weargait(model, device)
-    hmp_results,      hmp_global      = evaluate_hmp(model, device)
-    bioclite_results, bioclite_global = evaluate_bioclite(model, device)
+    # wisdm_results,    wisdm_global    = evaluate_wisdm(model, device)
+    # weargait_results, weargait_global = evaluate_weargait(model, device)
+    # hmp_results,      hmp_global      = evaluate_hmp(model, device)
+    # bioclite_results, bioclite_global = evaluate_bioclite(model, device)
 
     qsense_results_all = []
     qsense_globals = []
@@ -1067,50 +1067,50 @@ def main():
             **qs_global,
         })
 
-    free_results, free_global = evaluate_free_living(model, device, FREE_LIVING_PATH)
+    # free_results, free_global = evaluate_free_living(model, device, FREE_LIVING_PATH)
 
-    all_results = (
-        wisdm_results
-        + weargait_results
-        + hmp_results
-        + bioclite_results
-        + qsense_results_all
-        + free_results
-    )
+    # all_results = (
+    #     wisdm_results
+    #     + weargait_results
+    #     + hmp_results
+    #     + bioclite_results
+    #     + qsense_results_all
+    #     + free_results
+    # )
 
-    plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
-    plot_ROC_PR.plot_roc_curves(all_results, OUTPUT_PLOTS_DIR, model_name='eldernet')
-    plot_ROC_PR.plot_pr_curves(all_results, OUTPUT_PLOTS_DIR, model_name='eldernet')
+    # plot_subject_timeline(all_results, OUTPUT_PLOTS_DIR)
+    # plot_ROC_PR.plot_roc_curves(all_results, OUTPUT_PLOTS_DIR, model_name='eldernet')
+    # plot_ROC_PR.plot_pr_curves(all_results, OUTPUT_PLOTS_DIR, model_name='eldernet')
 
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    # os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    all_rows = [
-        {
-            'dataset':   r['dataset'],
-            'subject':   r['subject'],
-            'wrist':     r.get('wrist', 'N/A'),
-            'precision': r['precision'],
-            'recall':    r['recall'],
-            'f1':        r['f1'],
-            'accuracy':  r['accuracy'],
-        }
-        for r in all_results
-    ]
-    global_rows = [
-        {'dataset': 'WISDM',    **wisdm_global},
-        {'dataset': 'WearGait', **weargait_global},
-        {'dataset': 'HMP',      **hmp_global},
-        {'dataset': 'BIOCLITE', **bioclite_global},
-        *qsense_globals,
-        {'dataset': FREE_LIVING_DATASET_NAME, **free_global},
-    ]
+    # all_rows = [
+    #     {
+    #         'dataset':   r['dataset'],
+    #         'subject':   r['subject'],
+    #         'wrist':     r.get('wrist', 'N/A'),
+    #         'precision': r['precision'],
+    #         'recall':    r['recall'],
+    #         'f1':        r['f1'],
+    #         'accuracy':  r['accuracy'],
+    #     }
+    #     for r in all_results
+    # ]
+    # global_rows = [
+    #     {'dataset': 'WISDM',    **wisdm_global},
+    #     {'dataset': 'WearGait', **weargait_global},
+    #     {'dataset': 'HMP',      **hmp_global},
+    #     {'dataset': 'BIOCLITE', **bioclite_global},
+    #     *qsense_globals,
+    #     {'dataset': FREE_LIVING_DATASET_NAME, **free_global},
+    # ]
 
-    per_subject_csv = os.path.join(RESULTS_DIR, 'eldernet_cross_dataset_per_subject.csv')
-    global_csv      = os.path.join(RESULTS_DIR, 'eldernet_cross_dataset_global.csv')
-    pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
-    pd.DataFrame(global_rows).to_csv(global_csv, index=False)
-    print(f"\nSaved per-subject results : {per_subject_csv}")
-    print(f"Saved global summary      : {global_csv}")
+    # per_subject_csv = os.path.join(RESULTS_DIR, 'eldernet_cross_dataset_per_subject.csv')
+    # global_csv      = os.path.join(RESULTS_DIR, 'eldernet_cross_dataset_global.csv')
+    # pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
+    # pd.DataFrame(global_rows).to_csv(global_csv, index=False)
+    # print(f"\nSaved per-subject results : {per_subject_csv}")
+    # print(f"Saved global summary      : {global_csv}")
 
 
 if __name__ == '__main__':
