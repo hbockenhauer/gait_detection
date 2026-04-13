@@ -136,7 +136,7 @@ def simulate_realtime(df):
         # Only trust the middle portion — skip the 2s edges
         for local_i in range(TRUST_START, TRUST_END):
             global_i = window_indices[local_i]
-            if np.isnan(y_pred[global_i]):
+            if np.isnan(y_pred[global_i]) or y_pred[global_i]==0:
                 y_pred[global_i] = y_window[local_i]
 
     return y_pred

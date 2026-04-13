@@ -261,6 +261,7 @@ def detect_fused(data_path):
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    process = psutil.Process(os.getpid())
     DATA_PATH = sys.argv[1]
     detect_fused(DATA_PATH)
 
