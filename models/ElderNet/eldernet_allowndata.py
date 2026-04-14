@@ -1,4 +1,4 @@
-# Apply ElderNet gait detection to self-recorded data in QSense_data, recorded at 50Hz
+# Apply ElderNet gait detection to self-recorded data in Baseline, recorded at 50Hz
 import os
 import sys
 import glob

@@ -70,10 +70,10 @@ end
 function results = evaluate_qsense_group(projectRoot, outputsRoot)
     results = table();
     candidates = {
-        fullfile(projectRoot, 'Datasets', 'QSense_data')
-        fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
-        fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
-        fullfile(projectRoot, 'Datasets', 'QSense_data_clinic')
+        fullfile(projectRoot, 'Datasets', 'Baseline')
+        fullfile(projectRoot, 'Datasets', 'Edge_Cases')
+        fullfile(projectRoot, 'Datasets', 'Multiple_Activities')
+        fullfile(projectRoot, 'Datasets', 'Clinical')
     };
 
     for i = 1:numel(candidates)

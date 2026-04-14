@@ -26,11 +26,11 @@ end
 projectRoot = scriptDir;
 for k = 1:8
     hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
-    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+    hasData = exist(fullfile(projectRoot, 'Baseline'), 'dir') || ...
               exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
               exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
               exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
-              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Baseline'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
@@ -47,12 +47,12 @@ end
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
 qSenseCandidates = {
-    fullfile(projectRoot, 'QSense_data_edge')
-    fullfile(projectRoot, 'QSense_data')
-    fullfile(projectRoot, 'QSense_data_mixed')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_edge')
-    fullfile(projectRoot, 'Datasets', 'QSense_data')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
+    fullfile(projectRoot, 'Edge_Cases')
+    fullfile(projectRoot, 'Baseline')
+    fullfile(projectRoot, 'Multiple_Activities')
+    fullfile(projectRoot, 'Datasets', 'Edge_Cases')
+    fullfile(projectRoot, 'Datasets', 'Baseline')
+    fullfile(projectRoot, 'Datasets', 'Multiple_Activities')
 };
 
 dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
@@ -64,12 +64,12 @@ if isempty(dataPaths)
     for r = 1:length(rootCandidates)
         rootCandidate = rootCandidates{r};
         candidatePaths = {
-            fullfile(rootCandidate, 'QSense_data_edge')
-            fullfile(rootCandidate, 'QSense_data')
-            fullfile(rootCandidate, 'QSense_data_mixed')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data_edge')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+            fullfile(rootCandidate, 'Edge_Cases')
+            fullfile(rootCandidate, 'Baseline')
+            fullfile(rootCandidate, 'Multiple_Activities')
+            fullfile(rootCandidate, 'Datasets', 'Edge_Cases')
+            fullfile(rootCandidate, 'Datasets', 'Baseline')
+            fullfile(rootCandidate, 'Datasets', 'Multiple_Activities')
         };
         existingPaths = candidatePaths(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths));
         if ~isempty(existingPaths)

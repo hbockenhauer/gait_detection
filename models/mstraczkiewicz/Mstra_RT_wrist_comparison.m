@@ -42,8 +42,8 @@ plotsRoot = fullfile(outputsRoot, 'plots');
 
 % Data path search (QSense Clinic can be in different locations)
 qSenseCandidates = {
-    fullfile(projectRoot, 'QSense_data_clinic')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_clinic')
+    fullfile(projectRoot, 'Clinical')
+    fullfile(projectRoot, 'Datasets', 'Clinical')
     fullfile(projectRoot, 'QSense_clinic')
     fullfile(projectRoot, 'Datasets', 'QSense_clinic')
 };

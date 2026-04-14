@@ -20,11 +20,11 @@ end
 projectRoot = scriptDir;
 for k = 1:8
     hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
-    hasData = exist(fullfile(projectRoot, 'QSense_data'), 'dir') || ...
+    hasData = exist(fullfile(projectRoot, 'Baseline'), 'dir') || ...
               exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
               exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
               exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
-              exist(fullfile(projectRoot, 'Datasets', 'QSense_data'), 'dir') || ...
+              exist(fullfile(projectRoot, 'Datasets', 'Baseline'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
@@ -39,14 +39,14 @@ for k = 1:8
 end
 
 dataCandidates = {
-    fullfile(projectRoot, 'QSense_data_mixed')
-    fullfile(projectRoot, 'Datasets', 'QSense_data_mixed')
+    fullfile(projectRoot, 'Multiple_Activities')
+    fullfile(projectRoot, 'Datasets', 'Multiple_Activities')
 };
 dataCandidates = dataCandidates(cellfun(@(p) exist(p, 'dir') == 7, dataCandidates));
 if ~isempty(dataCandidates)
     dataPath = dataCandidates{1};
 else
-    dataPath = fullfile(projectRoot, 'QSense_data_mixed');
+    dataPath = fullfile(projectRoot, 'Multiple_Activities');
 end
 fs = 50;
 
@@ -56,8 +56,8 @@ if ~exist(dataPath, 'dir')
     for r = 1:length(rootCandidates)
         rootCandidate = rootCandidates{r};
         candidatePaths = {
-            fullfile(rootCandidate, 'QSense_data_mixed')
-            fullfile(rootCandidate, 'Datasets', 'QSense_data_mixed')
+            fullfile(rootCandidate, 'Multiple_Activities')
+            fullfile(rootCandidate, 'Datasets', 'Multiple_Activities')
         };
         idx = find(cellfun(@(p) exist(p, 'dir') == 7, candidatePaths), 1);
         if ~isempty(idx)
@@ -79,7 +79,7 @@ outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 resultsCsv = fullfile(resultsDir, 'sigpro_param_opt_QSense_runs.csv');
-plotDir = fullfile(outputsRoot, 'plots', 'QSense_data_mixed', 'SigPro', 'param_opt');
+plotDir = fullfile(outputsRoot, 'plots', 'Multiple_Activities', 'SigPro', 'param_opt');
 if ~exist(plotDir, 'dir'), mkdir(plotDir); end
 
 % --- 2. DATA SPLITTING & PRE-LOADING ---
@@ -146,7 +146,7 @@ disp(bestParams);
 
 runSummary = table(...
     {datestr(now, 'yyyy-mm-dd HH:MM:SS')}, ...
-    {'QSense_data_mixed'}, ...
+    {'Multiple_Activities'}, ...
     {dataPath}, ...
     numel(allFilesInfo), ...
     numel(trainIdx), ...
@@ -164,7 +164,7 @@ runSummary = table(...
     'NumEvaluations','BestTrainF1','TestF1','F_MIN','F_MAX','P_MIN','P_MAX','A_MIN','A_MAX'});
 append_run_summary(resultsCsv, runSummary);
 fprintf('Appended run summary to: %s\n', resultsCsv);
-save_optimization_trace_plot(results, plotDir, 'QSense_data_mixed');
+save_optimization_trace_plot(results, plotDir, 'Multiple_Activities');
 save_test_set_plots(testSet, allFilesInfo(testIdx), bestParams, fs, plotDir);
 
 %% --- QSense Data Pre-Loader ---

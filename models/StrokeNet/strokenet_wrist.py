@@ -1295,7 +1295,7 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.ylim([0.0, 1.0])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.title('ROC Curves for QSense_data_clinic using StrokeNet with varying wrist fusion strategies')
+        plt.title('ROC Curves for Clinical using StrokeNet with varying wrist fusion strategies')
         plt.legend(loc='lower right', fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()
@@ -1369,7 +1369,7 @@ def create_method_roc_pr_plots(results, plots_dir):
         plt.ylim([0.0, 1.0])
         plt.xlabel('Recall')
         plt.ylabel('Precision')
-        plt.title('Precision-Recall Curves for QSense_data_clinic using StrokeNet with varying wrist fusion strategies')
+        plt.title('Precision-Recall Curves for Clinical using StrokeNet with varying wrist fusion strategies')
         plt.legend(loc='lower left', fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()
@@ -1411,7 +1411,7 @@ def main():
         print(f"\nDetailed results saved to {results_csv}")
         
         # Create plots
-        plots_subdir = os.path.join(PLOTS_DIR, 'QSense_data_clinic', 'wrist_comparison', 'StrokeNet')
+        plots_subdir = os.path.join(PLOTS_DIR, 'Clinical', 'wrist_comparison', 'StrokeNet')
         create_comparison_plots(results, plots_subdir)
         create_method_roc_pr_plots(results, plots_subdir)
         

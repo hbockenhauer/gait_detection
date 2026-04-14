@@ -44,10 +44,10 @@ STROKENET_WEIGHTS = os.path.join(STROKENET_DIR, 'StrokeNet_weights.pth')
 
 # Dataset paths
 HMP_PATH = os.path.join(DATASETS_ROOT, 'HMP_Dataset')
-QSENSE_DATA = os.path.join(DATASETS_ROOT, 'QSense_data')
-QSENSE_EDGE = os.path.join(DATASETS_ROOT, 'QSense_data_edge')
-QSENSE_MIXED = os.path.join(DATASETS_ROOT, 'QSense_data_mixed')
-QSENSE_CLINIC = os.path.join(DATASETS_ROOT, 'QSense_data_clinic')
+QSENSE_DATA = os.path.join(DATASETS_ROOT, 'Baseline')
+QSENSE_EDGE = os.path.join(DATASETS_ROOT, 'Edge_Cases')
+QSENSE_MIXED = os.path.join(DATASETS_ROOT, 'Multiple_Activities')
+QSENSE_CLINIC = os.path.join(DATASETS_ROOT, 'Clinical')
 QSENSE_TEST = os.path.join(DATASETS_ROOT, 'QSense_tests')
 WEARGAIT_PD = os.path.join(DATASETS_ROOT, 'WearGait', 'WearGait-PD')
 WEARGAIT_CTRL = os.path.join(DATASETS_ROOT, 'WearGait', 'WearGait-Ctrl')
@@ -64,7 +64,7 @@ def get_plot_dir(dataset: str, model: str) -> str:
 ELDERNET_PLOTS      = get_plot_dir('HMP',             'eldernet')
 ELDERNET_DUAL_PLOTS = get_plot_dir('WearGait',        'eldernet')
 ELDERNET_WISDM_PLOTS = get_plot_dir('WISDM',          'eldernet')
-STROKENET_PLOTS     = get_plot_dir('QSense_data',     'strokenet')
+STROKENET_PLOTS     = get_plot_dir('Baseline',     'strokenet')
 
 
 def validate_dataset_paths():
