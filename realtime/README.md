@@ -2,9 +2,11 @@
 
 There are two potential approaches presented here: first one using the data recorded from a single wrist to classify the walking directly for the wrist, and the second using the data from two wrists to make the gait detection prediction. 
 
+The detection of gait from the two algorithms can be found in files `detect_per_wrist.py` and `detect_fused.py`. These do not assume the existance of labels in the data and instead just open the file and produce predictions of walk from the data in a real-time manner. 
+
 To see the performance of the two methods, run the scripts `evaluate_per_wrist.py` and `evaluate_fused.py` to respectively see the metrics of the algorithm performed either from a single wirst data or with the data from two wrists fused. 
 
-Both approaches address time discountinueties by segmenting the data at those discountinuities and ensuring that the windows are not passed over the junction of the segments. The discountinueties are found by only examining increasing timestamps and if the gap between the timestamps is sufficiently big, a new segment is assigned in the dataframe. 
+Both approaches address time discountinueties by segmenting the data at those discountinuities and ensuring that the windows are not passed over the junction of the segments. The discountinueties are found by only examining increasing timestamps. Further if the gap between the timestamps is sufficiently big, a new segment is assigned in the dataframe. 
 
 The main algorithm for both of the methods is provided in `GSD3.py` and it utilized `ActivityCounts.py` script. The method also builds upon the scripts provided in [multimob.GSD.utils](https://github.com/DMegaritis/multimobility_wrist/tree/main/multimob/GSD/utils). The following packages are used: 
 
