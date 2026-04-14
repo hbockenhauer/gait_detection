@@ -12,7 +12,7 @@ from datetime import time
 from GSD3_fused import KheirkhahanGSD
 # from singleGSD_robust import load_segmented 
 
-DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub3"
+DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub5"
 # ── Config (mirror your original script) ─────────────────────────────────────
 FILE_NAME_R = 's1_1RW.txt'
 FILE_NAME_L = 's2_2LW.txt'

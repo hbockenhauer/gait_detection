@@ -4,7 +4,7 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 #from multimob.GSD.GSD3 import KheirkhahanGSD
-from GSD2_test import HickeyGSD
+from old_scripts.GSD2_test import HickeyGSD
 from GSD3_test import KheirkhahanGSD
 import matplotlib.pyplot as plt
 import csv
@@ -42,9 +42,9 @@ def load_segmented(DATA_PATH, file_name, debug: bool = False) -> pd.DataFrame:
             rows = list(reader)
 
         # clip the first 10 seconds depending on the data path 
-        rows = rows if ("mixed" or "clinic") in str(DATA_PATH) else rows[500:]
-        if debug == True:
-            print("Data taken fully.") if ("mixed" or "clinic") in str(DATA_PATH) else print("First 10s are clipped.")
+        # rows = rows if ("mixed" or "clinic") in str(DATA_PATH) else rows[500:]
+        # if debug == True:
+        #     print("Data taken fully.") if ("mixed" or "clinic") in str(DATA_PATH) else print("First 10s are clipped.")
 
         clean_rows = []
         segments   = []

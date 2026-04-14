@@ -14,8 +14,8 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 
 # ── Config (mirror your original script) ─────────────────────────────────────
-DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub5"
-FILE_NAME      = "s2_2LW.txt"
+DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub1"
+FILE_NAME      = "s1_1RW.txt"
 SAMPLING_RATE  = 50
 WINDOW_SIZE    = 9 *SAMPLING_RATE   # 450 samples  — full buffer
 STEP_SIZE      = 1 * SAMPLING_RATE   # 50 samples   — shift per tick
@@ -146,7 +146,7 @@ def simulate_realtime(df):
         # Only trust the middle portion — skip the 2s edges
         for local_i in range(TRUST_START, TRUST_END):
             global_i = window_indices[local_i]
-            if np.isnan(y_pred[global_i]):
+            if np.isnan(y_pred[global_i]) or y_pred[global_i]==0:
                 y_pred[global_i] = y_window[local_i]
 
     return y_pred
@@ -179,6 +179,8 @@ def print_metrics(y_true: np.ndarray, y_pred: np.ndarray, file_name: str) -> Non
     print(f"  False Negatives   : {int(np.sum((yp == 0) & (yt == 1)))}")
     print(f"  True  Negatives   : {int(np.sum((yp == 0) & (yt == 0)))}")
     print("=" * 60)
+
+    return acc, prec, rec, f1
 
 def plot_results(df: pd.DataFrame,
                  y_pred, y_true, title):
@@ -244,6 +246,176 @@ def plot_results(df: pd.DataFrame,
     fig.autofmt_xdate()
     plt.tight_layout()
     
+def process_realtime(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
+                 fl_merged: pd.DataFrame, 
+                 save_results: bool = True, print_stats: bool = False) -> pd.DataFrame:
+    """
+    Run GSD on every (subject, wrist) segment inside the merged DataFrames.
+    Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
+    """
+    results = []
+
+    print(f"\n{'Subject':<35} | {'Wrist':<5} | {'Cond':<10} | "
+          f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+    print("-" * 90)
+
+    # ────────── Process the data per wrist ────────────────────────────────────── 
+    for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged), ('',fl_merged)]:
+        if merged_df.empty:
+            print(f"[{wrist_label}] No data — skipping.")
+            continue
+
+        # Process each recording (subject folder) separately so the GSD sees
+        # one continuous, coherent signal — not a mix of activities concatenated.
+        for subject, grp_sub in merged_df.groupby('subject', sort=True):
+            grp_sub = grp_sub.reset_index(drop=True)
+            y_true    = grp_sub['y_true'].to_numpy()
+            condition = grp_sub['condition'].iloc[0]
+            label     = f"{subject}/{wrist_label}"
+
+            y_pred = np.zeros(len(grp_sub))
+            skipped_seg = 0
+
+            for seg, grp_seg in grp_sub.groupby('segment', sort=True): 
+                    if len(grp_seg) < WINDOW_SIZE:
+                        y_pred[grp_seg.index] = np.nan
+                        # y_true[grp_seg.index] = np.nan
+                        skipped_seg += 1
+                        continue
+                    seg_pred = simulate_realtime(grp_seg.reset_index(drop=True))
+                    y_pred[grp_seg.index] = seg_pred
+
+            valid_mask = ~np.isnan(y_pred)
+            acc  = accuracy_score(y_true[valid_mask], y_pred[valid_mask])
+            prec = precision_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+            rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+            f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+
+            results.append({
+                'Subject':   label,
+                'Wrist':     wrist_label,
+                'Folder':    subject,
+                'Condition': condition,
+                'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1, 
+                'TP': np.sum((y_pred == 1) & (y_true == 1)), 
+                'FP': np.sum((y_pred == 1) & (y_true == 0)), 
+                'FN': np.sum((y_pred == 0) & (y_true == 1)), 
+                'TN': np.sum((y_pred == 0) & (y_true == 0))
+            })
+
+            if print_stats == True: 
+                print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
+                      f"{acc:.2f}   | {prec:.2f}   | "
+                      f"{rec:.2f}   | {f1:.2f}")    
+    
+    if not results:
+        print("No results to summarise.")
+        return pd.DataFrame()
+
+    res_df = pd.DataFrame(results)
+
+    VARIABLES = ['TP', 'FP', 'FN', 'TN']
+
+    def _avg_row(row_type: str, label: str,
+                 wrist: str, condition: str,
+                 subset: pd.DataFrame) -> dict:
+        """Build a single summary dict from a subset of res_df."""
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
+        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
+                                                              if (precision_av + recall_av) > 0 else 0.0
+
+        return {
+            'row_type':  row_type,
+            'Subject':   label,
+            'Wrist':     wrist,
+            'Folder':    '',
+            'Condition': condition,
+            'Accuracy':     accuracy_av,
+            'Precision':    precision_av,
+            'Recall':       recall_av,
+            'F1':           f1_av,
+            **{p: round(subset[p].sum(), 4) for p in VARIABLES}
+        }
+
+    def _print_avg(label: str, subset: pd.DataFrame):
+        if subset.empty:
+            return
+        tp = subset['TP'].sum()
+        fp = subset['FP'].sum()
+        fn = subset['FN'].sum()
+        tn = subset['TN'].sum()
+        total = tp + fp + fn + tn
+
+        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
+        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
+        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
+        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
+                                                              if (precision_av + recall_av) > 0 else 0.0
+        print(f"{label:<35} | {'':5} | {'':10} | "
+              f"{accuracy_av:.5f}   | "
+              f"{precision_av:.5f}   | "
+              f"{recall_av:.5f}   | "
+              f"{f1_av:.5f}")
+
+    # Collect average rows for CSV
+    avg_rows: list[dict] = []
+
+    # Per-wrist averages
+    for wrist in ['RW', 'LW']:
+        sub = res_df[res_df['Wrist'] == wrist]
+        if not sub.empty:
+            avg_rows.append(_avg_row('avg_wrist',
+                                     f"{wrist} average",
+                                     wrist, '', sub))
+
+    # Per-condition averages (all wrists combined)
+    for condition in sorted(res_df['Condition'].unique()):
+        sub = res_df[res_df['Condition'] == condition]
+        avg_rows.append(_avg_row('avg_condition',
+                                  f"Cond={condition} average",
+                                  '', condition, sub))
+
+    # Overall average
+    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
+
+    # Print summary to console
+    if print_stats: 
+        print("-" * 100)
+        _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
+        _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
+        print()
+    for condition in sorted(res_df['Condition'].unique()):
+        _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
+    print("-" * 100)
+    _print_avg("AVERAGE (Overall)", res_df)
+
+    # Save the csv
+    res_df.insert(0, 'row_type', 'result')
+
+    avg_df    = pd.DataFrame(avg_rows)
+    blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
+
+    csv_df = pd.concat(
+        [res_df,
+         blank_row,
+         avg_df],
+        ignore_index=True
+    )
+
+    if save_results == True:
+        csv_df.to_csv(OUTPUT_FILE, index=False)
+        print(f"\nSaved → {OUTPUT_FILE}")
+
+    return res_df
+
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

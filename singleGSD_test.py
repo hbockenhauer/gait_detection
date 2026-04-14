@@ -4,7 +4,7 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 #from multimob.GSD.GSD3 import KheirkhahanGSD
-from GSD2_test import HickeyGSD
+from old_scripts.GSD2_test import HickeyGSD
 from GSD3_test import KheirkhahanGSD
 import matplotlib.pyplot as plt
 

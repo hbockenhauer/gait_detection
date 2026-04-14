@@ -333,11 +333,11 @@ class KheirkhahanGSD:
 
         # CASE 2: only data1
         elif has_data1:
-            self.gs_list_ = self._process_single(data1, sampling_rate_hz)
+            self.gs_list_ = self._detect_single(data1, sampling_rate_hz)
 
         # CASE 3: only data2
         elif has_data2:
-            self.gs_list_ = self._process_single(data2, sampling_rate_hz)
+            self.gs_list_ = self._detect_single(data2, sampling_rate_hz)
 
         # CASE 4: no valid data
         else:
