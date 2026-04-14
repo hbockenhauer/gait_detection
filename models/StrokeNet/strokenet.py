@@ -37,6 +37,8 @@ from config.paths import (
 )
 import utils.plot_ROC_PR as plot_ROC_PR
 
+STROKENET_RESULTS_DIR = os.path.join(RESULTS_DIR, 'StrokeNet')
+
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Running on: {device}")
@@ -70,7 +72,7 @@ def main():
     plot_ROC_PR.plot_pr_curves(all_results, OUTPUT_PLOTS_DIR)
 
     # Save per-dataset results
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(STROKENET_RESULTS_DIR, exist_ok=True)
     
     # WISDM
     if wisdm_results:
@@ -79,7 +81,7 @@ def main():
             'precision': r['precision'], 'recall': r['recall'],
             'f1': r['f1'], 'accuracy': r['accuracy']
         } for r in wisdm_results]
-        wisdm_csv = os.path.join(RESULTS_DIR, 'strokenet_WISDM_subject_metrics.csv')
+        wisdm_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_WISDM_subject_metrics.csv')
         pd.DataFrame(wisdm_rows).to_csv(wisdm_csv, index=False)
         print(f"Saved WISDM results: {wisdm_csv}")
     
@@ -90,7 +92,7 @@ def main():
             'precision': r['precision'], 'recall': r['recall'],
             'f1': r['f1'], 'accuracy': r['accuracy']
         } for r in weargait_results]
-        weargait_csv = os.path.join(RESULTS_DIR, 'strokenet_WearGait_subject_metrics.csv')
+        weargait_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_WearGait_subject_metrics.csv')
         pd.DataFrame(weargait_rows).to_csv(weargait_csv, index=False)
         print(f"Saved WearGait results: {weargait_csv}")
     
@@ -101,7 +103,7 @@ def main():
             'precision': r['precision'], 'recall': r['recall'],
             'f1': r['f1'], 'accuracy': r['accuracy']
         } for r in hmp_results]
-        hmp_csv = os.path.join(RESULTS_DIR, 'strokenet_HMP_subject_metrics.csv')
+        hmp_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_HMP_subject_metrics.csv')
         pd.DataFrame(hmp_rows).to_csv(hmp_csv, index=False)
         print(f"Saved HMP results: {hmp_csv}")
     
@@ -112,7 +114,7 @@ def main():
             'precision': r['precision'], 'recall': r['recall'],
             'f1': r['f1'], 'accuracy': r['accuracy']
         } for r in bioclite_results]
-        bioclite_csv = os.path.join(RESULTS_DIR, 'strokenet_BIOCLITE_subject_metrics.csv')
+        bioclite_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_BIOCLITE_subject_metrics.csv')
         pd.DataFrame(bioclite_rows).to_csv(bioclite_csv, index=False)
         print(f"Saved BIOCLITE results: {bioclite_csv}")
 
@@ -139,8 +141,8 @@ def main():
         {'dataset': FREE_LIVING_DATASET_NAME, **free_global},
     ]
 
-    per_subject_csv = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
-    global_csv      = os.path.join(RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
+    per_subject_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_cross_dataset_per_subject.csv')
+    global_csv      = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_cross_dataset_global.csv')
     pd.DataFrame(all_rows).to_csv(per_subject_csv, index=False)
     pd.DataFrame(global_rows).to_csv(global_csv, index=False)
     print(f"\nSaved aggregated per-subject results: {per_subject_csv}")

@@ -1,3 +1,8 @@
+'''
+ElderNet Helper Functions
+This is a helper module for the Energy Analysis Notebook containing all the necessary functions.
+'''
+
 import os
 import sys
 import numpy as np

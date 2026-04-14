@@ -43,6 +43,7 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 dataCandidates = {
     fullfile(projectRoot, 'Free_living')
     fullfile(projectRoot, 'Datasets', 'Free_living')
@@ -67,6 +68,7 @@ maxGap     = 1.5 / fs;
 
 if ~exist(plotPath, 'dir'), mkdir(plotPath); end
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
 
 % --- 2. INITIALIZE SUMMARY ---
 summaryResults = table();
@@ -386,7 +388,7 @@ if ~isempty(summaryResults)
     fprintf('======================================================================\n');
     
     % Save RT results to outputs/results
-    resFile = fullfile(resultsDir, 'sigpro_RT_Free_living_results.xlsx');
+    resFile = fullfile(sigproResultsDir, 'sigpro_RT_Free_living_results.xlsx');
     writetable(summaryResults, resFile, 'Sheet', 'All_Files');
     writetable(subjectSummary, resFile, 'Sheet', 'By_Subject');
     writetable(dataQuality, resFile, 'Sheet', 'Data_Quality');

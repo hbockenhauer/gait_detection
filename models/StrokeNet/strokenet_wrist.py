@@ -31,6 +31,8 @@ from models.StrokeNet.strokenet_utils import (
 from config.paths import PLOTS_DIR, RESULTS_DIR, QSENSE_CLINIC
 import utils.plot_ROC_PR as plot_ROC_PR
 
+STROKENET_RESULTS_DIR = os.path.join(RESULTS_DIR, 'StrokeNet')
+
 # Affected side per patient in QSense Clinic [sub1, sub2, sub3...]
 affected_wrist_patient = ['RW', 'LW', 'LW', 'LW', 'LW']
 
@@ -1406,7 +1408,8 @@ def main():
         print(df.to_string(index=False))
         
         # Save to CSV
-        results_csv = os.path.join(RESULTS_DIR, 'StrokeNet_clinic_wrist_comparison_all_methods.csv')
+        os.makedirs(STROKENET_RESULTS_DIR, exist_ok=True)
+        results_csv = os.path.join(STROKENET_RESULTS_DIR, 'StrokeNet_clinic_wrist_comparison_all_methods.csv')
         df.to_csv(results_csv, index=False)
         print(f"\nDetailed results saved to {results_csv}")
         

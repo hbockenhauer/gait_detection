@@ -1,3 +1,8 @@
+'''
+ElderNet Evaluation on WISDM Dataset
+This script loads the pre-trained ElderNet model and evaluates it on the WISDM dataset. It computes global metrics (precision, recall, F1-score, accuracy) and also provides a breakdown by activity type. Finally, it generates detailed plots for selected subjects showing the model's confidence, energy, and frequency over time with activity annotations.
+'''
+
 import torch
 import numpy as np
 import pandas as pd

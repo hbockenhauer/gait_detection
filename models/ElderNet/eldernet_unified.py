@@ -1,3 +1,8 @@
+'''
+ElderNet Unified Evaluation Script
+This script serves as a unified entry point for evaluating the ElderNet model across multiple datasets (WISDM, HMP, QSENSE) and on self-recorded data. It loads the pre-trained ElderNet model and applies it to each dataset using the appropriate dataset-specific loader and thresholds. The script computes global metrics (precision, recall, F1-score) for each dataset and also provides a breakdown by activity type. Finally, it saves the results in a structured format for further analysis. The script is designed to be modular, allowing us to easily add new datasets or evaluation criteria in the future by simply implementing new loader classes and calling them in the main function.
+'''
+
 import torch
 import numpy as np
 import pandas as pd

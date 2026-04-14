@@ -38,6 +38,7 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 qSenseCandidates = {
     % fullfile(projectRoot, 'Multiple_Activities')
     % fullfile(projectRoot, 'Edge_Cases')
@@ -78,7 +79,9 @@ if isempty(dataPaths)
     if ~isempty(fallbackPaths)
         outputsRoot = fullfile(projectRoot, 'outputs');
         resultsDir = fullfile(outputsRoot, 'results');
+        sigproResultsDir = fullfile(resultsDir, 'SigPro');
         if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+        if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
         dataPaths = fallbackPaths;
         fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
     else
@@ -97,6 +100,7 @@ windowSize = 2 * fs;
 stepSize = 1 * fs;
 
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
 
 % --- 2. INITIALIZE SUMMARIES ---
 summaryResults = table();
@@ -533,7 +537,7 @@ if ~isempty(summaryResults)
     fprintf('Precision: %.4f | Recall: %.4f | F1: %.4f\n', ...
             global_precision, global_recall, global_f1);
         
-    resultsFile = fullfile(resultsDir, 'sigpro_optRT_QSense_results.xlsx');
+    resultsFile = fullfile(sigproResultsDir, 'sigpro_optRT_QSense_results.xlsx');
     writetable(summaryResults, resultsFile, 'Sheet', 'All_Files');
     writetable(wristFinal, resultsFile, 'Sheet', 'By_Wrist');
     writetable(activityFinal, resultsFile, 'Sheet', 'By_Activity');

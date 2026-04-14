@@ -1,4 +1,8 @@
-# Apply ElderNet gait detection to self-recorded data in Baseline, recorded at 50Hz
+'''
+ElderNet Acceleration Plotting
+This script loads the pre-recorded accelerometer data from the self-recorded datasets (specifically the Multi Activity dataset) and generates plots of the raw accelerometer signals (accX, accY, accZ) over time for both wrists. The script processes each subject's data, resamples it to 30Hz if necessary, and creates dual wrist plots showing the acceleration signals with proper annotations. Finally, it saves the generated plots in a structured directory for further analysis.
+'''
+
 import os
 import sys
 import glob

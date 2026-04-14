@@ -1,4 +1,4 @@
-# Apply ElderNet gait detection to self-recorded data in Baseline, recorded at 50Hz
+# Apply ElderNet gait detection to all self-recorded data recorded at 50Hz
 import os
 import sys
 import glob
@@ -37,6 +37,7 @@ WINDOW_SIZE = 300
 STEP_SIZE = 30
 GAIT_CLASSES = {'Walking', 'Stairs'}
 SAMPLE_RATE_QSENSE = 50.0 #Hz
+RESULTS_DIR = os.path.join(RESULTS_DIR, 'ElderNet')
 
 
 # --- REPRODUCIBILITY ---

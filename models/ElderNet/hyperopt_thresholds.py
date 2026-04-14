@@ -1,3 +1,8 @@
+'''
+ElderNet Threshold Hyperparameter Search
+This script performs a comprehensive grid search over a range of thresholds for the ElderNet gait detection model. It evaluates the model's performance on the WearGait dataset by varying the confidence threshold, energy threshold, maximum energy threshold, minimum frequency threshold, and maximum frequency threshold. The script collects the model's output probabilities, energy, and frequency for all windows in the dataset, and then applies each combination of thresholds to compute binary predictions. For each combination, it calculates precision, recall, F1-score, and accuracy against the ground truth labels. The results are saved in a CSV file for further analysis, and the best combination of thresholds is printed at the end.
+'''
+
 import os
 import glob
 import argparse

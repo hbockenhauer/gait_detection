@@ -1,3 +1,8 @@
+'''
+ElderNet Evaluation on HMP Dataset
+This script loads the pre-trained ElderNet model and evaluates it on the HMP dataset. It computes global metrics (precision, recall, F1-score, accuracy) and also provides a breakdown by activity type and by subject. Finally, it generates detailed plots for selected subjects showing the model's confidence, energy, and frequency over time with activity annotations.
+'''
+
 import os
 import sys
 import glob

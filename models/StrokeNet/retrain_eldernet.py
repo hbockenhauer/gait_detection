@@ -1,3 +1,14 @@
+'''
+Retrain ElderNet Model
+This script adapts the ElderNet model for gait detection to retrain on self-recorded datasets (Baseline, Multi Activity, Edge Cases, Free Living). The script performs the following steps:
+1. Loads the pre-trained ElderNet model.
+2. Modifies the model architecture to accommodate the new shorter input window size by fixing circular padding and removing the last downsampling layer.
+3. Prepares the self-recorded datasets by extracting windows of accelerometer data and corresponding labels.
+4. Trains the adapted model on the self-recorded datasets using a weighted loss function to handle class imbalance.
+5. Evaluates the model on a validation set and saves the best-performing model weights to disk.
+The script is designed to be modular, allowing us to easily modify the training parameters, add new datasets, or further adapt the model architecture in the future as needed.
+'''
+
 import os
 import sys
 import numpy as np

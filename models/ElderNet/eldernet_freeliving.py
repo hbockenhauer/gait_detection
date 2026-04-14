@@ -40,6 +40,7 @@ WINDOW_SIZE = 300
 STEP_SIZE = 30
 REPO_NAME = 'yonbrand/ElderNet'
 SAMPLE_RATE_QSENSE = 50.0
+RESULTS_DIR = os.path.join(RESULTS_DIR, 'ElderNet')
 
 # Thresholds
 CONF_THRESH = 0.65

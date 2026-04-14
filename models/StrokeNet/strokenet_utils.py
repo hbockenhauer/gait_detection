@@ -1,3 +1,9 @@
+'''
+StrokeNet Utility Functions
+This module contains utility functions for evaluating StrokeNet on various datasets.
+The functions include model loading, inference, metric computation, and data processing specific to the self-recorded datasets. These utilities are designed to be modular and reusable across different evaluation scripts, allowing us to maintain a clean separation between the core evaluation logic (in strokenet.py) and the dataset-specific processing steps. This also allows us to easily extend the functionality in the future by adding new utility functions as needed without cluttering the main evaluation scripts.
+'''
+
 import os
 import sys
 import numpy as np

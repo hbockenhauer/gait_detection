@@ -1,3 +1,8 @@
+''' 
+StrokeNet Upper Arm Evaluation Script
+This script loads the pre-trained StrokeNet model and evaluates it on the upper arm sensor data from the Clinical dataset.
+'''
+
 import os
 import sys
 import numpy as np
@@ -33,6 +38,7 @@ from strokenet_utils import (
 # --- CONFIGURATION ---
 QSENSE_PATHS = [QSENSE_CLINIC]
 WEIGHTS_PATH = STROKENET_WEIGHTS
+STROKENET_RESULTS_DIR = os.path.join(RESULTS_DIR, 'StrokeNet')
 REPO_NAME     = 'yonbrand/ElderNet'
 
 WINDOW_SIZE   = 100    # 2s at 50Hz
@@ -228,7 +234,8 @@ def main():
             'f1': r['f1'], 'accuracy': r['accuracy']
         } for r in qsense_results_all]
         qsense_df = pd.DataFrame(qsense_rows)
-        qsense_csv = os.path.join(RESULTS_DIR, 'strokenet_QSense_clinic_upperarm_metrics.csv')
+        os.makedirs(STROKENET_RESULTS_DIR, exist_ok=True)
+        qsense_csv = os.path.join(STROKENET_RESULTS_DIR, 'strokenet_QSense_clinic_upperarm_metrics.csv')
         qsense_df.to_csv(qsense_csv, index=False)
         print(f"Saved QSense results: {qsense_csv}")
 

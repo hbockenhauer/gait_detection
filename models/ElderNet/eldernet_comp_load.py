@@ -1,3 +1,13 @@
+'''
+ElderNet Computational Load Analysis
+This script loads the pre-trained ElderNet model and evaluates its computational load in terms of:  
+1. Number of parameters (total and trainable)
+2. Model size on disk (MB)  
+3. FLOPs / Multiply-Adds per inference (for a single window)
+4. Average inference time per window (on CPU and GPU if available)
+This analysis helps us understand the efficiency of ElderNet and its suitability for real-time gait detection on wearable devices. The code is structured to be clean and focused on the computational load evaluation, without any dataset-specific processing or evaluation logic. This keeps the script simple and allows us to easily reuse it for analyzing other models in the future by simply changing the model loading part.
+'''
+
 import torch
 from ptflops import get_model_complexity_info
 import os

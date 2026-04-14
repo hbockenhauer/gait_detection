@@ -1,3 +1,8 @@
+'''
+ElderNet Evaluation on WearGait Dataset
+This script loads the pre-trained ElderNet model and evaluates it on the WearGait dataset. It processes each subject's data, applies the model to obtain gait detection probabilities, and computes metrics (precision, recall, F1-score, accuracy) for each wrist. The script also generates detailed dual wrist plots showing the model's confidence, energy, and frequency over time with activity annotations. Finally, it saves a summary of the results in a CSV file for further analysis.
+'''
+
 import os
 import sys
 import glob

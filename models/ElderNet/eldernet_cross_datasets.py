@@ -56,6 +56,7 @@ WEARGAIT_CTRL_PATH = WEARGAIT_CTRL
 QSENSE_PATHS = [QSENSE_DATA, QSENSE_EDGE, QSENSE_MIXED, QSENSE_CLINIC]
 FREE_LIVING_PATH = FREELIVING_PATH
 REPO_NAME = 'yonbrand/ElderNet'
+RESULTS_DIR = os.path.join(RESULTS_DIR, 'ElderNet')
 
 # ElderNet native parameters (pre-trained at 30 Hz with 300-sample windows)
 TARGET_FS = 30.0
