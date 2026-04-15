@@ -3,25 +3,27 @@ import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from GSD3_test import KheirkhahanGSD
-from multimob.GSD.GSD4 import MacLeanGSD
-from multimob.GSD.GSD5 import KerenGSD
-from GSD2a import HickeyGSD
-from singleGSD_robust import plot_results
+from Kheirkhahan.GSD3_test import KheirkhahanGSD
+from Hickey.GSD2a import HickeyGSD
+
+from config.paths import (
+    FREELIVING_PATH,
+)
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
-DATA_PATHS = [
-    r"C:\Users\orlov\intern\gait_detection\Free_living"
-]
-GSD_n = 3
-SAMPLING_RATE = 50
-DEBUG = False
-GAIT_CLASSES = {'walking', 'stairs'}
+##############################
+GSD_n = 3 # 2 for hickey, 3 for Kheirkhahan
+DEBUG = False 
 SAVE_RESULTS = False
 PRINT_STATS = True
+##############################
 
-
+DATA_PATHS = [
+    FREELIVING_PATH
+]
+SAMPLING_RATE = 50
+GAIT_CLASSES = {'walking', 'stairs'}
 
 def load_csv(filepath: str):
     """
@@ -33,13 +35,12 @@ def load_csv(filepath: str):
     """
     try:
         df = pd.read_csv(filepath, sep=None, engine="python")
-        # df = df.reset_index(drop=True)
         
-        # 3. Create datetime helper
+        # Create datetime helper
         # Using Month/Day/Year as identified previously
         df['time_dt'] = pd.to_datetime(df['time'], format='%m/%d/%Y %H:%M:%S.%f')
 
-        # 4. Filter non-increasing timestamps
+        # Filter non-increasing timestamps
         time_diffs = df['time_dt'].diff().dt.total_seconds()
         valid_mask = (time_diffs > 0) | (time_diffs.isna())
         df = df[valid_mask].copy()
@@ -47,15 +48,15 @@ def load_csv(filepath: str):
         dropped_rows = len(df) - valid_mask.sum()
         df = df[valid_mask].copy()
 
-        # 5. Add requested columns in specific string formats
-        # yyyy-MM-dd (e.g., 2025-06-19)
+        # Add requested columns in specific string formats
+        # yyyy-MM-dd
         df['yyyy-MM-dd'] = df['time_dt'].dt.strftime('%Y-%m-%d')
         
         # HH:mm:ss.fff (e.g., 10:45:26.605)
         # Note: %f provides microseconds, so we slice to get 3 digits (milliseconds)
         df['HH:mm:ss.fff'] = df['time_dt'].dt.strftime('%H:%M:%S.%f').str[:-3]
         
-        # 6. Identify Gaps and Segments
+        #  Identify Gaps and Segments
         # Re-calculate diffs on the cleaned data
         df['gap_ms'] = df['time_dt'].diff().dt.total_seconds() * 1000
         
@@ -69,33 +70,16 @@ def load_csv(filepath: str):
             print(f"Found {df['segment'].nunique()} segments.")
             print(f"Kept {len(df)} rows.")
 
-        # Cleanup: Remove helper columns if you want to keep the DF clean
-        # df = df.drop(columns=['time_dt', 'gap_ms'])
-
-        # df = pd.DataFrame(clean_rows)
-        # df = df.reset_index(drop=True)
-        # df['segment'] = segments
-
-        # FIX: use startswith('a') instead of 'a' in col.lower() to avoid
-        # matching unrelated columns like 'Label', 'gz', 'mag_x', etc.
         acc_cols = [c for c in df.columns if c.lower().startswith('a')]
         if len(acc_cols) < 3:
             print(f"  [SKIP] Not enough acc columns in {filepath} (found {len(acc_cols)})")
             return None
 
-        # imu_df = df[acc_cols[:3]].copy()
-        # imu_df = imu_df * 9.81          # convert g → m/s²
-        # imu_df['segment'] = df['segment']
-        # imu_df['y_true'] = df['Label']
-        # imu_df['yyyy-MM-dd'] = df['yyyy-MM-dd']
-        # imu_df['HH:mm:ss.fff'] = df['HH:mm:ss.fff']
-        # imu_df.columns = ['yyyy-MM-dd', 'HH:mm:ss.fff', 'acc_is', 'acc_ml', 'acc_pa', 'segment', 'y_true']
         imu_df = df[acc_cols[:3]].copy()
         imu_df.columns = ['acc_is', 'acc_ml', 'acc_pa'] # Rename just the accels first
         imu_df = imu_df * 9.81
 
         imu_df['segment'] = df['segment']
-        # imu_df['y_true'] = df['Label']
         imu_df['yyyy-MM-dd'] = df['yyyy-MM-dd']
         imu_df['HH:mm:ss.fff'] = df['HH:mm:ss.fff']
         
@@ -176,14 +160,6 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                 activity_counts = gsd.get_activity(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 std_norm = gsd.get_std_norm(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 output_name = 'KheirkhahanGSD_Results.csv'
-            case 4:
-                gsd = MacLeanGSD()
-                detected_bouts = gsd.detect(imu_df)
-                output_name = 'MacLeanGSD_Results.csv'
-            case 5:
-                gsd = KerenGSD()
-                detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'KerenGSD_Results.csv'
             case _:
                 print(f"  [ERROR] Unknown GSD_n={GSD_n}")
                 return None
@@ -226,11 +202,6 @@ def process_gait(imu_merged: pd.DataFrame,
     """
     Run GSD on every subject segment inside imu_merged.
     Prints a per-file table and overall averages; optionally saves results CSV.
-
-    FIX: previously accepted (rw_merged, lw_merged) — simplified to one DataFrame
-         since merge_all_wrists only returns one.
-    FIX: _avg_row was called with an extra positional '' argument that didn't
-         match its signature — removed the stray argument.
     """
     results = []
 
@@ -321,9 +292,7 @@ def process_gait(imu_merged: pd.DataFrame,
         print(f"{label:<40} | {accuracy_av:.5f}  | {precision_av:.5f}  | "
               f"{recall_av:.5f}  | {f1_av:.5f}")
 
-    # FIX: _avg_row called without the stale extra '' positional argument
     avg_rows = [_avg_row('avg_overall', 'AVERAGE (Overall)', res_df)]
-
     print("-" * 80)
     _print_avg("AVERAGE (Overall)", res_df)
 
@@ -357,10 +326,13 @@ if __name__ == "__main__":
     # Pool across all datasets
     imu_merged = pd.concat(all_imu, ignore_index=True) if all_imu else pd.DataFrame()
 
+    match GSD_n: 
+        case 2: 
+            GSD = "Hickey"
+        case 3: 
+            GSD = "Kheirkhahan"
     print(f"\n{'=' * 80}")
-    print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
+    print(f"  Running {GSD} GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
 
-    # FIX: process_gait now takes one DataFrame + save_results flag,
-    #      matching the updated function signature.
     process_gait(imu_merged, SAVE_RESULTS)

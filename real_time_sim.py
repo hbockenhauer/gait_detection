@@ -6,7 +6,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_sc
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-from GSD3_test import KheirkhahanGSD
+from Kheirkhahan.GSD3_test import KheirkhahanGSD
 from singleGSD_robust import load_segmented   
 
 import pandas as pd

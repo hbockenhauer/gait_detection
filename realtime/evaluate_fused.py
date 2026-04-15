@@ -75,8 +75,8 @@ def plot_results_fused(df_sync: pd.DataFrame,
             ax.axvline(x=jt, color="yellow", linewidth=1.0, linestyle="--", alpha=0.8,
                        label="Time gap left" if (labeled and i == 0) else None)
 
-    fig, axes = plt.subplots(4, 1, figsize=(12, 14), sharex=True)
-    fig.suptitle(title, fontsize=13)
+    fig, axes = plt.subplots(2, 1, figsize=(9, 5), sharex=True)
+    fig.suptitle("Raw data, sub5", fontsize=13)
 
     # ── Panel 1: raw acc R ────────────────────────────────────────────────────
     ax = axes[0]
@@ -99,26 +99,26 @@ def plot_results_fused(df_sync: pd.DataFrame,
     ax.legend(loc="upper left", fontsize=7)
 
     # ── Panel 3: per-wrist predictions ────────────────────────────────────────
-    ax = axes[2]
-    _add_truth_bands(ax)
-    ax.plot(time_all_sec, pred_r, label="pred R", alpha=0.75,
-            linewidth=1, color="steelblue")
-    ax.plot(time_all_sec, pred_l, label="pred L", alpha=0.75,
-            linewidth=1, color="tomato")
-    _add_gaps(ax, labeled=False)
-    ax.set_ylabel("Pred per wrist")
-    ax.set_ylim(-0.1, 1.4)
-    ax.legend(loc="upper left", fontsize=7)
+    # ax = axes[2]
+    # _add_truth_bands(ax)
+    # ax.plot(time_all_sec, pred_r, label="pred R", alpha=0.75,
+    #         linewidth=1, color="steelblue")
+    # ax.plot(time_all_sec, pred_l, label="pred L", alpha=0.75,
+    #         linewidth=1, color="tomato")
+    # _add_gaps(ax, labeled=False)
+    # ax.set_ylabel("Pred per wrist")
+    # ax.set_ylim(-0.1, 1.4)
+    # ax.legend(loc="upper left", fontsize=7)
 
-    # ── Panel 4: fused prediction ─────────────────────────────────────────────
-    ax = axes[3]
-    _add_truth_bands(ax)
-    ax.plot(time_all_sec, y_fused, label="Fused prediction", alpha=0.9,
-            linewidth=1.2, color="darkorchid")
-    _add_gaps(ax, labeled=False)
-    ax.set_ylabel("Fused (1=walk)")
-    ax.set_ylim(-0.1, 1.4)
-    ax.legend(loc="upper left", fontsize=7)
+    # # ── Panel 4: fused prediction ─────────────────────────────────────────────
+    # ax = axes[3]
+    # _add_truth_bands(ax)
+    # ax.plot(time_all_sec, y_fused, label="Fused prediction", alpha=0.9,
+    #         linewidth=1.2, color="darkorchid")
+    # _add_gaps(ax, labeled=False)
+    # ax.set_ylabel("Fused (1=walk)")
+    # ax.set_ylim(-0.1, 1.4)
+    # ax.legend(loc="upper left", fontsize=7)
 
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(
         lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"

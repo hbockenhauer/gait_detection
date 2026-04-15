@@ -4,7 +4,7 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from multimob.GSD.GSD3 import KheirkhahanGSD
-from GSD2a import HickeyGSD
+from Hickey.GSD2a import HickeyGSD
 
 # Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)

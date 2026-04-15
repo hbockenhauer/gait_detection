@@ -3,13 +3,13 @@ import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from GSD3_test import KheirkhahanGSD
-from GSD2a import HickeyGSD
+from Kheirkhahan.GSD3_test import KheirkhahanGSD
+from Hickey.GSD2a import HickeyGSD
 import csv
 from datetime import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from free_living_test import merge_csv
+from Kheirkhahan.free_living_test import merge_csv
 from singleGSD_robust import load_segmented
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)

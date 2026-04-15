@@ -1,53 +1,24 @@
+"""
+Contains helper functions to run each existing dataset with Hickey. 
+"""
+
+
 import os
 import pandas as pd
 import numpy as np
-import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from Kheirkhahan.GSD3_test import KheirkhahanGSD
 from Hickey.GSD2a import HickeyGSD
 import scipy.io as sio
 from collections import deque
 
-THRESHOLD_STILL = 0.0
 DEBUG = False
-
-
-def simulate_realtime(df, sampling_rate):
-    BUFFER_SIZE = 13 * sampling_rate
-    TRUST_START= 2 * sampling_rate
-    TRUST_END = 11 * sampling_rate
-    STEP_SIZE = sampling_rate
-
-    n = len(df)
-    y_pred = np.full(n, np.nan)
-    buffer = deque(maxlen=BUFFER_SIZE)
-
-    for sample_idx in range(n):
-        buffer.append(sample_idx)
-
-        if (sample_idx + 1) % STEP_SIZE != 0:
-            continue
-        if len(buffer) < BUFFER_SIZE:
-            continue
-
-        window_indices = list(buffer)
-        window_df = df.iloc[window_indices].copy()
-        y_window = run_gsd_on_wrist(window_df, sampling_rate)   # length = BUFFER_SIZE
-
-        # Only trust the middle portion — skip the 2s edges
-        for local_i in range(TRUST_START, TRUST_END):
-            global_i = window_indices[local_i]
-            if np.isnan(y_pred[global_i]) or y_pred[global_i]==0:
-                y_pred[global_i] = y_window[local_i]
-
-    return y_pred
+MIN_SEC_PER_WINDOW = 0.1
 
 # --------------------------------------------------------------------------------
 #                                  WearGait dataset 
 # --------------------------------------------------------------------------------
 
 SAMPLING_RATE_WEARGATE = 100
-MIN_SEC_PER_WINDOW = 0.1
 WEARGAIT_GAIT_KEYWORDS = ['walk', 'stair', 'gait', 'jog', 'run', 'climb']
 
 def run_gsd_on_wrist(imu_df: pd.DataFrame, sampling_rate: float = 50) -> np.ndarray:
@@ -63,8 +34,6 @@ def run_gsd_on_wrist(imu_df: pd.DataFrame, sampling_rate: float = 50) -> np.ndar
         print("the issue is",len(seg_imu))
         return np.full(len(seg_imu), np.nan)
 
-    # gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
-    # bout_result = gsd.detect(seg_imu, sampling_rate_hz=sampling_rate)
     gsd = HickeyGSD()
     bout_result = gsd.preprocess(seg_imu, sampling_rate_hz=sampling_rate, 
                                  target_sampling_rate_hz=sampling_rate
@@ -89,7 +58,7 @@ def _pooled_metrics(subset: pd.DataFrame) -> tuple:
     return acc_av, prec_av, rec_av, f1_av
 
 def process_weargait(data_path: str, print_stats: bool = True, 
-                     save_results: bool = False, realtime: bool = False,
+                     save_results: bool = False, 
                      output_file: str = "Results/WearGait_Results.csv") -> pd.DataFrame:
     files = sorted([
         f for f in os.listdir(data_path)
@@ -140,10 +109,7 @@ def process_weargait(data_path: str, print_stats: bool = True,
                 col_x: 'acc_is', col_y: 'acc_ml', col_z: 'acc_pa',
             })
 
-            if realtime:
-                y_pred = simulate_realtime(wrist_df, SAMPLING_RATE_WEARGATE)
-            else:
-                y_pred = run_gsd_on_wrist(wrist_df, SAMPLING_RATE_WEARGATE)
+            y_pred = run_gsd_on_wrist(wrist_df, SAMPLING_RATE_WEARGATE)
 
             valid_mask = ~np.isnan(y_pred)
             if valid_mask.sum() == 0:
@@ -260,7 +226,7 @@ def process_weargait(data_path: str, print_stats: bool = True,
 #                                  WISDM dataset 
 # --------------------------------------------------------------------------------
 
-SAMPLING_RATE_WISDM = 20  # adjust to actual dataset sampling rate
+SAMPLING_RATE_WISDM = 20  # doesnt work with Hickey unless the lowpass cutoof is adjusted to 9 
 
 GAIT_LABELS_WISM = {'A', 'B', 'C'}  # walking, jogging, stairs
 
@@ -309,7 +275,7 @@ def load_wismd_txt_file(filepath: str) -> pd.DataFrame | None:
     return df
 
 def process_wisdm(data_path: str, print_stats: bool = True,
-                    save_results: bool = False, realtime: bool = False, 
+                    save_results: bool = False,  
                     output_file: str = "Results/WISDM_Results.csv") -> pd.DataFrame:
     """
     Process all .txt files in data_path.
@@ -354,10 +320,7 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         activities_present = grp['activity'].unique()
 
         imu_df = grp[['acc_is', 'acc_ml', 'acc_pa']]
-        if realtime: 
-            y_pred = simulate_realtime(imu_df, sampling_rate=SAMPLING_RATE_WISDM)
-        else:
-            y_pred = run_gsd_on_wrist(imu_df, sampling_rate=SAMPLING_RATE_WISDM)
+        y_pred = run_gsd_on_wrist(imu_df, sampling_rate=SAMPLING_RATE_WISDM)
 
         valid_mask = ~np.isnan(y_pred)
         if valid_mask.sum() == 0:
@@ -393,7 +356,6 @@ def process_wisdm(data_path: str, print_stats: bool = True,
                         'row_type':  'result_per_activity',
                         'Subject':   subject,
                         'Folder':    subject,
-                        # 'Condition': condition,
                         'Activity':  act,
                         'Accuracy':  accuracy_score (y_true[act_mask], y_pred[act_mask]),
                         'Precision': precision_score(y_true[act_mask], y_pred[act_mask], zero_division=0),
@@ -447,12 +409,6 @@ def process_wisdm(data_path: str, print_stats: bool = True,
 
     print()
 
-    # Per-condition summary (uses overall rows)
-    # for cond in sorted(overall_df['Condition'].unique()):
-    #     sub = overall_df[overall_df['Condition'] == cond]
-    #     _print_avg(f"AV(cond={cond})", sub)
-    #     avg_rows.append(_avg_row('avg_condition', f"Cond={cond} average", cond, sub))
-
     print("-" * 70)
     _print_avg("AVERAGE (Overall)", overall_df)
     avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', overall_df))
@@ -473,9 +429,9 @@ def process_wisdm(data_path: str, print_stats: bool = True,
 #                                  HMP dataset 
 # --------------------------------------------------------------------------------
 
-SAMPLING_RATE_HMP = 32  # adjust to actual dataset sampling rate
+SAMPLING_RATE_HMP = 32  # doesnt work with Hickey unless the lowpass cutoof is adjusted to 15
 
-GAIT_FOLDERS_HMP = {'walk', 'stairs'}  # folder names (or substrings) that count as gait
+GAIT_FOLDERS_HMP = {'walk', 'stairs'}  # 
 
 
 def folder_is_gait(folder_name: str) -> bool:
@@ -490,7 +446,6 @@ def load_HMP_txt(filepath: str) -> pd.DataFrame | None:
     Returns DataFrame with columns [acc_is, acc_ml, acc_pa] or None on failure.
     """
     try:
-        # Try to sniff the separator
         df = pd.read_csv(filepath, header=None, sep=None, engine='python',
                          comment='#', skip_blank_lines=True)
 
@@ -510,7 +465,6 @@ def load_HMP_txt(filepath: str) -> pd.DataFrame | None:
 
 def process_HMP(data_path: str, print_stats: bool = True,
                             save_results: bool = False,
-                            realtime: bool = False, 
                             output_file: str = "Results/FolderDataset_Results.csv") -> pd.DataFrame:
     """
     Dataset structure:
@@ -572,29 +526,17 @@ def process_HMP(data_path: str, print_stats: bool = True,
                           f"too short ({len(imu_df)} samples), skipped.")
                 continue
 
-            # gsd = HickeyGSD()
-            # bout_result = gsd.preprocess(
-            #     imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
-            #     sampling_rate_hz=SAMPLING_RATE_HMP, 
-            #     target_sampling_rate_hz=SAMPLING_RATE_HMP
-            # ).detect_wrist()
+            gsd = HickeyGSD()
+            bout_result = gsd.preprocess(
+                imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
+                sampling_rate_hz=SAMPLING_RATE_HMP, 
+                target_sampling_rate_hz=SAMPLING_RATE_HMP
+            ).detect_wrist()
 
-            if realtime: 
-                y_pred = simulate_realtime(
-                    imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
-                    sampling_rate=SAMPLING_RATE_HMP
-                )
-            else: 
-                y_pred = np.zeros(len(imu_df))
-                
-                gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
-                bout_result = gsd.detect(
-                    imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
-                    sampling_rate_hz=SAMPLING_RATE_HMP
-                )
-                if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
-                    for _, bout_row in bout_result.gs_list_.iterrows():
-                        y_pred[int(bout_row['start']):int(bout_row['end'])] = 1
+            y_pred = np.zeros(len(imu_df))
+            if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
+                for _, bout_row in bout_result.gs_list_.iterrows():
+                    y_pred[int(bout_row['start']):int(bout_row['end'])] = 1
             
             valid_mask = ~np.isnan(y_pred)
             if valid_mask.sum() == 0:
@@ -728,10 +670,7 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
         y_true = (act_labels == BIOCLITE_GAIT_LABEL).astype(int)
 
         seg_imu = pd.DataFrame(acc, columns=['acc_is', 'acc_ml', 'acc_pa'])
-        if realtime: 
-            y_pred  = simulate_realtime(seg_imu, SAMPLING_RATE_BIOCLITE)
-        else:
-            y_pred = run_gsd_on_wrist(seg_imu, SAMPLING_RATE_BIOCLITE)
+        y_pred = run_gsd_on_wrist(seg_imu, SAMPLING_RATE_BIOCLITE)
 
         valid_mask = ~np.isnan(y_pred)
         if valid_mask.sum() == 0:

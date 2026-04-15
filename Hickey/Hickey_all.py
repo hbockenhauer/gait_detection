@@ -1,9 +1,11 @@
 import os
 import pandas as pd
 import warnings
-from ..free_living_test import merge_csv
-from ..process_datasets import process_weargait, process_wisdm,  process_HMP, process_bioclite
-from ..MM_own_all_robust import merge_all_wrists, process_gait, process_Hickey
+from Kheirkhahan.free_living_test import merge_csv
+from Hickey.process_existing import process_weargait, process_wisdm,  process_HMP, process_bioclite
+# from process_datasets import process_weargait, process_wisdm,  process_HMP, process_bioclite
+from MM_own_all_robust import merge_all_wrists, process_gait, process_Hickey
+
 
 
 from config.paths import (
@@ -17,35 +19,21 @@ from config.paths import (
     QSENSE_CLINIC,
     FREELIVING_PATH,
     BIOCLITE_PATH,
-    STROKENET_WEIGHTS,
-    PLOTS_DIR as OUTPUT_PLOTS_DIR,
-    RESULTS_DIR,
 )
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-# DATA_PATHS = [
-#     # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-#     # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-#     # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-#     r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
-#     # r"C:\Users\orlov\intern\gait_detection\Free_living",
-#     # r"C:\Users\orlov\intern\gait_detection\Datasets\WearGait-PD", 
-#     # r"C:\Users\orlov\intern\gait_detection\Datasets\wisdm-dataset\raw\watch\accel", 
-#     # r"C:\Users\orlov\intern\gait_detection\Datasets\HMP_Dataset", 
-#     # r"C:\Users\orlov\intern\gait_detection\Datasets\Bioclite\data_6activities_plain.mat"
-# ]
 
-DATA_PATHS = [    HMP_PATH,
-    WISDM_PATH,
-    WEARGAIT_PD,
-    WEARGAIT_CTRL,
-    QSENSE_DATA,
+
+DATA_PATHS = [ #HMP_PATH,
+    # WISDM_PATH,
+    # WEARGAIT_PD,
+    # WEARGAIT_CTRL,
+    # QSENSE_DATA,
     QSENSE_EDGE,
-    QSENSE_MIXED,
-    QSENSE_CLINIC,
-    FREELIVING_PATH,
-    BIOCLITE_PATH,
-    STROKENET_WEIGHTS]
+    # QSENSE_MIXED,
+    # QSENSE_CLINIC,
+    # FREELIVING_PATH,
+    BIOCLITE_PATH]
 
 DEBUG = False
 PRINT_STATS = True 

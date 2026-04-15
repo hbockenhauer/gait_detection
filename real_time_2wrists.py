@@ -9,7 +9,7 @@ from collections import deque
 from datetime import time
 
 # from detect_per_wrist import simulate_realtime, load_segmented, SAMPLING_RATE, WINDOW_SIZE
-from GSD3_fused import KheirkhahanGSD
+from Kheirkhahan.GSD3_fused import KheirkhahanGSD
 # from singleGSD_robust import load_segmented 
 
 DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub5"

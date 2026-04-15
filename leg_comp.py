@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from GSD3_test import KheirkhahanGSD
+from Kheirkhahan.GSD3_test import KheirkhahanGSD
 from multimob.GSD.GSD4 import MacLeanGSD
 from multimob.GSD.GSD5 import KerenGSD
-from GSD2a import HickeyGSD
+from Hickey.GSD2a import HickeyGSD
 import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
