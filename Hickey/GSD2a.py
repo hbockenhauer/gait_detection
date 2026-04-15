@@ -185,7 +185,12 @@ class HickeyGSD:
             print(f"\nMovement detection:")
             print(f"Windows marked as movement: {i_array_move_st_si.sum()}/{win_num} ({i_array_move_st_si.sum()/win_num*100:.2f}%)")
             print(f"First 20 windows: {i_array_move_st_si[:20]}")
-
+        
+        #Calculating starts and ends of walking
+        # first and last elements should be 0 to identify transitions
+        i_array_move_st_si[0] = 0
+        i_array_move_st_si[-1] = 0
+        
         # if i_array_move_st_si is all ones then the function should return a dataframe with the start and end of the signal!
         if i_array_move_st_si.sum() == win_num:
             self.gs_list_ = pd.DataFrame([[0, len(acc_norm_centered)]], columns=["start", "end"])
@@ -200,10 +205,8 @@ class HickeyGSD:
             self.gs_list_.index.name = 'gs_id'
             return self
 
-        #Calculating starts and ends of walking
-        # first and last elements should be 0 to identify transitions
-        i_array_move_st_si[0] = 0
-        i_array_move_st_si[-1] = 0
+
+
 
         # difference in array elements indicate start (1) and stop (-1)
         diffs = np.diff(i_array_move_st_si)
@@ -218,6 +221,7 @@ class HickeyGSD:
 
         # Set the first value of DifferenceArrayAMoveStSi to be similar to the first value of BoutArrayMoveStSi
         # the reason is that this represents the difference from the beginning of the signal to the first bout
+        # print(bout_array_move_st_si.shape)
         betweenbbout_array_move_st_si[0] = bout_array_move_st_si[0,0]
 
         # Calculate the bout lengths
