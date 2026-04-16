@@ -1,54 +1,65 @@
 # Gait Detection
 
-Gait detection algorithm using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke.
+Gait detection algorithms using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke. Developed for the Toward@HomeRehab project in collaboration with Erasmus MC and Rijndam Revalidatie enabling clincians to track and analyse stroke patients home rehabilitation, specifically their functional arm use by filtering out periods of non-functional use such as walking.
 
 ## Project Overview
 
-This project implements Machine Learning models (ElderNet/StrokeNet) and Signal Processing algorithms (mstraczkiewicz) for gait detection from wearable IMU sensors. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait, Bioclite) as well as stroke patient cohorts and self-recorded data using QSense Motion Capture IMUs.
+This project implements Machine Learning models (ElderNet/StrokeNet) and Signal Processing algorithms (mstraczkiewicz, Hickey, Kheirkhahan) for gait detection from wearable IMU sensors. It also includes real-time simulation pipelines for per-wrist and fused two-wrist gait detection. The models are evaluated across multiple public datasets (WISDM, HMP, WearGait, Bioclite) as well as stroke patient cohorts and self-recorded data using QSense Motion Capture IMUs.
 
 ## Directory Structure
 
 ```
 gait_detection/
-├── config/                    # Configuration management and centralized paths
-│   ├── paths.py              # Dataset & model path definitions
-│   └── hyperparameters.py    # Model hyperparameter configs
-│
-├── models/                    # Model implementations
-│   ├── ElderNet/             # Gait detection model inference source code
-│   ├── StrokeNet/            # Fine-tuned variant for stroke patients
-│   └── mstraczkiewicz/       # Signal Processing MATLAB implementations
-│
-├── Datasets/                  # All training and evaluation data
-│   ├── HMP_Dataset/          # Fall detection dataset (32Hz)
-│   ├── QSense_data/          # Self-recorded data (50Hz)
-│   ├── QSense_data_clinic/   # Data recorded on stroke patients (50 Hz)
-│   ├── QSense_data_edge/     # Self-recorded edge cases (50 Hz)
-│   ├── QSense_data_mixed/    # Self-recorded mixed activity (50 Hz)
-│   ├── WearGait/             # Parkinson's and age-matched control patients (100 Hz)
-│   ├── wisdm-dataset/        # Public activity recognition dataset (20Hz)
-│   ├── Free_living/          # Stroke patient data (50 Hz)
-│   └── Bioclite/             # 6-activity reference dataset (50 Hz)
-│
-├── analysis/                  # Comparative analysis and evaluation scripts
-│   ├── cross_dataset.py      # Multi-dataset evaluation
-│   └── leg_classification.py # Leg classification analysis using QSense algorithm
+├── Algo_flowcharts.drawio     # Pipeline and algorithm flowcharts
+├── README.md                  # Project documentation
+├── requirements.txt           # Python dependencies
 │
 ├── annotation_tools/          # Data annotation and validation tools
-│   ├── video_annotater.py    # Video frame labeling tool for Free_living data
-│   └── mixed_annotater.py    # Annotation tool for QSense_data_mixed files
+│   ├── mixed_annotater.py     # Annotation tool for Multiple_Activities files
+│   └── video_annotater.py     # Video frame labeling tool for Free_living data
 │
-├── utils/                     # Shared utilities and helpers
-│   ├── visualization.py      # Plotting and visualization functions
-│   ├── data_loaders.py       # Common dataset loading utilities
-|	├── plot_ROC_PR.py		  # Plot ROC curve and precision-recall curve
-│	├── plot_qsense_activities.py # Plot QSense data with signal processing characteristics
-|	└── comp_load.py 		  # Script to compute compuational load of model
+├── config/                    # Configuration management and centralized paths
+│   ├── hyperparameters.py     # Model hyperparameter configs
+│   └── paths.py               # Dataset and model path definitions
+│
+├── Datasets/                  # All training and evaluation data
+│   ├── Baseline/              # Self-recorded baseline activities (50Hz)
+│   ├── Bioclite/              # 6-activity reference dataset (50Hz)
+│   ├── Clinical/              # Data recorded on stroke patients (50Hz)
+│   ├── Edge_Cases/            # Self-recorded edge cases (50Hz)
+│   ├── Free_living/           # Stroke patient data (50Hz)
+│   ├── HMP_Dataset/           # Fall detection dataset (32Hz)
+│   ├── Multiple_Activities/   # Self-recorded mixed activities (50Hz)
+│   ├── Qsense_tests/          # Internal test recordings and checks
+│   ├── WearGait/              # Parkinson's and control cohorts (100Hz)
+│   └── wisdm-dataset/         # Public activity recognition dataset (20Hz)
+│
+├── models/                    # Model implementations
+│   ├── ElderNet/              # Machine Learning gait detection model
+│   ├── Hickey/                # Wrist-adapted Hickey gait sequence detection
+│   ├── Kheirkhahan/           # Wrist and fused Kheirkhahan gait sequence detection
+│   ├── mstraczkiewicz/        # Signal processing Straczkiewicz MATLAB implementations
+│   ├── realtime/              # Real-time simulation and fused/per-wrist evaluation
+│   └── StrokeNet/             # Retrained Eldernet variant for stroke patients
 |
 ├── outputs/                   # Generated outputs
-    ├── plots/                # Visualizations and result plots
-    ├── results/              # CSV results and metrics
-    └── logs/                 # Training and evaluation logs
+│   ├── logs/                  # Training and evaluation logs
+│   ├── plots/                 # Visualizations and result plots
+│   └── results/               # CSV results and metrics
+|
+└── utils/                     # Shared utilities and helpers
+    ├── __init__.py            # Utility package initializer
+    ├── comp_load.py           # Compute computational load of models
+    ├── data_loaders.py        # Common dataset loading utilities
+    ├── faulty_data.py         # Detection and handling helpers for faulty segments
+    ├── hub_utils.py           # Shared helper functions for model pipelines
+    ├── leg_comp.py            # Leg-side and condition comparison utilities
+    ├── plot_accelerations.py  # Plot raw acceleration channels
+    ├── plot_powerspec.py      # Plot power spectra of acceleration signals
+    ├── plot_qsense_activities.py # Plot QSense activities and signal features
+    ├── plot_ROC_PR.py         # Plot ROC and precision-recall curves
+    ├── time_check.py          # Timing and runtime validation helpers
+    └── visualization.py       # Generic plotting and visualization functions
 
 ```
 
@@ -75,20 +86,6 @@ gait_detection/
 
 ### Quick Start
 
-#### Running ElderNet on a dataset
-```python
-from config.paths import WEARGAIT_PD, PLOTS_DIR
-from models.ElderNet.eldernet_WearGait import load_weargait_data, detect_sampling_rate
-
-# Load data
-data = load_weargait_data(WEARGAIT_PD)
-```
-
-#### Running Cross-Dataset Evaluation
-```bash
-python analysis/cross_dataset.py
-```
-
 #### Using Centralized Paths
 Instead of hardcoding paths, use the centralized path configuration:
 ```python
@@ -105,15 +102,67 @@ Core gait detection model trained on multiple public datasets. Supports inferenc
 
 Files:
 - `models/ElderNet/eldernet_*.py` - Dataset-specific evaluation scripts
-- `models/ElderNet/eldernet_unified.py` - Multi-dataset unified interface
+- `models/ElderNet/eldernet_comp_load.py` -  Script to determine computational load of ElderNet
+
 
 ### StrokeNet
 Fine-tuned variant of ElderNet optimized for stroke patients. Used for activity-level metric computation.
 
 Files:
-- `models/StrokeNet/strokenet.py` - Main inference pipeline
+- `models/StrokeNet/Energy_analysis.ipynb` - Jupyter Notebook for clinician to run end-of-day analysis
+- `models/StrokeNet/energy_report.py` - Script to perform end-of-day energy analysis of patient
+- `models/StrokeNet/helper_functions.py` - Necessary functions for Notebook 
 - `models/StrokeNet/retrain_eldernet.py` - Fine-tuning script
+- `models/StrokeNet/strokenet_comp_load.py` - Script to determine computational load of StrokeNet
+- `models/StrokeNet/strokenet_upperarm.py` - Script to perform gait detection using sensor on upper arm for Clinical dataset
 - `models/StrokeNet/strokenet_utils.py` - Script to run necessary data loaders and plotters for inference
+- `models/StrokeNet/StrokeNet_weights.pth` - New model weights obtained from retrain_eldernet.py
+- `models/StrokeNet/strokenet_wrist.py` - Script to analyse different wrist fusion strategies 
+- `models/StrokeNet/strokenet.py` - Main inference pipeline for global cross-dataset evaluation
+- `models/StrokeNet/__init__.py` - Package initializer
+
+### Straczkiewicz
+
+Reference MATLAB implementations of the Straczkiewicz gait detection pipeline, used for signal-processing-based walking detection, dataset benchmarking, and real-time simulation.
+
+Files:
+- `models/mstraczkiewicz/find_walking.m` - Core walking detector based on vector magnitude, CWT peaks, and cadence continuity checks.
+- `models/mstraczkiewicz/find_continuous_dominant_peaks.m` - Helper that enforces continuity of dominant spectral peaks across windows.
+- `models/mstraczkiewicz/load_weargait_data.m` - Loader for WearGait CSV files that separates right and left wrist streams.
+- `models/mstraczkiewicz/MStra_QSense.m` - Batch evaluation on self-recorded data, Clinical using classic Straczkiewicz detector.
+- `models/mstraczkiewicz/MStra_WearGait.m` - WearGait-PD evaluation using the classic Straczkiewicz detector.
+- `models/mstraczkiewicz/Mstra_RT.m` - Adapted real-time simulation on data with detailed results and diagnostics.
+- `models/mstraczkiewicz/MStra_RT_freeliving.m` - Adapted real-time evaluator for annotated Free_living CSV files.
+- `models/mstraczkiewicz/MStra_RT_cross_dataset.m` - Cross-dataset real-time evaluation and summary generation using adapted algorithm
+- `models/mstraczkiewicz/Mstra_RT_wrist_comparison.m` - Compares fusion strategies for Clinical data using adapted algorithm.
+- `models/mstraczkiewicz/param_opt_QSense.m` - Bayesian optimization of detector thresholds on Multiple_Activities  data.
+- `models/mstraczkiewicz/param_opt_freeliving.m` - Bayesian optimization of detector thresholds on Free_living data.
+
+
+### Hickey
+Wrist-adapted implementation of the Hickey gait sequence detection approach, including robust dataset processing for existing datasets and QSense cohorts.
+
+Files:
+- `models/Hickey/GSD2a.py` - Core Hickey gait sequence detection class
+- `models/Hickey/Hickey_all.py` - Run Hickey pipeline on supported existing datasets
+- `models/Hickey/Hickey_own.py` - Run robust Hickey evaluation on self-recorded datasets
+
+### Kheirkhahan
+Wrist and two-wrist fused gait sequence detection implementations inspired by Kheirkhahan et al., with robust segmentation for discontinuous timestamps.
+
+Files:
+- `models/Kheirkhahan/GSD3_test.py` - Core Kheirkhahan single-wrist detector
+- `models/Kheirkhahan/GSD3_fused.py` - Activity-level fusion of two wrists
+- `models/Kheirkhahan/MM_own_all_robust.py` - Robust evaluation across QSense and free-living datasets
+
+### Real-Time Simulation
+Streaming-style inference scripts to simulate deployment behavior for single-wrist and fused two-wrist workflows.
+
+Files:
+- `models/realtime/detect_per_wrist.py` - Label-free single-wrist real-time detector
+- `models/realtime/detect_fused.py` - Label-free fused two-wrist real-time detector
+- `models/realtime/evaluate_per_wrist.py` - Metric evaluation for single-wrist simulation
+- `models/realtime/evaluate_fused.py` - Metric evaluation for fused simulation
 
 ## Configuration
 
@@ -131,19 +180,10 @@ Model hyperparameters are centralized in `config/hyperparameters.py` (create if 
 3. Create evaluation script (if needed) in `analysis/`
 
 ### Extending Models
-- Keep model code in `models/{ElderNet,StrokeNet}/`
+- Keep model code in `models/{ElderNet,StrokeNet,Hickey,Kheirkhahan,realtime,mstraczkiewicz}/`
 - Shared utilities → `utils/`
-- Analysis scripts → `analysis/`
 - Outputs automatically → `outputs/`
 
-### Testing
-```bash
-# Validate dataset setup
-python -m config.paths
-
-# Run analysis
-python analysis/cross_dataset.py
-```
 
 ## References
 

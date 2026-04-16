@@ -9,8 +9,12 @@ scriptDir = get_script_dir();
 projectRoot = find_project_root(scriptDir);
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 if ~exist(resultsDir, 'dir')
     mkdir(resultsDir);
+end
+if ~exist(sigproResultsDir, 'dir')
+    mkdir(sigproResultsDir);
 end
 
 allResults = table();
@@ -33,7 +37,7 @@ if isempty(allResults)
     return;
 end
 
-resultsCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_results.csv');
+resultsCsv = fullfile(sigproResultsDir, 'sigpro_mstra_rt_cross_dataset_results.csv');
 writetable(allResults, resultsCsv);
 
 fprintf('\nSaved per-record results to: %s\n', resultsCsv);
@@ -42,9 +46,9 @@ summaryTbl = compute_group_summary(allResults, {'Dataset'});
 subjectTbl = compute_group_summary(allResults, {'Dataset', 'Subject'});
 activityTbl = compute_dataset_activity_summary(allResults);
 
-summaryCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_summary.csv');
-subjectCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_by_subject.csv');
-activityCsv = fullfile(resultsDir, 'sigpro_mstra_rt_cross_dataset_by_activity.csv');
+summaryCsv = fullfile(sigproResultsDir, 'sigpro_mstra_rt_cross_dataset_summary.csv');
+subjectCsv = fullfile(sigproResultsDir, 'sigpro_mstra_rt_cross_dataset_by_subject.csv');
+activityCsv = fullfile(sigproResultsDir, 'sigpro_mstra_rt_cross_dataset_by_activity.csv');
 writetable(summaryTbl, summaryCsv);
 writetable(subjectTbl, subjectCsv);
 if ~isempty(activityTbl)

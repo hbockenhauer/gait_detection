@@ -46,6 +46,7 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 qSenseCandidates = {
     fullfile(projectRoot, 'Edge_Cases')
     fullfile(projectRoot, 'Baseline')
@@ -82,6 +83,7 @@ if isempty(dataPaths)
     if ~isempty(fallbackPaths)
         outputsRoot = fullfile(projectRoot, 'outputs');
         resultsDir = fullfile(outputsRoot, 'results');
+        sigproResultsDir = fullfile(resultsDir, 'SigPro');
         dataPaths = fallbackPaths;
         fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
     else
@@ -259,7 +261,8 @@ end
 %% --- EXPORT RESULTS ---
 if ~isempty(summaryResults)
     if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
-    csvFileName = fullfile(resultsDir, 'sigpro_MStra_QSense_results.csv');
+    if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
+    csvFileName = fullfile(sigproResultsDir, 'sigpro_MStra_QSense_results.csv');
     writetable(summaryResults, csvFileName);
     fprintf('Results saved to: %s\n', csvFileName);
 end

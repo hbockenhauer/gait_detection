@@ -38,6 +38,7 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 plotsRoot = fullfile(outputsRoot, 'plots');
 
 % Data path search (QSense Clinic can be in different locations)
@@ -74,6 +75,7 @@ stepSize = 1 * fs;
 affected_wrist_mapping = containers.Map({'sub1', 'sub2', 'sub3'}, {'RW', 'LW', 'LW'});
 
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
+if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
 
 % --- 2. INITIALIZE SUMMARIES ---
 summaryResults = table();
@@ -205,7 +207,7 @@ for d = 1:length(dataPaths)
 end
 
 % Save results
-outputFile = fullfile(resultsDir, 'SigPro_wrist_comparison_results.csv');
+outputFile = fullfile(sigproResultsDir, 'SigPro_wrist_comparison_results.csv');
 writetable(summaryResults, outputFile);
 fprintf('\n======================================================================\n');
 fprintf('Results saved to: %s\n', outputFile);
