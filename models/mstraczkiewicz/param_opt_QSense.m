@@ -77,8 +77,10 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
-resultsCsv = fullfile(resultsDir, 'sigpro_param_opt_QSense_runs.csv');
+if ~exist(sigproResultsDir, 'dir'), mkdir(sigproResultsDir); end
+resultsCsv = fullfile(sigproResultsDir, 'sigpro_param_opt_QSense_runs.csv');
 plotDir = fullfile(outputsRoot, 'plots', 'Multiple_Activities', 'SigPro', 'param_opt');
 if ~exist(plotDir, 'dir'), mkdir(plotDir); end
 

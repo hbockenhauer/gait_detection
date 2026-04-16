@@ -21,6 +21,7 @@ MISSING_PERIOD = 10  # seconds — threshold for reporting missing data periods
 GAP_THRESHOLD = 0.1
 REPO_NAME     = 'yonbrand/ElderNet'
 
+# This is a workaround to avoid hub load conflicts with local module imports in the notebook environment.
 def safe_hub_load(repo, model, *args, **kwargs):
     saved = {k: v for k, v in list(sys.modules.items())
              if k == 'models' or k.startswith('models.')}
@@ -31,6 +32,7 @@ def safe_hub_load(repo, model, *args, **kwargs):
     finally:
         sys.modules.update(saved)
 
+# Fix circular padding in loaded model to prevent errors during inference. This is needed because the original model was trained with circular padding, but it causes issues when running inference on CPU or with certain PyTorch versions. We replace it with zero padding and adjust the internal padding attributes accordingly.
 def fix_circular_padding(model):
     for module in model.modules():
         if isinstance(module, nn.Conv1d) and module.padding_mode == 'circular':
@@ -40,6 +42,7 @@ def fix_circular_padding(model):
             )
     return model
 
+# Remove the last downsampling layer (maxpool) from the model to preserve temporal resolution for energy analysis. This is done by modifying the feature extractor's layer5 to exclude the maxpool layer, which is typically the 4th child in that layer.
 def remove_last_downsample(model):
     layer5 = model.feature_extractor.layer5
     model.feature_extractor.layer5 = nn.Sequential(
@@ -47,6 +50,7 @@ def remove_last_downsample(model):
     )
     return model
 
+# Load the finetuned ElderNet model from the repo, applying necessary fixes for circular padding and downsampling and then apply StrokeNet weights. The model is set to evaluation mode after loading.
 def load_finetuned_model(weights_path):
     model = safe_hub_load(REPO_NAME, 'eldernet_ft', trust_repo=True)
     model = fix_circular_padding(model)
@@ -56,6 +60,7 @@ def load_finetuned_model(weights_path):
     print(f"Loaded finetuned weights from {weights_path}")
     return model
 
+# Run inference on the given windows of accelerometer data using the loaded model. The input windows are converted to a PyTorch tensor and moved to the specified device (CPU or GPU). The model's output logits are converted to probabilities using softmax, and the probability of the positive class (non-walking) is returned as a NumPy array.
 def run_inference(model, windows_np, device):
     wins  = torch.FloatTensor(windows_np).to(device)
     with torch.no_grad():
@@ -72,6 +77,7 @@ def get_discontinuity_times(times, gap_threshold=GAP_THRESHOLD):
     gap_idx = np.where(dt > gap_threshold)[0] + 1
     return times[gap_idx]
 
+# Helper to flexibly get a column by trying multiple name candidates and falling back to an index if needed. This is useful for handling variations in QSense export formats where column names may differ.
 def _column_by_name_or_index(df, name_candidates, fallback_idx):
     for name in name_candidates:
         if name in df.columns:
@@ -167,6 +173,10 @@ def load_qsense_file(filepath, folder_name):
     return times, acc, energy, start_dt
 
 def extract_windows_with_gaps(times, acc_data, energy):
+    '''
+    Extract windows of accelerometer data while respecting gaps in the timestamps.
+    Windows that span a gap are discarded. Returns arrays of windows, their corresponding energies, and their center times.
+    '''
     dt      = np.diff(times)
     gap_idx = np.where(dt > GAP_THRESHOLD)[0] + 1
     bounds  = np.concatenate([[0], gap_idx, [len(times)]])
@@ -373,6 +383,10 @@ def qsense_energy(model, device, dataset_path):
 
 
 def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy, target_ratio):
+    '''
+    Plot hourly non-walking energy with per-hour wrist contribution labels and cumulative line for affected wrist, with target line. 
+    Only shows hours with non-walking energy, and skips subjects with no energy data.
+    '''
     os.makedirs(output_dir, exist_ok=True)
     for r in results:
         # ── Build per-wrist hourly sums and per-window cumulative series ──
@@ -569,7 +583,7 @@ def load_hub_times(folder_path):
         print(f"  Warning: could not load hub file from {folder_path}: {e}")
         return None
 
-
+# Compare wrist window times to hub times to find periods where wrist data is missing. Returns list of (gap_start, gap_end, gap_duration_sec) for gaps longer than min_gap_sec.
 def find_missing_periods(wrist_real_win_times, hub_times, win_duration_sec, min_gap_sec=10):
     if wrist_real_win_times is None or hub_times is None:
         return []
@@ -838,8 +852,8 @@ def save_subject_excel(r, output_dir, affected_wrist, target_energy, target_rati
 
     print(f"  Saved: {xlsx_path} ({len(df_windows)} windows)")
 
-
-# ── Caching ────────────────────────────────────────────────────────────────
+# Caching functions to speed up plot_multiday() by saving a small summary of each processed day to disk, and loading it instantly on subsequent runs without reprocessing raw data. 
+# Uses pickle for simplicity, but could be switched to JSON or CSV if human readability is desired.
 import pickle
 
 def _cache_dir(patient_folder):

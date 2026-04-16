@@ -46,6 +46,7 @@ end
 
 outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
+sigproResultsDir = fullfile(resultsDir, 'SigPro');
 datasetName = 'WearGait';
 dataCandidates = {
     fullfile(projectRoot, datasetName)
@@ -81,6 +82,7 @@ if ~exist(dataPath, 'dir')
     if ~isempty(foundDataPath)
         outputsRoot = fullfile(projectRoot, 'outputs');
         resultsDir = fullfile(outputsRoot, 'results');
+        sigproResultsDir = fullfile(resultsDir, 'SigPro');
         dataPath = foundDataPath;
         plotPath = fullfile(outputsRoot, 'plots', datasetName, 'SigPro');
         fprintf('Using fallback projectRoot from pwd: %s\n', projectRoot);
@@ -244,8 +246,9 @@ end
 if ~isempty(summaryResults)
     if ~exist(plotPath,'dir'), mkdir(plotPath); end
     if ~exist(resultsDir,'dir'), mkdir(resultsDir); end
+    if ~exist(sigproResultsDir,'dir'), mkdir(sigproResultsDir); end
 
-    csvFileName = fullfile(resultsDir,'sigpro_MStra_WearGait_results.csv');
+    csvFileName = fullfile(sigproResultsDir,'sigpro_MStra_WearGait_results.csv');
     writetable(summaryResults,csvFileName);
 
     fprintf('\nResults saved to:\n%s\n', csvFileName);

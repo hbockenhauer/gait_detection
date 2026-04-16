@@ -1,5 +1,5 @@
-"""Thin entrypoint for StrokeNet evaluation.
-
+"""
+This script serves as the main evaluation pipeline for StrokeNet, orchestrating the loading of the finetuned model, running evaluations across multiple datasets, and saving the results.
 All dataset evaluators and plotting functions are implemented in `strokenet_utils.py` to keep this file 
 clean and focused on the overall evaluation flow. This also allows us to easily reuse the same 
 evaluation code for other datasets in the future by simply calling the relevant functions from

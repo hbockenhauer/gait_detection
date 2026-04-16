@@ -18,11 +18,7 @@ end
 projectRoot = scriptDir;
 for k = 1:8
     hasModels = exist(fullfile(projectRoot, 'models'), 'dir');
-    hasData = exist(fullfile(projectRoot, 'Baseline'), 'dir') || ...
-              exist(fullfile(projectRoot, 'Free_living'), 'dir') || ...
-              exist(fullfile(projectRoot, 'WearGait-PD'), 'dir') || ...
-              exist(fullfile(projectRoot, 'wisdm-dataset'), 'dir') || ...
-              exist(fullfile(projectRoot, 'Datasets', 'Baseline'), 'dir') || ...
+    hasData = exist(fullfile(projectRoot, 'Datasets', 'Baseline'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'Free_living'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'WearGait', 'WearGait-PD'), 'dir') || ...
               exist(fullfile(projectRoot, 'Datasets', 'wisdm-dataset'), 'dir');
@@ -40,14 +36,10 @@ outputsRoot = fullfile(projectRoot, 'outputs');
 resultsDir = fullfile(outputsRoot, 'results');
 sigproResultsDir = fullfile(resultsDir, 'SigPro');
 qSenseCandidates = {
-    % fullfile(projectRoot, 'Multiple_Activities')
-    % fullfile(projectRoot, 'Edge_Cases')
-    % fullfile(projectRoot, 'Baseline')
-    fullfile(projectRoot, 'QSense_clinic')
     % fullfile(projectRoot, 'Datasets', 'Multiple_Activities')
     % fullfile(projectRoot, 'Datasets', 'Edge_Cases')
     % fullfile(projectRoot, 'Datasets', 'Baseline')
-    fullfile(projectRoot, 'Datasets', 'Qsense_clinic')
+    fullfile(projectRoot, 'Datasets', 'Clinical')
 };
 
 dataPaths = qSenseCandidates(cellfun(@(p) exist(p, 'dir') == 7, qSenseCandidates));
@@ -58,11 +50,8 @@ if isempty(dataPaths)
 
     for r = 1:length(rootCandidates)
         rootCandidate = rootCandidates{r};
+        % Choose Dataset to evaluate
         candidatePaths = {
-            % fullfile(rootCandidate, 'Multiple_Activities')
-            % fullfile(rootCandidate, 'Edge_Cases')
-            % fullfile(rootCandidate, 'Baseline')
-            fullfile(rootCandidate, 'QSense_clinic')
             % fullfile(rootCandidate, 'Datasets', 'Multiple_Activities')
             % fullfile(rootCandidate, 'Datasets', 'Edge_Cases')
             % fullfile(rootCandidate, 'Datasets', 'Baseline')

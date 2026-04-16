@@ -307,10 +307,9 @@ def run_subject(folder, folder_path, model, device, dataset_name):
             'y_pred':             L['y_pred']             if L else None,
         },
     }
-
-
+ 
 def qsense_energy(model, device, dataset_path):
-    """Thin loop — runs each subject and collects results."""
+    """Thin loop — runs each subject and collects results in a list."""
     dataset_name = os.path.basename(os.path.normpath(dataset_path))
     results = []
     if not os.path.isdir(dataset_path):
@@ -325,7 +324,7 @@ def qsense_energy(model, device, dataset_path):
             results.append(result)
     return results
 
-# Plot energy over time with walking periods shaded with R/L ratio subplot 
+# Plot energy over time with walking periods shaded with R/L ratio subplot (better for short recordings)
 def plot_energy_results_line(results, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -419,6 +418,7 @@ def plot_energy_results_line(results, output_dir):
         plt.close()
         print(f"  Saved energy line plot: {plot_path}")
 
+# Bar plot of hourly non-walking energy with per-hour wrist contribution labels and cumulative line for affected wrist, with target line. Only shows hours with non-walking energy, and skips subjects with no energy data.
 def plot_energy_results_bar(results, output_dir, affected_wrist, target_energy):
     os.makedirs(output_dir, exist_ok=True)
     for r in results:

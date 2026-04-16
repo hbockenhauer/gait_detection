@@ -131,7 +131,7 @@ Files:
 - `models/mstraczkiewicz/load_weargait_data.m` - Loader for WearGait CSV files that separates right and left wrist streams.
 - `models/mstraczkiewicz/MStra_QSense.m` - Batch evaluation on self-recorded data, Clinical using classic Straczkiewicz detector.
 - `models/mstraczkiewicz/MStra_WearGait.m` - WearGait-PD evaluation using the classic Straczkiewicz detector.
-- `models/mstraczkiewicz/Mstra_RT.m` - Adapted real-time simulation on free-living stroke patient data with timestamp gap handling.
+- `models/mstraczkiewicz/Mstra_RT.m` - Adapted real-time simulation on data with detailed results and diagnostics.
 - `models/mstraczkiewicz/MStra_RT_freeliving.m` - Adapted real-time evaluator for annotated Free_living CSV files.
 - `models/mstraczkiewicz/MStra_RT_cross_dataset.m` - Cross-dataset real-time evaluation and summary generation using adapted algorithm
 - `models/mstraczkiewicz/Mstra_RT_wrist_comparison.m` - Compares fusion strategies for Clinical data using adapted algorithm.
