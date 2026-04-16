@@ -1,4 +1,4 @@
-# Apply ElderNet gait detection to self-recorded data in Baseline, recorded at 50Hz
+# plot raw accelerations for visual analysis. 
 import os
 import sys
 import glob
@@ -28,11 +28,11 @@ if PROJECT_ROOT not in sys.path:
 
 from config.paths import QSENSE_MIXED, PLOTS_DIR
 
-DATASET_PATH = QSENSE_MIXED
+DATASET_PATH = QSENSE_MIXED #change as desired
 PLOT_DATASET_NAME = os.path.basename(DATASET_PATH)
 
 set_seed(42)
-# --- RUN ELDERNET AND OBTAIN PROBABILITIES ---
+
 def main():
 
     for folder in os.listdir(DATASET_PATH):
@@ -56,13 +56,13 @@ def main():
             
 
             try:
-                df_30hz = resample_to_30hz(file)
+                #file = resample_to_30hz(file)  #if desired, can also return the original 50Hz df and plot both for comparison.
 
                 # ADD inside the for file in files loop (after df_30hz is loaded)
                 if wrist == "right":
-                    right_df = df_30hz
+                    right_df = file
                 else:
-                    left_df = df_30hz
+                    left_df = file
 
                 ## ADD this block AFTER the for file in files loop
                 if right_df is not None and left_df is not None:
