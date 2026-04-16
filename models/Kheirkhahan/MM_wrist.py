@@ -497,8 +497,6 @@ if __name__ == "__main__":
         # Tag each row with its source dataset for traceability
         df = merge_all_wrists(data_path)
         df['dataset'] = dataset_name
-        # lw['dataset'] = dataset_name
-        # all_rw.append(rw)
         all_df.append(df)
         
     # Pool across all datasets

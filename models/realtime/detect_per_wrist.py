@@ -131,7 +131,7 @@ def simulate_realtime(df):
 
         window_indices = list(buffer)
         window_df = df.iloc[window_indices].copy()
-        y_window = run_gsd_on_window(window_df)   # length = BUFFER_SIZE
+        y_window = run_gsd_on_window(window_df)   
 
         # Only trust the middle portion — skip the 2s edges
         for local_i in range(TRUST_START, TRUST_END):

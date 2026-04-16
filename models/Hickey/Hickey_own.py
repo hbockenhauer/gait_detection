@@ -29,7 +29,7 @@ DEBUG = False
 PRINT_STATS = True 
 
 SAVE_RESULTS = True 
-out_file = "Hickey_own.csv"
+out_file = "Hickey/Hickey_own.csv"
 
 PLOT = False
 OUT_FOLDER = PLOTS_DIR
@@ -37,10 +37,10 @@ OUT_FOLDER = PLOTS_DIR
 
 DATA_PATHS = [ 
     QSENSE_DATA,
-    # QSENSE_EDGE,
-    # QSENSE_MIXED,
-    # QSENSE_CLINIC,
-    # FREELIVING_PATH
+    QSENSE_EDGE,
+    QSENSE_MIXED,
+    QSENSE_CLINIC,
+    FREELIVING_PATH
     ]
 
 SAMPLING_RATE = 50 
@@ -101,7 +101,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
             if rw_df is not None:
                 # assign true values 
-                if 'test' in folder.lower() or 'sub' in folder.lower():
+                if 'Label' in rw_df.columns:
                     rw_df['y_true']    = rw_df['Label'].astype(int).to_numpy()
                 else:
                     activity = folder.split('_')[0].lower()
@@ -121,7 +121,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             lw_df = load_segmented(folder_path, 's2_2LW.txt', DEBUG)
             if lw_df is not None:
                 # print(" in folder:", folder)
-                if 'test' in folder.lower() or 'sub' in folder.lower():
+                if 'Label' in lw_df.columns:
                     lw_df['y_true']    = lw_df['Label'].astype(int).to_numpy()
                 else: 
                     activity = folder.split('_')[0].lower()
@@ -374,7 +374,7 @@ if __name__ == "__main__":
             print(f"{'=' * 80}")
 
         # chech which dataset to process 
-        if "QSense" in dataset_name: 
+        if any(x in dataset_name for x in ["Baseline", "Clinical", "Edge_Cases", "Multiple"]):
             # Tag each row with its source dataset for traceability
             rw, lw = merge_all_wrists(data_path)
             rw['dataset'] = dataset_name

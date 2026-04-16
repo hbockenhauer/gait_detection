@@ -66,63 +66,6 @@ class ActivityCounts:
              0.41620323, -0.13832322, 0.01985172]
         return signal.filtfilt(b, a, data)
 
-    def _actigraph_filter_copy(self, data: np.ndarray, sampling_rate: Union[int, float]) -> np.ndarray:
-
-        """
-        Approximate ActiGraph filter using a Butterworth bandpass filter.
-
-        Parameters
-        ----------
-        data : np.ndarray
-            Input signal
-        fs : float
-            Sampling frequency in Hz
-
-        Returns
-        -------
-        np.ndarray
-            Filtered signal (zero-phase)
-        """
-
-        lowcut = 0.3076171875
-        highcut = 1.6278076171875
-
-        # Normalize by Nyquist frequency
-        nyq = sampling_rate / 2
-        low = lowcut / nyq
-        high = highcut / nyq
-
-        wp = [lowcut / nyq, highcut / nyq]      # passband
-        ws = [0.3 / nyq, 5.0 / nyq]             # stopband (tune these!)
-
-        # sos = signal.iirdesign(
-        #     wp=wp,
-        #     ws=ws,
-        #     gpass=1,    # passband ripple (dB)
-        #     gstop=40,   # stopband attenuation (dB)
-        #     ftype='ellip',   
-        #     output='sos'
-        # )
-        sos = signal.ellip(
-            N=6,
-            rp=1,      # passband ripple
-            rs=40,     # stopband attenuation
-            Wn=[low, high],
-            btype='bandpass',
-            output='sos'
-        )
-
-        return signal.sosfiltfilt(sos, data)
-    
-        # # Design bandpass filter
-        # b, a = signal.butter(
-        #     N=5,                # order 
-        #     Wn=[low, high],
-        #     btype='bandpass'
-        # )
-        # # Zero-phase filtering
-        # return signal.filtfilt(b, a, data)
-
     def _downsample(self, data: np.ndarray, sampling_rate: Union[int, float], final_sampling_rate: Union[int, float]) -> np.ndarray:
         """
         Downsample the input data to a lower sampling rate.
@@ -235,8 +178,7 @@ class ActivityCounts:
         if sampling_rate > 30:
             tmp = self._downsample(tmp, sampling_rate, 30)
             tmp = self._aliasing_filter(tmp, 30)
-            tmp = self._actigraph_filter_copy(tmp, 30)
-            # tmp = self._actigraph_filter(tmp)
+            tmp = self._actigraph_filter(tmp)
             tmp = self._downsample(tmp, 30, 10)
         elif sampling_rate > 10:
             tmp = self._aliasing_filter(tmp, sampling_rate)

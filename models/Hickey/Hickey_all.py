@@ -60,7 +60,7 @@ if __name__ == "__main__":
             print(f"{'=' * 80}")
 
         # check which dataset to process 
-        if "QSense" in dataset_name: 
+        if any(x in dataset_name for x in ["Baseline", "Clinical", "Edge_Cases", "Multiple"]):
             rw, lw = merge_all_wrists(data_path)
             rw['dataset'] = dataset_name
             lw['dataset'] = dataset_name

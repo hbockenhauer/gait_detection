@@ -43,10 +43,10 @@ folder = "Kheirkhahan_plots" # folder to be saved in
 
 DATA_PATHS = [
     QSENSE_CLINIC, 
-    QSENSE_DATA, 
-    QSENSE_EDGE, 
-    QSENSE_MIXED, 
-    FREELIVING_PATH
+    # QSENSE_DATA, 
+    # QSENSE_EDGE, 
+    # QSENSE_MIXED, 
+    # FREELIVING_PATH
 ]
 
 SAMPLING_RATE = 50 
@@ -94,7 +94,6 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         if not os.path.isdir(folder_path):
             continue
 
-        #y_label   = 
         condition = extract_condition(folder)
         subject   = folder
 
@@ -109,7 +108,7 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
             if rw_df is not None:
                 # assign true values 
-                if 'test' in folder.lower() or 'sub' in folder.lower():
+                if 'Label' in rw_df.columns:
                     rw_df['y_true']    = rw_df['Label'].astype(int).to_numpy()
                 else:
                     activity = folder.split('_')[0].lower()
@@ -128,12 +127,10 @@ def merge_all_wrists(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         if os.path.exists(lw_path):
             lw_df = load_segmented(folder_path, 's2_2LW.txt', DEBUG)
             if lw_df is not None:
-                # print(" in folder:", folder)
-                if 'test' in folder.lower() or 'sub' in folder.lower():
+                if 'Label' in lw_df.columns:
                     lw_df['y_true']    = lw_df['Label'].astype(int).to_numpy()
                 else: 
                     activity = folder.split('_')[0].lower()
-                    # print("activity is", activity)
                     lw_df['y_true'] =  np.ones(len(lw_df)) if activity in GAIT_CLASSES else np.zeros(len(lw_df))
 
                 acc_cols = [c for c in lw_df.columns if 'acc' in c]
@@ -497,17 +494,17 @@ if __name__ == "__main__":
             print(f"{'=' * 80}")
 
         # chech which dataset to process 
-        if "QSense" in dataset_name: 
-            # Tag each row with its source dataset for traceability
+        if "Free_livin" in data_path: 
+            fl = merge_csv(data_path, PRINT_STATS)
+            fl['dataset'] = dataset_name
+            all_fl.append(fl)
+        else: 
             rw, lw = merge_all_wrists(data_path)
             rw['dataset'] = dataset_name
             lw['dataset'] = dataset_name
             all_rw.append(rw)
             all_lw.append(lw)
-        else: 
-            fl = merge_csv(data_path, PRINT_STATS)
-            fl['dataset'] = dataset_name
-            all_fl.append(fl)
+
         
     # Pool across all datasets
     rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()

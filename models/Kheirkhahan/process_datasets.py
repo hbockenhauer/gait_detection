@@ -11,6 +11,7 @@ THRESHOLD_STILL = 0.0
 DEBUG = False
 ####################################################
 
+MIN_SEC_PER_WINDOW = 9
 
 def simulate_realtime(df, sampling_rate):
     BUFFER_SIZE = 13 * sampling_rate
@@ -47,7 +48,6 @@ def simulate_realtime(df, sampling_rate):
 # --------------------------------------------------------------------------------
 
 SAMPLING_RATE_WEARGATE = 100
-MIN_SEC_PER_WINDOW = 9
 WEARGAIT_GAIT_KEYWORDS = ['walk', 'stair', 'gait', 'jog', 'run', 'climb']
 
 def run_gsd_on_wrist(imu_df: pd.DataFrame, sampling_rate: float = 50) -> np.ndarray:
