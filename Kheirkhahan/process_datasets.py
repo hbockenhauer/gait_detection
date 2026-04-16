@@ -4,7 +4,6 @@ import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from Kheirkhahan.GSD3_test import KheirkhahanGSD
-from Hickey.GSD2a import HickeyGSD
 import scipy.io as sio
 from collections import deque
 
@@ -47,7 +46,7 @@ def simulate_realtime(df, sampling_rate):
 # --------------------------------------------------------------------------------
 
 SAMPLING_RATE_WEARGATE = 100
-MIN_SEC_PER_WINDOW = 0.1
+MIN_SEC_PER_WINDOW = 9
 WEARGAIT_GAIT_KEYWORDS = ['walk', 'stair', 'gait', 'jog', 'run', 'climb']
 
 def run_gsd_on_wrist(imu_df: pd.DataFrame, sampling_rate: float = 50) -> np.ndarray:
@@ -63,12 +62,8 @@ def run_gsd_on_wrist(imu_df: pd.DataFrame, sampling_rate: float = 50) -> np.ndar
         print("the issue is",len(seg_imu))
         return np.full(len(seg_imu), np.nan)
 
-    # gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
-    # bout_result = gsd.detect(seg_imu, sampling_rate_hz=sampling_rate)
-    gsd = HickeyGSD()
-    bout_result = gsd.preprocess(seg_imu, sampling_rate_hz=sampling_rate, 
-                                 target_sampling_rate_hz=sampling_rate
-                                 ).detect_wrist()
+    gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
+    bout_result = gsd.detect(seg_imu, sampling_rate_hz=sampling_rate)
 
     if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
         for _, bout_row in bout_result.gs_list_.iterrows():
@@ -518,12 +513,8 @@ def process_HMP(data_path: str, print_stats: bool = True,
             walk_normal/       ← gait (y_true = 1)
                 subject1.txt
                 subject2.txt
-                ...
             stairs_up/         ← gait (y_true = 1)
-                ...
             sitting/           ← non-gait (y_true = 0)
-                ...
-
     Each txt file is treated as one recording (one subject/trial).
     GSD is run on the full file as a single segment.
     """
@@ -572,13 +563,6 @@ def process_HMP(data_path: str, print_stats: bool = True,
                           f"too short ({len(imu_df)} samples), skipped.")
                 continue
 
-            # gsd = HickeyGSD()
-            # bout_result = gsd.preprocess(
-            #     imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
-            #     sampling_rate_hz=SAMPLING_RATE_HMP, 
-            #     target_sampling_rate_hz=SAMPLING_RATE_HMP
-            # ).detect_wrist()
-
             if realtime: 
                 y_pred = simulate_realtime(
                     imu_df[['acc_is', 'acc_ml', 'acc_pa']].reset_index(drop=True),
@@ -612,7 +596,7 @@ def process_HMP(data_path: str, print_stats: bool = True,
             tn = int(np.sum((y_pred == 0) & (y_true == 0)))
 
             if DEBUG:
-                print(f"{f'{activity_folder}/{file_name}':<35} | {activity_folder:<20} | {y_label:>5} | "
+                print(f"{f'{file_name}':<35} | {activity_folder:<20} | {y_label:>5} | "
                       f"{acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
 
             results.append({

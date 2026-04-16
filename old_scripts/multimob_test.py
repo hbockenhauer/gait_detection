@@ -1,45 +1,11 @@
+"""initial attempt used for loading WISDM dataset """
 from multimob.utils.data_loader import load_imu_data
 from multimob.GSD.GSD3 import KheirkhahanGSD
 from multimob.GSD.GSD2 import HickeyGSD
-
     
 import pandas as pd
 from importlib import resources
 
-'''
-def load_imu_data() -> pd.DataFrame:
-    # Load accelerometer data
-    with resources.open_text("HAR_data", "Watch_accelerometer.csv") as f:
-        acc = pd.read_csv(f)
-
-    # Load gyroscope data
-    with resources.open_text("HAR_data", "Watch_gyroscope.csv") as f:
-        gyr = pd.read_csv(f)
-
-    # Rename axes to match IMU convention
-    acc = acc.rename(columns={
-        "x": "acc_is",
-        "y": "acc_ml",
-        "z": "acc_pa"
-    })
-
-    gyr = gyr.rename(columns={
-        "x": "gyr_is",
-        "y": "gyr_ml",
-        "z": "gyr_pa"
-    })
-
-    label = acc[["Index", "gt"]].set_index("Index")
-    # Keep only needed columns (+ Index for merge)
-    acc = acc[["Index", "acc_is", "acc_ml", "acc_pa"]]
-    gyr = gyr[["Index", "gyr_is", "gyr_ml", "gyr_pa"]]
-
-    # Merge accelerometer and gyroscope data
-    imu_data = pd.merge(acc, gyr, on="Index", how="inner")
-    
-
-    return imu_data, label
-'''
 
 def load_imu_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     csv_path = resources.files("WearGait_ctrl") / "WHC014_FreeWalk.csv"
@@ -113,7 +79,6 @@ def walking_accuracy_from_df(
 
 imu_data, labels = load_imu_data()
 
-#N = 100000
 M = 10000000
 imu_data = imu_data.iloc[:M]
 

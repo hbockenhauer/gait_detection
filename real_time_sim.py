@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
 from Kheirkhahan.GSD3_test import KheirkhahanGSD
-from singleGSD_robust import load_segmented   
+from Kheirkhahan.singleGSD_robust import load_segmented   
 
 import pandas as pd
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)

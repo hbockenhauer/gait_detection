@@ -1,3 +1,8 @@
+"""
+Runs the GSD on all QSense data
+Robust to faulty data
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -10,15 +15,40 @@ from datetime import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from Kheirkhahan.free_living_test import merge_csv
-from singleGSD_robust import load_segmented
+from Kheirkhahan.singleGSD_robust import load_segmented
+
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED,  
+    FREELIVING_PATH,  
+    RESULTS_DIR, 
+    PLOTS_DIR
+)
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
+
+######### can be adjusted #####################
+THRESHOLD_STILL = 0.1 # set to 0.0 to disable the Hickey element
+
+DEBUG = False
+PRINT_STATS = True 
+
+SAVE_RESULTS = False 
+OUTPUT_FILE = "Kheirkhahan/KheirkhahanGSD_Results_wHickey.csv"
+
+PLOT = False # plots and saves all plots
+folder = "Kheirkhahan_plots" # folder to be saved in 
+##############################
+
+
 DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic",
-    # r"C:\Users\orlov\intern\gait_detection\Free_living"
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED, 
+    FREELIVING_PATH
 ]
 
 SAMPLING_RATE = 50 
@@ -27,16 +57,8 @@ CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker',
                       'cane', 'limp', 'armfixed', 'stroke', 
                       'sub1', 'sub2','sub3', 'sub4', "sub5"]
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
-THRESHOLD_STILL = 0.0
+OUT_FOLDER = os.path.join(PLOTS_DIR, folder)
 
-DEBUG = False
-PRINT_STATS = True 
-
-SAVE_RESULTS = False 
-OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
-
-PLOT = False
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\temp"
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -170,30 +192,6 @@ def run_gsd_on_segment(grp) :
 
     return bout_result, activity_counts, std_norm, grp_start_idx
 
-def run_Hickey_on_segment(grp) : 
-    """
-    Input grp: columns = 'yyyy-MM-dd', 'HH:mm:ss.fff', 
-                         'accX', 'accY', 'accZ', 
-                         'segment', 'y_true', 'condition', 'subject'
-    """
-    grp_start_idx = grp.index[0]  # offset into the full df
-    # print("global_start_idx", grp_start_idx)
-    # find the acceleration columns 
-    acc_cols = [c for c in grp.columns if 'acc' in c]
-    if len(acc_cols) < 3:
-        print("Incorrect number of columns.")
-        print(f"{len(acc_cols)} columns found instead.")
-    # rename the columns and run the gsd on them
-    seg_imu = grp[acc_cols].copy().astype(float) 
-    seg_imu.columns = ['acc_is', 'acc_ml', 'acc_pa']
-    # seg_imu.reset_index(drop=True)
-    seg_imu = seg_imu.reset_index(drop=True)
-    
-    gsd = HickeyGSD()
-    bout_result = gsd.preprocess(seg_imu, sampling_rate_hz=SAMPLING_RATE).detect_wrist()
-
-    return bout_result, grp_start_idx
-
 def plot_results(df: pd.DataFrame, activity_counts_timeline, 
                  std_norm_timeline, y_pred, y_true, title,
                  threshold: float = THRESHOLD_STILL):
@@ -296,191 +294,11 @@ def plot_results(df: pd.DataFrame, activity_counts_timeline,
     plt.close(fig)
     print(f"Saved -> {out_path}")
 
-def process_Hickey(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
-                 fl_merged: pd.DataFrame, 
-                 save_results: bool = True, print_stats: bool = False) -> pd.DataFrame:
-    """
-    Run GSD on every (subject, wrist) segment inside the merged DataFrames.
-    Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
-    """
-    results = []
-
-    print(f"\n{'Subject':<35} | {'Wrist':<5} | {'Cond':<10} | "
-          f"{'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
-    print("-" * 90)
-
-    # ────────── Process the data per wrist ────────────────────────────────────── 
-    for wrist_label, merged_df in [('RW', rw_merged), ('LW', lw_merged), ('',fl_merged)]:
-        if merged_df.empty:
-            print(f"[{wrist_label}] No data — skipping.")
-            continue
-
-        # Process each recording (subject folder) separately so the GSD sees
-        # one continuous, coherent signal — not a mix of activities concatenated.
-        for subject, grp_sub in merged_df.groupby('subject', sort=True):
-            grp_sub = grp_sub.reset_index(drop=True)
-            y_true    = grp_sub['y_true'].to_numpy()
-            condition = grp_sub['condition'].iloc[0]
-            label     = f"{subject}/{wrist_label}"
-
-            detected_bouts = []
-            y_pred = np.zeros(len(grp_sub))
-            activity_counts_timeline = {}
-            std_timeline = {}
-            skipped_seg = 0
-
-            for segment, grp_seg in grp_sub.groupby('segment', sort=True):
-                if len(grp_seg) < MIN_SEGMENT_SAMPLES:
-                    y_pred[grp_seg.index] = np.nan
-                    skipped_seg += 1
-                    continue
-                bout_result, global_start_idx = run_Hickey_on_segment(grp_seg)
-
-                # global_start_sec = global_start_idx // SAMPLING_RATE
-
-                if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
-                    for _, bout_row in bout_result.gs_list_.iterrows():
-                        # Offset local segment indices to global df indices
-                        local_bout_start = int(bout_row['start']) + global_start_idx
-                        local_bout_end   = int(bout_row['end'])   + global_start_idx
-                        detected_bouts.append((local_bout_start, local_bout_end))
-                        y_pred[local_bout_start:local_bout_end] = 1
-
-            valid_mask = ~np.isnan(y_pred)
-            acc  = accuracy_score(y_true[valid_mask], y_pred[valid_mask])
-            prec = precision_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
-            rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
-            f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
-
-
-            results.append({
-                'Subject':   label,
-                'Wrist':     wrist_label,
-                'Folder':    subject,
-                'Condition': condition,
-                'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1, 
-                'TP': np.sum((y_pred == 1) & (y_true == 1)), 
-                'FP': np.sum((y_pred == 1) & (y_true == 0)), 
-                'FN': np.sum((y_pred == 0) & (y_true == 1)), 
-                'TN': np.sum((y_pred == 0) & (y_true == 0))
-            })
-
-            if print_stats == True: 
-                print(f"{label[:35]:<35} | {wrist_label:<5} | {condition:<10} | "
-                      f"{acc:.2f}   | {prec:.2f}   | "
-                      f"{rec:.2f}   | {f1:.2f}")    
-    
-    if not results:
-        print("No results to summarise.")
-        return pd.DataFrame()
-
-    res_df = pd.DataFrame(results)
-
-    VARIABLES = ['TP', 'FP', 'FN', 'TN']
-
-    def _avg_row(row_type: str, label: str,
-                 wrist: str, condition: str,
-                 subset: pd.DataFrame) -> dict:
-        """Build a single summary dict from a subset of res_df."""
-        tp = subset['TP'].sum()
-        fp = subset['FP'].sum()
-        fn = subset['FN'].sum()
-        tn = subset['TN'].sum()
-        total = tp + fp + fn + tn
-
-        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
-        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
-        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
-        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
-                                                              if (precision_av + recall_av) > 0 else 0.0
-
-        return {
-            'row_type':  row_type,
-            'Subject':   label,
-            'Wrist':     wrist,
-            'Folder':    '',
-            'Condition': condition,
-            'Accuracy':     accuracy_av,
-            'Precision':    precision_av,
-            'Recall':       recall_av,
-            'F1':           f1_av,
-            **{p: round(subset[p].sum(), 4) for p in VARIABLES}
-        }
-
-    def _print_avg(label: str, subset: pd.DataFrame):
-        if subset.empty:
-            return
-        tp = subset['TP'].sum()
-        fp = subset['FP'].sum()
-        fn = subset['FN'].sum()
-        tn = subset['TN'].sum()
-        total = tp + fp + fn + tn
-
-        accuracy_av  = (tp + tn) / total                          if total > 0             else 0.0
-        precision_av = tp / (tp + fp)                             if (tp + fp) > 0         else 0.0
-        recall_av    = tp / (tp + fn)                             if (tp + fn) > 0         else 0.0
-        f1_av        = 2 * precision_av * recall_av / (precision_av + recall_av) \
-                                                              if (precision_av + recall_av) > 0 else 0.0
-        print(f"{label:<35} | {'':5} | {'':10} | "
-              f"{accuracy_av:.5f}   | "
-              f"{precision_av:.5f}   | "
-              f"{recall_av:.5f}   | "
-              f"{f1_av:.5f}")
-
-    # Collect average rows for CSV
-    avg_rows: list[dict] = []
-
-    # Per-wrist averages
-    for wrist in ['RW', 'LW']:
-        sub = res_df[res_df['Wrist'] == wrist]
-        if not sub.empty:
-            avg_rows.append(_avg_row('avg_wrist',
-                                     f"{wrist} average",
-                                     wrist, '', sub))
-
-    # Per-condition averages (all wrists combined)
-    for condition in sorted(res_df['Condition'].unique()):
-        sub = res_df[res_df['Condition'] == condition]
-        avg_rows.append(_avg_row('avg_condition',
-                                  f"Cond={condition} average",
-                                  '', condition, sub))
-
-    # Overall average
-    avg_rows.append(_avg_row('avg_overall', 'AVERAGE (Overall)', '', '', res_df))
-
-    # Print summary to console
-    if print_stats: 
-        print("-" * 100)
-        _print_avg("AVERAGE (RW  Right Wrist)", res_df[res_df['Wrist'] == 'RW'])
-        _print_avg("AVERAGE (LW  Left Wrist)",  res_df[res_df['Wrist'] == 'LW'])
-        print()
-    for condition in sorted(res_df['Condition'].unique()):
-        _print_avg(f"AV(cond={condition})", res_df[res_df['Condition'] == condition])
-    print("-" * 100)
-    _print_avg("AVERAGE (Overall)", res_df)
-
-    # Save the csv
-    res_df.insert(0, 'row_type', 'result')
-
-    avg_df    = pd.DataFrame(avg_rows)
-    blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
-
-    csv_df = pd.concat(
-        [res_df,
-         blank_row,
-         avg_df],
-        ignore_index=True
-    )
-
-    if save_results == True:
-        csv_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"\nSaved → {OUTPUT_FILE}")
-
-    return res_df
-
 def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
                  fl_merged: pd.DataFrame, 
-                 save_results: bool = True, print_stats: bool = False) -> pd.DataFrame:
+                 print_stats: bool = False, save_results: bool = True,
+                 out_file: str = "Kheirkhahan/Own_data.cvs", 
+                 plot: bool = False) -> pd.DataFrame:
     """
     Run GSD on every (subject, wrist) segment inside the merged DataFrames.
     Prints a per-file table and condition/wrist averages, saves HickeyGSD_Results.csv.
@@ -538,9 +356,8 @@ def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
             rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
             f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
 
-            if PLOT == True: 
+            if plot == True: 
                 title = f"{subject}{wrist_label}"
-                # plot_predictions(grp_sub, activity_counts_timeline, y_pred, y_true, wrist_label, subject)
                 plot_results(grp_sub, activity_counts_timeline, std_timeline, y_pred, y_true, title)
 
             results.append({
@@ -663,6 +480,7 @@ def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
     )
 
     if save_results == True:
+        os.path.join(RESULTS_DIR, out_file)
         csv_df.to_csv(OUTPUT_FILE, index=False)
         print(f"\nSaved → {OUTPUT_FILE}")
 

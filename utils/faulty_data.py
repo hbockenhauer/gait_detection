@@ -1,13 +1,23 @@
+"""
+used to examine the faulty data, it then renames 
+the original file with _faulty and assigns a file 
+with the jumps skipped to the original name 
+"""
+
 import csv
 import os
 from datetime import time
 
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED, 
+    QSENSE_TEST)
 
 FILES = [
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\Walking_crutches_Tanya\s1_1RW.txt",
-    
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_edge\Walking_crutches_Tanya\s2_2LW.txt",
-    #r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test6_Tanya\s3_3RL.txt",
+    r"Walking_crutches_Tanya\s1_1RW.txt",
+    r"Walking_crutches_Tanya\s2_2LW.txt",
 ]
 
 
@@ -48,7 +58,8 @@ def fix_file(file_path):
 
 
 if __name__ == '__main__':
-    for path in FILES:
+    for file in FILES:
+        path = os.path.join(QSENSE_EDGE, file)
         if os.path.exists(path):
             fix_file(path)
         else:

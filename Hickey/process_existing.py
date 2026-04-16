@@ -2,7 +2,6 @@
 Contains helper functions to run each existing dataset with Hickey. 
 """
 
-
 import os
 import pandas as pd
 import numpy as np
@@ -10,6 +9,8 @@ from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_sc
 from Hickey.GSD2a import HickeyGSD
 import scipy.io as sio
 from collections import deque
+
+from config.paths import RESULTS_DIR
 
 DEBUG = False
 MIN_SEC_PER_WINDOW = 0.1
@@ -59,7 +60,7 @@ def _pooled_metrics(subset: pd.DataFrame) -> tuple:
 
 def process_weargait(data_path: str, print_stats: bool = True, 
                      save_results: bool = False, 
-                     output_file: str = "Results/WearGait_Results.csv") -> pd.DataFrame:
+                     output_file: str = "Hickey/WearGait_Results.csv") -> pd.DataFrame:
     files = sorted([
         f for f in os.listdir(data_path)
         if f.endswith('.csv') and (f.startswith('W') or f.startswith('N'))
@@ -216,9 +217,10 @@ def process_weargait(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return overall_df
 
@@ -276,7 +278,7 @@ def load_wismd_txt_file(filepath: str) -> pd.DataFrame | None:
 
 def process_wisdm(data_path: str, print_stats: bool = True,
                     save_results: bool = False,  
-                    output_file: str = "Results/WISDM_Results.csv") -> pd.DataFrame:
+                    output_file: str = "Hickey/WISDM_Results.csv") -> pd.DataFrame:
     """
     Process all .txt files in data_path.
     Each file may contain multiple subjects and activities.
@@ -417,9 +419,10 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return overall_df 
     
@@ -465,19 +468,15 @@ def load_HMP_txt(filepath: str) -> pd.DataFrame | None:
 
 def process_HMP(data_path: str, print_stats: bool = True,
                             save_results: bool = False,
-                            output_file: str = "Results/FolderDataset_Results.csv") -> pd.DataFrame:
+                            output_file: str = "Hickey/FolderDataset_Results.csv") -> pd.DataFrame:
     """
     Dataset structure:
         data_path/
             walk_normal/       ← gait (y_true = 1)
                 subject1.txt
                 subject2.txt
-                ...
             stairs_up/         ← gait (y_true = 1)
-                ...
             sitting/           ← non-gait (y_true = 0)
-                ...
-
     Each txt file is treated as one recording (one subject/trial).
     GSD is run on the full file as a single segment.
     """
@@ -616,9 +615,10 @@ def process_HMP(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return res_df
 
@@ -642,7 +642,7 @@ BIOCLITE_LABEL_MAP  = {
 
 def process_bioclite(mat_path: str, print_stats: bool = True,
                      save_results: bool = False, realtime: bool = False,
-                     output_file: str = "Results/Bioclite_Results.csv") -> pd.DataFrame:
+                     output_file: str = "Hickey/Bioclite_Results.csv") -> pd.DataFrame:
     if not os.path.exists(mat_path):
         raise FileNotFoundError(f"MAT file not found: {mat_path}")
 
@@ -766,9 +766,10 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return overall_df
 

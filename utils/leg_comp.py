@@ -1,3 +1,7 @@
+"""
+used to check the accuracy of the leg algo 
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -10,21 +14,34 @@ from Hickey.GSD2a import HickeyGSD
 import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed", 
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic"
-]
+
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED)
+
+
+########### can be adjusted #########################
 GSD_n = 3
-SAMPLING_RATE = 50 
 DEBUG = False; 
-GAIT_CLASSES = {'walking', 'stairs'}
-CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'mixed']
 SAVE_RESULTS = True 
 PRINT_STATS = True 
 PLOT_SAVE_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Leg_comp"
 PLOT_PRED = True
+#############################
+
+
+DATA_PATHS = [
+    # QSENSE_EDGE",
+    # QSENSE_MIXED, 
+    QSENSE_CLINIC
+]
+
+SAMPLING_RATE = 50 
+
+GAIT_CLASSES = {'walking', 'stairs'}
+CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 'cane', 'mixed']
+
 
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
@@ -45,12 +62,7 @@ def load_file(filepath: str) -> pd.DataFrame | None:
     try:
         df = pd.read_csv(filepath, sep=None, engine="python")
         df = df.reset_index(drop=True)
-
-        # clip the first 10 seconds 
-        if "s3_3RL.txt" in filepath:
-            df = df
-        else:
-            df = df[500:]
+        # data is not clipped since the wrists arent processed 
 
         acc_cols = [c for c in df.columns if 'acc' in c.lower()]
         if len(acc_cols) < 3:
@@ -68,7 +80,6 @@ def load_file(filepath: str) -> pd.DataFrame | None:
     except Exception as e:
         print(f"  [ERROR] Failed to load {filepath}: {e}")
         return None
-
 
 def merge_all(data_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -295,17 +306,12 @@ if __name__ == "__main__":
         print(f"  Merging: {dataset_name}")
         print(f"{'=' * 80}")
         rw, lw, rl = merge_all(data_path)
-        # Tag each row with its source dataset for traceability
-        # rw['dataset'] = dataset_name
-        # lw['dataset'] = dataset_name
+
         rl['dataset'] = dataset_name
-        # all_rw.append(rw)
-        # all_lw.append(lw)
+
         all_rg.append(rl)
 
     # Pool across all datasets
-    # rw_merged = pd.concat(all_rw, ignore_index=True) if all_rw else pd.DataFrame()
-    # lw_merged = pd.concat(all_lw, ignore_index=True) if all_lw else pd.DataFrame()
     rl_merged = pd.concat(all_rg, ignore_index=True) if all_rg else pd.DataFrame()
 
     print(f"\n{'=' * 80}")

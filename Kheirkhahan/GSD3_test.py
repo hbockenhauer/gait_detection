@@ -1,3 +1,9 @@
+"""
+Main GSD file; adjusted to include fuctions to examine 
+the activity count and the std norm. filters() plots several 
+approaches tried to adjust the algorithm. 
+"""
+
 from typing_extensions import Self, Literal
 import pandas as pd
 import  numpy as np
@@ -66,62 +72,7 @@ class KheirkhahanGSD:
         self.cwb = cwb
         # self.visual = visual
         self.threshold_still = threshold_still
-    '''
-    def plot_acceleration_data(self, data: pd.DataFrame, sampling_rate_hz: float, 
-                               title: str = "3-Axis Acceleration", 
-                               xaxis: str = None,
-                               yaxis: str = None,
-                               vertical_lines=None, 
-                               scale: float = 1.0) -> None:
-        """
-        Plot 3-axis acceleration data over time.
-
-        Parameters
-        ----------
-        data : pd.DataFrame
-            Input acceleration data with three axes.
-        sampling_rate_hz : float
-            Original sampling rate of the data.
-        """
-        if type(data) is np.ndarray:
-            #names = 
-            data = pd.DataFrame(data, columns=[title])
-
-        time = np.arange(len(data)) / sampling_rate_hz
-        cols = list(data.columns[:3])
-        print('cols', cols)
-
-        fig, ax = plt.subplots(figsize=(10, 4))
-        for col in cols:
-            ax.plot(time, data[col], label=col)
-
-        if xaxis is not None:
-            ax.set_xlabel(xaxis) 
-        if yaxis is not None:
-            ax.set_ylabel(yaxis)
-        ax.set_title(title)
-        ax.legend()
-        # if self.switch is not None:
-        #     sr = switch_sampling_rate if switch_sampling_rate is not None else sampling_rate_hz
-        #     for sw in self.switch: 
-        #         if 0 <= sw < len(data) * (sr / sampling_rate_hz):  # bounds check in original samples
-        #             time_of_change = sw / sr  # convert switch index (original samples) → seconds
-        #             ax.axvline(x=time_of_change, color='red', linestyle='--', alpha=0.7, linewidth=1)
-
-
-        if vertical_lines is not None:
-            for idx in vertical_lines:
-                if 0 <= idx < len(data):
-                    time_at_idx = time[idx]
-                    time_at_idx = scale * time_at_idx
-                    ax.axvline(x=time_at_idx, color='blue', linestyle='--', alpha=0.7, linewidth=1)
-
-        #print("ploting ", len(data))
-        #print('plot done')
-        fig.tight_layout()
-        fig.show()
-        return fig
-    '''
+ 
     def detect(self, data, *, sampling_rate_hz: float = 100) -> Self:
         """
         Detect gait sequences in wrist-worn accelerometer data.
@@ -210,9 +161,6 @@ class KheirkhahanGSD:
             else:
                 std_acc[i] = 0
 
-        # print("last i", i)
-        # print("std_acc", std_acc)
-        # print("std_acc len", len(std_acc))
 
         # self.threshold_still = 0.1
         # th3 = 0.45
@@ -226,24 +174,9 @@ class KheirkhahanGSD:
 
         # Shows how many times each second's activity counts are included in the moving window
         detected_walking = sum_partial_overlapping_windows(walking_windows, activity_counts, self.win_size_s, self.win_shift_s)
-        # print("detected_walking 1", detected_walking)
         # Interpolates the walking windows to the original data length (True or False for all data points)
         detected_walking = resample_to_orginal_data_length(detected_walking, len(norm_acc)).astype(bool)
-        # print("detected_walking 2", detected_walking)
-        """
-        here the .astype(bool) taked any detected window to be true; 
-        could add a check of detected_walking needs to be >1 for example 
-        not sure if that makes sense ?
 
-        didnt seem helpful i think? 
-        """
-        # print("len activity",len(activity_counts))
-        # print("len detected_walking",len(detected_walking))
-        # for i in range(activity_counts):
-            
-        #     if activity_counts[i] > 200:
-                
-        #         detected_walking[i] = 0 
         gs = generate_gs_list(detected_walking)
         # Clipping start and end to be within limits of file
         gs[['start', 'end']] = np.clip(gs[['start', 'end']], 0, len(self.data))
@@ -347,14 +280,6 @@ class KheirkhahanGSD:
 
         fig3.tight_layout()
         fig3.show()
-
-
-
-        '''
-        ideas: 
-        - using a lowpass filter with cutoff of 0.25Hz was assumed to approximate the graity contribution from Hickey
-        - the output of that lowpass is the gravity, so the output of the highpass is the dynamic motion? 
-        '''
 
         return self
      

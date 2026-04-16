@@ -1,14 +1,16 @@
+"""
+Loads one file; not robust to faulty data. 
+"""
+
 import os
 import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-#from multimob.GSD.GSD3 import KheirkhahanGSD
 from old_scripts.GSD2_test import HickeyGSD
 from Kheirkhahan.GSD3_test import KheirkhahanGSD
 import matplotlib.pyplot as plt
 
-# Suppress the DtypeWarning for the walkway columns
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed\test9_Hendrik"
 file_name = "s2_2LW.txt"
@@ -28,11 +30,8 @@ if __name__ == "__main__":
     try:
         # 1. Load Data
         df = pd.read_csv(os.path.join(DATA_PATH, file_name), 
-                        sep='\t',  # Use whitespace as separator (adjust if needed)
+                        sep='\t', 
                         low_memory=False)
-        
-        #### CLIPPING THE FIRST 10 SECONDS
-        # df = df[500:]
 
         # 2. Identify and Rename Columns to Anatomical Labels
         # The package requires: acc_pa, acc_ml, acc_is
@@ -44,12 +43,9 @@ if __name__ == "__main__":
             
         imu_df = df[acc_cols[:3]].copy()
         imu_df = imu_df * 9.81  
-        #print(imu_df)
-        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is']  # <--- The key fix
+        imu_df.columns = ['acc_pa', 'acc_ml', 'acc_is'] 
         
         # 3. Ground Truth
-        # if False:
-        #     y_true = np.ones(len(df))
         if 'test' in DATA_PATH:
             y_true = np.zeros(len(df))
             y_true = df['Label']
@@ -62,10 +58,6 @@ if __name__ == "__main__":
             print('zeros', len(y_true==0))
         diffs = np.diff(y_true)
         diffs_pos = np.where((np.abs(diffs) == 1))
-        #print(diffs_pos)
-        #label_col = [c for c in df.columns if any(word in c.lower() for word in ['activity', 'event', 'label', 'gt'])][0]
-        #y_true = df[label_col].str.contains('walk|gait|free|stair', case=False, na=False).astype(int).values
-
         # 4. Run GSD
         
         # HickeyGSD
@@ -138,5 +130,4 @@ if __name__ == "__main__":
         if not other_files.empty:
             print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.2f}   | {other_files['Precision'].mean():.2f}   | {other_files['Recall'].mean():.2f}   | {other_files['F1'].mean():.2f}")
         
-        #res_df.to_csv('HickeyGSD_Results.csv', index=False)
         plt.show()

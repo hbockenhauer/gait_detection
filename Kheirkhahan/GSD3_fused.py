@@ -1,3 +1,7 @@
+"""
+Fusing the detection of the two wrists at the activity level. 
+"""
+
 from typing_extensions import Self, Literal
 import pandas as pd
 import  numpy as np

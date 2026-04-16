@@ -1,3 +1,8 @@
+"""
+Processes the files from Free living dataset only. 
+Can run for both Hickey and Kherikhahan methods.
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -8,15 +13,19 @@ from Hickey.GSD2a import HickeyGSD
 
 from config.paths import (
     FREELIVING_PATH,
+    RESULTS_DIR
 )
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 ##############################
 GSD_n = 3 # 2 for hickey, 3 for Kheirkhahan
+
 DEBUG = False 
-SAVE_RESULTS = False
 PRINT_STATS = True
+
+SAVE_RESULTS = False
+OUT_FILE = "Free_living_Results.csv"
 ##############################
 
 DATA_PATHS = [
@@ -93,7 +102,6 @@ def load_csv(filepath: str):
         print(f"  [ERROR] Failed to load {filepath}: {e}")
         return None
 
-
 def merge_csv(data_path: str, PRINT_STATS: bool = False) -> pd.DataFrame:
     """
     Walk data_path, load every *_annotated.csv file, attach metadata,
@@ -153,13 +161,11 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
                                    target_sampling_rate_hz=SAMPLING_RATE)
                     .detect_wrist()
                 )
-                output_name = 'HickeyGSD_Results.csv'
             case 3:
                 gsd = KheirkhahanGSD()
                 detected_bouts = gsd.detect(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 activity_counts = gsd.get_activity(imu_df, sampling_rate_hz=SAMPLING_RATE)
                 std_norm = gsd.get_std_norm(imu_df, sampling_rate_hz=SAMPLING_RATE)
-                output_name = 'KheirkhahanGSD_Results.csv'
             case _:
                 print(f"  [ERROR] Unknown GSD_n={GSD_n}")
                 return None
@@ -190,12 +196,11 @@ def _run_gsd_on_group(imu_df: pd.DataFrame, y_true: np.ndarray,
             'FP': fp,
             'FN': fn,
             'TN': tn,
-        }, output_name, activity_counts, std_norm
+        }, activity_counts, std_norm
 
     except Exception as e:
         print(f"  [ERROR] GSD failed on {label}: {e}")
         return None
-
 
 def process_gait(imu_merged: pd.DataFrame,
                  save_results: bool = True) -> pd.DataFrame:
@@ -223,8 +228,8 @@ def process_gait(imu_merged: pd.DataFrame,
         if result is None:
             continue
 
-        metrics, output_name, _, _ = result
-        output_name = 'Results/Free_living_Results.csv'  
+        metrics, _, _ = result
+        output_name = OUT_FILE  
 
         results.append({
             'Subject': label,
@@ -304,8 +309,9 @@ def process_gait(imu_merged: pd.DataFrame,
     csv_df = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
 
     if save_results:
-        csv_df.to_csv(output_name, index=False)
-        print(f"\nSaved → {output_name}")
+        save_path = os.path.join(RESULTS_DIR, output_name)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return res_df
 

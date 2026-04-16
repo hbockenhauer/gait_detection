@@ -1,29 +1,42 @@
+"""
+ONLY for running QSense files. Fusion of the wrists at classifier level. 
+All QSense files merged. 
+"""
+
 import os
 import pandas as pd
 import numpy as np
 import warnings
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from Kheirkhahan.GSD3_test import KheirkhahanGSD
-# from multimob.GSD.GSD3 import KheirkhahanGSD
-# from multimob.GSD.GSD4 import MacLeanGSD
-# from multimob.GSD.GSD5 import KerenGSD
-# from GSD2a import HickeyGSD
 import csv
 from datetime import time
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 
-"""
-ONLY for running QSense files 
-"""
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED, 
+    RESULTS_DIR
+)
 
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
+########### can be adjusted ######################
+THRESHOLD_STILL = 0.1 # set to 0.0 to disable the Hickey threshold
+
+DEBUG = False
+PRINT_STATS = True 
+
+SAVE_RESULTS = False 
+OUTPUT_FILE = "Kheirkhahan/Fused_wrist.csv"
+##################################################
+
 DATA_PATHS = [
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_edge",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data_mixed",
-    # r"C:\Users\orlov\intern\gait_detection\QSense_data",
-    r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic"
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED
 ]
 
 SAMPLING_RATE = 50 
@@ -31,16 +44,6 @@ GAIT_CLASSES = {'walking', 'stairs'}
 CONDITION_KEYWORDS = ['pockets', 'phone', 'rail', 'free', 'crutches', 'walker', 
                       'cane', 'limp', 'armfixed', 'stroke']
 MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE 
-THRESHOLD_STILL = 0.1
-
-DEBUG = False
-PRINT_STATS = True 
-
-SAVE_RESULTS = False 
-OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wrist.csv"
-
-PLOT = False
-OUT_FOLDER = r"C:\Users\orlov\intern\gait_detection\Plots\Robust_Kheirkhahan\wHickey"
 
 # ── Wrist functions ────────────────────────────────────────────────────
 def _pred_series(grp_wrist: pd.DataFrame, y_pred: np.ndarray) -> pd.Series:
@@ -472,8 +475,9 @@ def process_gait_from_wrists(df_merged: pd.DataFrame, #lw_merged: pd.DataFrame,
     )
 
     if save_results == True:
-        csv_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"\nSaved → {OUTPUT_FILE}")
+        save_path = os.path.join(RESULTS_DIR, OUTPUT_FILE)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return res_df
 

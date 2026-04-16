@@ -1,13 +1,28 @@
+"""
+Produces the plots of timestamp vs row index to detect any faulty data. 
+"""
+
+
 import csv
 import os
 import matplotlib.pyplot as plt
 from datetime import time
 
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED, 
+    QSENSE_TEST,
+    PLOTS_DIR
+)
 
-#DATA_PATH = r"C:\Users\orlov\intern\gait_detection\QSense_data_edge"
-DATA_ROOT = r"C:\Users\orlov\intern\gait_detection\QSense_tests"
+###############################################
+DATA_ROOT = QSENSE_TEST
+save_folder = "\faulty_data_plots\tests"
 
-SAVE_PATH = r"C:\Users\orlov\intern\gait_detection\Plots\faulty_data_plots\tests"
+SAVE_PATH = os.path.join(PLOTS_DIR, save_folder)
+################################################
 
 FILES = [
     "s0_Hub.txt",

@@ -1,3 +1,9 @@
+"""
+Runs the fusion approach with fusion happening at the 
+activity calculation step. Runs in real-time manner. 
+Processes one file at a time. Plots the results. 
+"""
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
@@ -7,26 +13,32 @@ import csv
 import os 
 from collections import deque
 from datetime import time
-
-# from detect_per_wrist import simulate_realtime, load_segmented, SAMPLING_RATE, WINDOW_SIZE
 from Kheirkhahan.GSD3_fused import KheirkhahanGSD
-# from singleGSD_robust import load_segmented 
-
-DATA_PATH      = r"C:\Users\orlov\intern\gait_detection\QSense_data_clinic\sub5"
-# ── Config (mirror your original script) ─────────────────────────────────────
-FILE_NAME_R = 's1_1RW.txt'
-FILE_NAME_L = 's2_2LW.txt'
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED, 
+    QSENSE_TEST
+)
 
 SAMPLING_RATE  = 50
 WINDOW_SIZE    = 9 *SAMPLING_RATE   # 450 samples  — full buffer
 STEP_SIZE      = 1 * SAMPLING_RATE   # 50 samples   — shift per tick
+
+FILE_NAME_R = 's1_1RW.txt'
+FILE_NAME_L = 's2_2LW.txt'
+# ── Config ─────────────────────────────────────
+DATASET         = QSENSE_CLINIC
+FOLDER          = 'sub5'
 THRESHOLD_STILL = 0.1
-DEBUG          = True
+DEBUG           = False
 
 BUFFER_SIZE = 13 * SAMPLING_RATE   # 2s padding each side + 9s window
 TRUST_START = 2 * SAMPLING_RATE    # skip first 2s
 TRUST_END   = 11 * SAMPLING_RATE   # skip last 2s
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────
+DATA_PATH = os.path.join(DATASET, FOLDER)
 
 def parse_time(t_str):
     h, m, s_ms = t_str.strip().split(':')
@@ -45,12 +57,7 @@ def load_segmented(DATA_PATH, file_name, debug: bool = False) -> pd.DataFrame:
         with open(filepath, newline='') as f:
             reader = csv.DictReader(f, delimiter='\t')
             rows = list(reader)
-        # print(rows)
-        # clip the first 10 seconds depending on the data path 
-        # rows = rows if ("mixed" or "clinic") in str(DATA_PATH) else rows[500:]
-        # if debug == True:
-        #     print("Data taken fully.") if ("mixed" or "clinic") in str(DATA_PATH) else print("First 10s are clipped.")
-
+        
         clean_rows = []
         segments   = []
         max_time   = None
@@ -381,16 +388,8 @@ if __name__ == "__main__":
     # print_metrics(y_true, pred_r,  f"Right wrist only  ({FILE_NAME_R})")
     # print_metrics(y_true, pred_l,  f"Left wrist only   ({FILE_NAME_L})")
     print_metrics(y_true, y_fused, f"Fused             ({DATA_PATH})")
-    plot_results(df_sync, y_fused, y_true, DATA_PATH)
 
-    # # 7. Plot
-    # plot_results_fused(
-    #     df_sync=df_sync,
-    #     pred_r=pred_r,
-    #     pred_l=pred_l,
-    #     y_fused=y_fused,
-    #     y_true=y_true,
-    #     title=f"Fused evaluation — {os.path.basename(data_path)}",
-    # )
+    # 7. Plot
+    plot_results(df_sync, y_fused, y_true, DATA_PATH)
     plt.show()
 
