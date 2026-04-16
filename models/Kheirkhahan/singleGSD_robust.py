@@ -1,0 +1,398 @@
+import os
+import pandas as pd
+import numpy as np
+import warnings
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from models.Kheirkhahan.GSD3_test import KheirkhahanGSD
+import matplotlib.pyplot as plt
+import csv
+from datetime import time
+import matplotlib.ticker as mticker
+
+from config.paths import (
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
+    QSENSE_EDGE, 
+    QSENSE_MIXED
+)
+# Suppress the DtypeWarning for the walkway columns
+warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
+
+############ can be adjusted #############################
+THRESHOLD_STILL = 0.1 # set to 0.0 to disable the Hickey threshold check
+DEBUG = True
+
+DATASET = QSENSE_CLINIC
+FOLDER = "sub4"
+file_name = "s1_1RW.txt" #"s2_2LW.txt"
+
+PLOT = True # produces a graph 
+##########################################################
+
+SAMPLING_RATE = 50 
+MIN_SEGMENT_SAMPLES = 9*SAMPLING_RATE  # requirement for 9s window 
+DATA_PATH = os.path.join(DATASET, FOLDER)
+
+
+def parse_time(t_str):
+    h, m, s_ms = t_str.strip().split(':')
+    s, ms = s_ms.split('.')
+    return time(int(h), int(m), int(s), int(ms) * 1000)
+
+def trim_to_multiple(group, factor=SAMPLING_RATE):
+    n = len(group)
+    trimmed = n - (n % factor)
+    return group.iloc[:trimmed]
+    
+def load_segmented(DATA_PATH, file_name, debug: bool = False) -> pd.DataFrame:
+    try:
+        # open the file 
+        filepath = os.path.join(DATA_PATH, file_name)
+        with open(filepath, newline='') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+
+        # clip the first 10 seconds depending on the data path 
+        # rows = rows if ("mixed" or "clinic") in str(DATA_PATH) else rows[500:]
+        # if debug == True:
+        #     print("Data taken fully.") if ("mixed" or "clinic") in str(DATA_PATH) else print("First 10s are clipped.")
+
+        clean_rows = []
+        segments   = []
+        max_time   = None
+        prev_time  = None
+        segment_id = 0
+        dropped_rows = 0
+
+        for row in rows:
+            try:
+                t = parse_time(row['HH:mm:ss.fff'])
+            except Exception:
+                continue
+
+            if max_time is None or t > max_time:
+                if prev_time is not None:
+                    # compute gap in ms (handles minute/hour rollover simply)
+                    gap_ms = (t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
+                              - prev_time.hour * 3600 - prev_time.minute * 60 - prev_time.second - prev_time.microsecond / 1e6) * 1000
+                    if gap_ms > ((1001/SAMPLING_RATE)):
+                        segment_id += 1
+                max_time  = t
+                prev_time = t           
+                clean_rows.append(row)
+                segments.append(segment_id)
+            else:
+                dropped_rows += 1
+        df = pd.DataFrame(clean_rows)
+        df = df.reset_index(drop=True)
+        df['segment'] = segments
+        df = df.set_index('segment')
+        # clip the last samples to full seconds 
+        df = df.groupby('segment', group_keys=False).apply(trim_to_multiple, include_groups=False)
+        df = df.reset_index()
+
+        if debug:
+            print(f"Dropped {dropped_rows} rows.")
+            print(f"Found {segment_id+1} segments. ")
+            print(f"Kept {len(clean_rows)} rows. \n")
+
+        # df.columns are now :
+        # ['yyyy-MM-dd', 'HH:mm:ss.fff', 'gyrX', 'gyrY', 'gyrZ', 
+        # 'accX', 'accY', 'accZ', 'magX', 'magY', 'magZ', 
+        # 'Marker', 'Energy', 'Angle', 'Classification', 'Label', 'segment']
+        
+    except Exception as e:
+        print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
+    
+    return df
+
+def run_gsd_on_segment(grp) : 
+    """
+    Input grp: columns = 'yyyy-MM-dd', 'HH:mm:ss.fff', 
+                         'accX', 'accY', 'accZ', 
+                         'segment', 'y_true', 'condition', 'subject'
+    """
+    grp_start_idx = grp.index[0]  # offset into the full df
+    # find the acceleration columns 
+    acc_cols = [c for c in grp.columns if 'acc' in c]
+    if len(acc_cols) < 3:
+        print("Incorrect number of columns.")
+        print(f"{len(acc_cols)} columns found instead.")
+    # rename the columns and run the gsd on them
+    seg_imu = grp[acc_cols].copy().astype(float) 
+    seg_imu.columns = ['acc_is', 'acc_ml', 'acc_pa']
+    seg_imu = seg_imu.reset_index(drop=True)
+    gsd = KheirkhahanGSD(threshold_still=THRESHOLD_STILL)
+    seg_imu = pd.DataFrame(seg_imu)
+    bout_result = gsd.detect(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+    activity_counts, walking_windows = gsd.get_activity(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+
+    std_norm = gsd.get_std_norm(seg_imu, sampling_rate_hz=SAMPLING_RATE)
+
+    return bout_result, activity_counts, grp_start_idx, std_norm, walking_windows
+
+def plot_results(df: pd.DataFrame, activity_counts_timeline, 
+                 std_norm_timeline, walking_timeline,
+                 y_pred, y_true, title,
+                 threshold: float = None):
+    # Parse timestamps from df into timedeltas
+    time_series = pd.to_timedelta(df['HH:mm:ss.fff'].str.strip())
+    # Convert to total seconds (float) for plotting
+    time_per_second_sec = time_series.iloc[::SAMPLING_RATE].reset_index(drop=True).dt.total_seconds()
+
+    total_seconds = len(time_per_second_sec)
+    ac_plot = np.full(total_seconds, np.nan)
+    for sec_idx, val in activity_counts_timeline.items():
+        if sec_idx < total_seconds:
+            ac_plot[sec_idx] = val
+    
+    std_plot = np.full(total_seconds, np.nan)
+    for sec_idx, val in std_norm_timeline.items():
+        if sec_idx < total_seconds:
+            std_plot[sec_idx] = val
+    
+    walking_plot = np.full(total_seconds, np.nan)
+    for sec_idx, val in walking_timeline.items():
+        if sec_idx < total_seconds:
+            walking_plot[sec_idx] = val
+
+    all_segment_first_rows = df.groupby('segment').nth(0).index
+    all_segment_last_rows = df.groupby('segment').nth(-1).index
+    jump_row_indices = all_segment_first_rows[1:]
+    jump_times_sec = [time_series.iloc[idx].total_seconds() for idx in jump_row_indices]
+
+
+    time_all_sec = time_series.dt.total_seconds() # seconds from midnight, accurate to 2 decimals
+    
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(10, 8), sharex=True)
+    # ── figure 1: raw data ────────────────────────────────────────────────────
+    ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', transform=ax1.get_xaxis_transform(),
+                    label='Ground truth (walking)')
+    if 2 in y_true:
+        ax1.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax1.get_xaxis_transform(),
+                        label='Functional Arm use')
+    acc_cols = [c for c in df.columns if 'acc' in c]
+    for acc in acc_cols:
+
+        ax1.plot(time_all_sec, df[acc], label=acc, alpha=0.8, marker='.', linestyle='None', markersize=3)
+
+    for i, jt in enumerate(jump_times_sec):
+        ax1.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax1.set_ylabel(f'Acceleration (m/s^{2})')
+    ax1.set_title(f'{title}')
+    ax1.legend(loc='upper left')
+
+    # ── figure 2: activity counts ───────────────────────────────────────────────
+    ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', transform=ax2.get_xaxis_transform(),
+                    label='Ground truth (walking)')
+    if 2 in y_true:
+        ax2.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax2.get_xaxis_transform(),
+                        label='Functional Arm use')
+    
+    ax2.plot(time_per_second_sec, ac_plot, label='Activity count', 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax2.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax2.set_xlabel('Time')
+    ax2.set_ylabel('Activity count')
+    ax2.legend(loc='upper left')
+    # ── figure 3: activity counts ───────────────────────────────────────────────
+    ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', transform=ax3.get_xaxis_transform(),
+                    label='Ground truth (walking)')
+    if 2 in y_true:
+        ax3.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', transform=ax3.get_xaxis_transform(),
+                        label='Functional Arm use')
+    ax3.plot(time_per_second_sec, walking_plot, label='walking windows', 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax3.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax3.set_xlabel('Time')
+    ax3.set_ylabel('walking windows from activity')
+    ax3.legend(loc='upper left')
+
+
+    # ── figure 4: std norm ───────────────────────────────────────────────
+    ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', label='Ground truth (walking)')
+    if 2 in y_true:
+        ax4.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', label='Functional Arm use')
+    
+    ax4.plot(time_per_second_sec, std_plot, label='std norm', alpha=0.8, 
+            linewidth=1, color='steelblue')
+    for i, jt in enumerate(jump_times_sec):
+        ax4.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+    ax4.axhline(y=threshold, color='red', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='threshold')
+    ax4.set_ylim(-0.1, np.nanmax(std_plot)+0.1)
+    ax4.set_xlabel('Time')
+    ax4.set_ylabel('Std of the norm')
+    ax4.legend(loc='upper left')
+
+    # ── figure 5: y_pred and y_true ──────────────────────────────────────────────
+    ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 1),
+                    alpha=0.2, color='green', label='Ground truth (walking)')
+    if 2 in y_true:
+        ax5.fill_between(time_all_sec, -1, 2, where=(y_true == 2),
+                        alpha=0.2, color='purple', label='Functional Arm use')
+    ax5.plot(time_all_sec, y_pred, label='y_pred (GSD)', alpha=0.8, 
+            linewidth=1, color='steelblue')
+
+    for i, jt in enumerate(jump_times_sec):
+        ax5.axvline(x=jt, color='orange', linewidth=1.0, linestyle='--', alpha=0.8,
+                    label='Time gap' if i == 0 else None)
+
+    ax5.set_ylabel('Walking (1) / Not (0)')
+    ax5.legend(loc='upper left')
+    ax5.set_ylim(-0.1, 1.4)
+    
+
+    # Format x-axis as HH:MM:SS
+    ax5.xaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda x, _: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+    ))
+    fig.autofmt_xdate()
+    plt.tight_layout()
+
+if __name__ == "__main__":
+
+    results = []
+    files = [f for f in os.listdir(DATA_PATH) if f.endswith('.txt')]
+    
+    print(f"{'Subject':<25} | {'Acc':<6} | {'Prec':<6} | {'Rec':<6} | {'F1':<6}")
+    print("-" * 75)
+
+    
+    try:
+        # 1. Load Data
+        df = load_segmented(DATA_PATH, file_name, debug=DEBUG)
+
+        # 2. Identify and Rename Columns to Anatomical Labels
+        # The package requires: 'acc_is', 'acc_ml', 'acc_pa'
+        acc_cols = [c for c in df.columns if 'acc' in c]
+        if len(acc_cols) < 3:
+            print("Incorrect number of columns.")
+            print(f"{len(acc_cols)} columns found instead.")
+        df[['acc_is', 'acc_ml', 'acc_pa']] = df[acc_cols[:3]].copy().astype(float) * 9.8
+        # 3. Ground Truth
+        if 'Label' in df.columns :
+            y_true = df['Label'].astype(int).to_numpy()
+            # print(y_true == 2)
+            # y_true = (y_true == 1)
+        else:
+            y_true = np.ones(len(df))
+        df['y_true'] = y_true
+        col_order = ['yyyy-MM-dd', 'HH:mm:ss.fff', 
+                 'acc_is', 'acc_ml', 'acc_pa', 
+                 'segment', 'y_true']
+        df = df[col_order]
+
+        diffs = np.diff(y_true)
+        diffs_pos = np.where((np.abs(diffs) == 1))
+
+        # 4. Run GSD        
+        detected_bouts = []
+        y_pred = np.zeros(len(df))
+        activity_counts_timeline = {}
+        std_norm_timeline = {}
+        walking_timeline = {}
+        skipped_seg = 0
+        for segment, grp in df.groupby('segment', sort=True):            
+            if len(grp) < MIN_SEGMENT_SAMPLES:
+                y_pred[grp.index] = np.nan
+                skipped_seg += 1
+                continue
+
+            bout_result, activity_counts, global_start_idx, std_norm, walking_windows = run_gsd_on_segment(grp)
+            global_start_sec = global_start_idx // SAMPLING_RATE
+            for i, val in enumerate(activity_counts):
+                activity_counts_timeline[global_start_sec + i] = val
+            
+            for i, val in enumerate(std_norm):
+                std_norm_timeline[global_start_sec + i] = val
+            
+            for i, val in enumerate(walking_windows):
+                walking_timeline[global_start_sec + i] = val
+
+            if hasattr(bout_result, 'gs_list_') and not bout_result.gs_list_.empty:
+                for _, bout_row in bout_result.gs_list_.iterrows():
+                    # Offset local segment indices to global df indices
+                    global_bout_start = int(bout_row['start']) + global_start_idx
+                    global_bout_end = int(bout_row['end']) + global_start_idx
+                    detected_bouts.append((global_bout_start, global_bout_end))
+                    y_pred[global_bout_start:global_bout_end] = 1
+       
+        if hasattr(bout_result, 'gs_list_') and DEBUG:
+            print(f"Total detected bouts across all segments: {len(detected_bouts)}")
+            print(f"Skipped {skipped_seg} segments.")
+            if detected_bouts != []:
+                print(f"Detected bouts:\n{detected_bouts}")
+                print(f'True switch times:\n{diffs_pos}')
+            else:
+                print("No walking bouts detected!")
+        
+        if PLOT == True: 
+            plot_results(df, activity_counts_timeline, std_norm_timeline, walking_timeline,
+                         y_pred, y_true, file_name, threshold=0.1)
+        y_true = (y_true==1)
+
+
+        if DEBUG == True:
+            print(f"\nPrediction shape: {y_pred.shape}")
+            
+            print(f"--- Comparison ---")
+            print(f"True Positives (both predict & true walking): {np.sum((y_pred == 1) & (y_true == 1))}")
+            print(f"False Positives (predict walking, true not): {np.sum((y_pred == 1) & (y_true == 0))}")
+            print(f"False Negatives (predict not walking, true walking): {np.sum((y_pred == 0) & (y_true == 1))}")
+            print(f"True Negatives (both predict & true not walking): {np.sum((y_pred == 0) & (y_true == 0))}")
+        
+        # 6. Calculate Metrics
+        valid_mask = ~np.isnan(y_pred)
+        acc  = accuracy_score(y_true[valid_mask], y_pred[valid_mask])
+        prec = precision_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+        rec  = recall_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+        f1   = f1_score(y_true[valid_mask], y_pred[valid_mask], zero_division=0)
+
+        results.append({
+            'Subject': file_name,
+            'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1
+        })
+
+        print(f"{file_name[:25]:<25} | {acc:.2f}   | {prec:.2f}   | {rec:.2f}   | {f1:.2f}")
+
+    except Exception as e:
+        print(f"{file_name[:25]:<25} | ERROR: {str(e)}")
+
+    # Final Summary
+    if results:
+        res_df = pd.DataFrame(results)
+        print("-" * 75)
+        
+        # Separate results by file type
+        rw_files = res_df[res_df['Subject'].str.endswith('RW.txt')]
+        other_files = res_df[~res_df['Subject'].str.endswith('RW.txt')]
+        
+        # Print RW.txt average
+        if not rw_files.empty:
+            print(f"{'AVERAGE right wrist ':<25} | {rw_files['Accuracy'].mean():.4f}   | {rw_files['Precision'].mean():.4f}   | {rw_files['Recall'].mean():.4f}   | {rw_files['F1'].mean():.4f}")
+        
+        # Print other files average
+        if not other_files.empty:
+            print(f"{'AVERAGE left wrist':<25} | {other_files['Accuracy'].mean():.4f}   | {other_files['Precision'].mean():.4f}   | {other_files['Recall'].mean():.4f}   | {other_files['F1'].mean():.4f}")
+    
+        plt.show()
