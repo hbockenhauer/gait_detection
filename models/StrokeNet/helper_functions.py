@@ -1,5 +1,5 @@
 '''
-ElderNet Helper Functions
+StrokeNet Helper Functions
 This is a helper module for the Energy Analysis Notebook containing all the necessary functions.
 '''
 

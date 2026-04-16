@@ -1,6 +1,6 @@
 # Gait Detection
 
-Gait detection algorithm using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke.
+Gait detection algorithms using wrist-worn Inertial Measurement Unit (IMU) data for patients with stroke. Developed for the Toward@HomeRehab project in collaboration with Erasmus MC and Rijndam Revalidatie enabling clincians to track and analyse stroke patients home rehabilitation, specifically their functional arm use by filtering out periods of non-functional use such as walking.
 
 ## Project Overview
 
@@ -35,18 +35,18 @@ gait_detection/
 │   └── wisdm-dataset/         # Public activity recognition dataset (20Hz)
 │
 ├── models/                    # Model implementations
-│   ├── ElderNet/              # Gait detection model inference source code
+│   ├── ElderNet/              # Machine Learning gait detection model
 │   ├── Hickey/                # Wrist-adapted Hickey gait sequence detection
 │   ├── Kheirkhahan/           # Wrist and fused Kheirkhahan gait sequence detection
 │   ├── mstraczkiewicz/        # Signal processing Straczkiewicz MATLAB implementations
 │   ├── realtime/              # Real-time simulation and fused/per-wrist evaluation
-│   └── StrokeNet/             # Fine-tuned variant for stroke patients
-
+│   └── StrokeNet/             # Retrained Eldernet variant for stroke patients
+|
 ├── outputs/                   # Generated outputs
 │   ├── logs/                  # Training and evaluation logs
 │   ├── plots/                 # Visualizations and result plots
 │   └── results/               # CSV results and metrics
-
+|
 └── utils/                     # Shared utilities and helpers
     ├── __init__.py            # Utility package initializer
     ├── comp_load.py           # Compute computational load of models
