@@ -1,3 +1,9 @@
+'''
+Comprehensive model loading and profiling utilities for PyTorch models, including memory usage, GPU power, and inference benchmarking.
+Designed for use with StrokeNet but can be reused for other models as well. Provides a standardized way to report model complexity, latency, throughput, and power consumption, which is crucial for understanding the trade-offs of deploying models on edge devices.
+'''
+
+
 import os
 import time
 import statistics
