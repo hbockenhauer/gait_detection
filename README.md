@@ -53,7 +53,7 @@ gait_detection/
     ├── data_loaders.py        # Common dataset loading utilities
     ├── faulty_data.py         # Detection and handling helpers for faulty segments
     ├── hub_utils.py           # Shared helper functions for model pipelines
-    ├── leg_comp.py            # Leg-side and condition comparison utilities
+    ├── leg_comp.py            # Leg comparison utilities
     ├── plot_accelerations.py  # Plot raw acceleration channels
     ├── plot_powerspec.py      # Plot power spectra of acceleration signals
     ├── plot_qsense_activities.py # Plot QSense activities and signal features
@@ -140,29 +140,40 @@ Files:
 
 
 ### Hickey
-Wrist-adapted implementation of the Hickey gait sequence detection approach, including robust dataset processing for existing datasets and QSense cohorts.
+Wrist-adapted implementation of the Hickey gait sequence detection approach, originally taken from Multimobility Repo (D. Megaritis), and tuned for the self-recorded data. All scripts run segment the data for discontinuities. 
 
 Files:
-- `models/Hickey/GSD2a.py` - Core Hickey gait sequence detection class
-- `models/Hickey/Hickey_all.py` - Run Hickey pipeline on supported existing datasets
-- `models/Hickey/Hickey_own.py` - Run robust Hickey evaluation on self-recorded datasets
+- `models/Hickey/GSD2a.py` - Main algorithm definition
+- `models/Hickey/Hickey_own.py` - Runs the algo on own recorded data only.
+- `models/Hickey/Hickey_all.py` - Runs the algo on all exiting dataset. 
+- `models/Hickey/process_existing.py` - Functions for reading and processing the existing datasets. 
 
 ### Kheirkhahan
-Wrist and two-wrist fused gait sequence detection implementations inspired by Kheirkhahan et al., with robust segmentation for discontinuous timestamps.
+Wrist-adapted implementation of the Kheirkhahan gait sequence detection approach, originally taken from Multimobility Repo (D. Megaritis), and tuned for the self-recorded data. An addtional step is taken from Hickey by cheking the std per window. To disable this check, set `THRESHOLD_STILL` to 0 in the scripts. All scripts run segment the data for discontinuities.
 
 Files:
-- `models/Kheirkhahan/GSD3_test.py` - Core Kheirkhahan single-wrist detector
-- `models/Kheirkhahan/GSD3_fused.py` - Activity-level fusion of two wrists
-- `models/Kheirkhahan/MM_own_all_robust.py` - Robust evaluation across QSense and free-living datasets
+- `models/Kheirkhahan/GSD3_test.py` - Main processing steps of the algo; includes helper functions to provide insight into the intermediate steps. 
+- `models/Kheirkhahan/GSD3_fused.py` - Main processing allowing for fusion of the two wrist at activity count level
+- `models/Kheirkhahan/free_living_test.py`- Processes the data from the Free Living dataset only, allows to run with the Hickey method
+- `models/Kheirkhahan/MM_existing_data.py` - Processes all existing datasets
+- `models/Kheirkhahan/process_dataset.py` - Functions to process the existing datasets  
+- `models/Kheirkhahan/MM_own_all_robust.py` - Processes all recorded datasets 
+- `models/Kheirkhahan/MM_wrist.py` - Processes all recorded datasets using both wrist files, fused at the classifier (AND) 
+- `models/Kheirkhahan/singleGSD_robust.py` - Processes a single given file, plots the intermediate steps
 
 ### Real-Time Simulation
-Streaming-style inference scripts to simulate deployment behavior for single-wrist and fused two-wrist workflows.
+The modified Kheirkhahan method is further implemented and tested in real-time manner but only provided a window of data into the algorithm. 
 
 Files:
-- `models/realtime/detect_per_wrist.py` - Label-free single-wrist real-time detector
-- `models/realtime/detect_fused.py` - Label-free fused two-wrist real-time detector
-- `models/realtime/evaluate_per_wrist.py` - Metric evaluation for single-wrist simulation
-- `models/realtime/evaluate_fused.py` - Metric evaluation for fused simulation
+- `models/realtime/ActivityCounts.py` - The retuned implementaion of the activity count calculation.
+- `models/realtime/GSD3.py` - Basic core algorithm
+- `models/realtime/detect_per_wrist.py` - All the functions non requiring the labels in processing a single wirst file 
+- `models/realtime/evaluate_per_wrist.py` - Processes and evaluates the metrics of a single provided file, visualizes the results
+- `models/realtime/detect_fused.py` - All the functions non requiring the labels in processing two wrist files from a provided folder, the fused happens with AND statement at the classsifier 
+- `models/realtime/evaluate_fused.py` - Processes and evaluates the metrics of the fused wrist approach given a provided folder, visualizes the results
+- `models/realtime/evaluate_all.py` - Processes all the existing dataset in realtime manner
+- `models/realtime/real_time_2wrist.py` - Processes the fused files from the two wrists, when fusing happens on the activity level
+
 
 ## Configuration
 
@@ -193,6 +204,7 @@ Model hyperparameters are centralized in `config/hyperparameters.py` (create if 
 - Bioclite Dataset: https://zenodo.org/records/14623732
 - ElderNet Repo: https://github.com/yonbrand/ElderNet
 - MStraczkiewicz find_walking repo: https://github.com/MStraczkiewicz/find_walking/tree/main
+- Multimobility Wrist Repo: https://github.com/DMegaritis/multimobility_wrist 
 
 ## Authors
 

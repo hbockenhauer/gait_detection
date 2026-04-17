@@ -31,7 +31,7 @@ from config.paths import (
 DEBUG = False
 PRINT_STATS = True 
 
-SAVE_RESULTS = False 
+SAVE_RESULTS = True 
 OUTPUT_FILE = "Realtime/Realtime_results_own.csv"
 ###################################################
 
@@ -41,7 +41,7 @@ DATA_PATHS = [
     # WISDM_PATH, 
     # WEARGAIT_PD,
     # WEARGAIT_CTRL,
-    QSENSE_DATA,
+    # QSENSE_DATA,
     QSENSE_EDGE,
     QSENSE_MIXED,
     QSENSE_CLINIC,
@@ -213,7 +213,7 @@ def process_realtime(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
     )
 
     if save_results == True:
-        save_path = os.join.path(RESULTS_DIR,OUTPUT_FILE)
+        save_path = os.path.join(RESULTS_DIR,OUTPUT_FILE)
         csv_df.to_csv(save_path, index=False)
         print(f"\nSaved → {save_path}")
 

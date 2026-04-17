@@ -25,7 +25,7 @@ from config.paths import (
 DEBUG = False
 PRINT_STATS = True 
 
-SAVE_RESULTS = False 
+SAVE_RESULTS = True 
 OUTPUT_FILE = "Results/KheirkhahanGSD_Results_wHickey.csv"
 ###################################################
 
@@ -35,11 +35,11 @@ DATA_PATHS = [
     WISDM_PATH, 
     WEARGAIT_PD,
     WEARGAIT_CTRL,
-    QSENSE_DATA,
-    QSENSE_EDGE,
-    QSENSE_MIXED,
-    QSENSE_CLINIC,
-    FREELIVING_PATH,
+    # QSENSE_DATA,
+    # QSENSE_EDGE,
+    # QSENSE_MIXED,
+    # QSENSE_CLINIC,
+    # FREELIVING_PATH,
     BIOCLITE_PATH
     ]
 
@@ -68,16 +68,20 @@ if __name__ == "__main__":
             process_gait(rw, lw, fl, save_results=SAVE_RESULTS)
 
         elif "WearGait" in dataset_name:
-            fl = process_weargait(data_path, PRINT_STATS)
+            fl = process_weargait(data_path, PRINT_STATS, SAVE_RESULTS, 
+                                  output_file="Kheirkhahan/WearGait.csv")
         
         elif "accel" in dataset_name:
-            process_wisdm(data_path, PRINT_STATS)
+            process_wisdm(data_path, PRINT_STATS, SAVE_RESULTS, 
+                                  output_file="Kheirkhahan/WISDM.csv")
 
         elif "HMP" in dataset_name: 
-            process_HMP(data_path, PRINT_STATS)
+            process_HMP(data_path, PRINT_STATS, SAVE_RESULTS, 
+                                  output_file="Kheirkhahan/HMP.csv")
 
         elif "6activities_plain.mat" in dataset_name:
-            process_bioclite(data_path, PRINT_STATS)
+            process_bioclite(data_path, PRINT_STATS, SAVE_RESULTS, 
+                                  output_file="Kheirkhahan/Bioclite.csv")
 
 
     ###############################

@@ -34,7 +34,7 @@ DEBUG = False
 PRINT_STATS = True 
 
 SAVE_RESULTS = False 
-OUTPUT_FILE = "Kheirkhahan/KheirkhahanGSD_Results_wHickey.csv"
+OUTPUT_FILE = "Kheirkhahan/Clinic_wHickey.csv"
 
 PLOT = False # plots and saves all plots
 folder = "Kheirkhahan_plots" # folder to be saved in 
@@ -42,9 +42,9 @@ folder = "Kheirkhahan_plots" # folder to be saved in
 
 
 DATA_PATHS = [
-    QSENSE_CLINIC, 
+    # QSENSE_CLINIC, 
     # QSENSE_DATA, 
-    # QSENSE_EDGE, 
+    QSENSE_EDGE, 
     # QSENSE_MIXED, 
     # FREELIVING_PATH
 ]
@@ -475,9 +475,9 @@ def process_gait(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
     )
 
     if save_results == True:
-        os.path.join(RESULTS_DIR, out_file)
-        csv_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"\nSaved → {OUTPUT_FILE}")
+        save_path = os.path.join(RESULTS_DIR, out_file)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return res_df
 
@@ -514,4 +514,5 @@ if __name__ == "__main__":
     print(f"\n{'=' * 80}")
     print(f"  Running GSD on pooled data ({len(DATA_PATHS)} dataset(s))")
     print(f"{'=' * 80}")
-    process_gait(rw_merged, lw_merged, fl_merged, print_stats=PRINT_STATS, save_results=SAVE_RESULTS)
+    process_gait(rw_merged, lw_merged, fl_merged, print_stats=PRINT_STATS, 
+                 save_results=SAVE_RESULTS, out_file=OUTPUT_FILE)

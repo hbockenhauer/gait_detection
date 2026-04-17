@@ -18,7 +18,6 @@ from config.paths import (
     QSENSE_MIXED,
     QSENSE_CLINIC,
     FREELIVING_PATH,
-    PLOTS_DIR, 
     RESULTS_DIR
 )
 
@@ -28,11 +27,8 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 DEBUG = False
 PRINT_STATS = True 
 
-SAVE_RESULTS = True 
+SAVE_RESULTS = False 
 out_file = "Hickey/Hickey_own.csv"
-
-PLOT = False
-OUT_FOLDER = PLOTS_DIR
 ###############################################
 
 DATA_PATHS = [ 

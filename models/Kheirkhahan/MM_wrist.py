@@ -60,7 +60,6 @@ def _true_series(grp_wrist: pd.DataFrame) -> pd.Series:
                   + grp_wrist['HH:mm:ss.fff'].str.strip())
     return pd.Series(grp_wrist['y_true'].to_numpy(), index=timestamps.values, name='y_true')
 
-
 def extract_condition(folder_name: str) -> str:
     folder_lower = folder_name.lower()
     for kw in CONDITION_KEYWORDS:

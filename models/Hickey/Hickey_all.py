@@ -35,7 +35,7 @@ PRINT_STATS = True
 # names for each files with the dataset results are preset 
 # but can be adjusted by providing it as an input to the 
 # process functions
-SAVE_RESULTS = False  
+SAVE_RESULTS = True  
 ##################################
 
 DATA_PATHS = [ 
@@ -48,7 +48,8 @@ DATA_PATHS = [
     QSENSE_MIXED,
     QSENSE_CLINIC,
     FREELIVING_PATH,
-    BIOCLITE_PATH]
+    BIOCLITE_PATH
+    ]
 
 
 if __name__ == "__main__":
@@ -77,15 +78,15 @@ if __name__ == "__main__":
             process_Hickey(rw, lw, fl, PRINT_STATS, SAVE_RESULTS)
 
         elif "WearGait" in dataset_name:
-            fl = process_weargait(data_path, PRINT_STATS)
+            fl = process_weargait(data_path, PRINT_STATS, SAVE_RESULTS)
         
         elif "accel" in dataset_name:
-            process_wisdm(data_path, PRINT_STATS)
+            process_wisdm(data_path, PRINT_STATS, SAVE_RESULTS)
 
         elif "HMP" in dataset_name: 
-            process_HMP(data_path, PRINT_STATS)
+            process_HMP(data_path, PRINT_STATS, SAVE_RESULTS)
 
         elif "6activities_plain.mat" in dataset_name:
-            process_bioclite(data_path, PRINT_STATS)
+            process_bioclite(data_path, PRINT_STATS, SAVE_RESULTS)
 
 

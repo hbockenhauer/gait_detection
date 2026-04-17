@@ -6,6 +6,8 @@ from models.Kheirkhahan.GSD3_test import KheirkhahanGSD
 import scipy.io as sio
 from collections import deque
 
+from config.paths import RESULTS_DIR
+
 ################# can be adjusted ##################
 THRESHOLD_STILL = 0.0
 DEBUG = False
@@ -246,6 +248,7 @@ def process_weargait(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
+        save_path = os.path.join(RESULTS_DIR, output_file)
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         csv_df.to_csv(output_file, index=False)
         print(f"\nSaved → {output_file}")
@@ -457,9 +460,10 @@ def process_wisdm(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return overall_df 
     
@@ -659,9 +663,10 @@ def process_HMP(data_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return res_df
 
@@ -812,9 +817,10 @@ def process_bioclite(mat_path: str, print_stats: bool = True,
         avg_df    = pd.DataFrame(avg_rows)
         blank_row = pd.DataFrame([{c: '' for c in res_df.columns}])
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
-        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
-        print(f"\nSaved → {output_file}")
+        save_path = os.path.join(RESULTS_DIR, output_file)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        csv_df.to_csv(save_path, index=False)
+        print(f"\nSaved → {save_path}")
 
     return overall_df
 
