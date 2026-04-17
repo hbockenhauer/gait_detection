@@ -100,7 +100,7 @@ status = validate_dataset_paths()
 ## Models
 
 ### ElderNet
-Core gait detection model trained on multiple public datasets. Supports inference on provided datasets.
+Files related to ElderNet gait detection model. Supports inference on provided datasets.
 
 Files:
 - `models/ElderNet/eldernet_*.py` - Dataset-specific evaluation scripts
@@ -108,7 +108,7 @@ Files:
 
 
 ### StrokeNet
-Fine-tuned variant of ElderNet optimized for stroke patients. Used for activity-level metric computation.
+FIles related to fine-tuned variant of ElderNet optimized for stroke patients.
 
 Files:
 - `models/StrokeNet/Energy_analysis.ipynb` - Jupyter Notebook for clinician to run end-of-day analysis
@@ -125,7 +125,7 @@ Files:
 
 ### Straczkiewicz
 
-Reference MATLAB implementations of the Straczkiewicz gait detection pipeline, used for signal-processing-based walking detection, dataset benchmarking, and real-time simulation.
+Files related to MATLAB implementations of the signal-processing-based Straczkiewicz gait detection pipeline and its adaptation.
 
 Files:
 - `models/mstraczkiewicz/find_walking.m` - Core walking detector based on vector magnitude, CWT peaks, and cadence continuity checks.
