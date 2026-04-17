@@ -1,3 +1,9 @@
+'''
+Power Spectral Density (PSD) Analysis for QSense Dataset
+This script loads accelerometer data from the QSense dataset, selects only the walking samples, and computes the Power Spectral Density (PSD) for each axis (X, Y, Z) using Welch's method. 
+The resulting PSDs are plotted on a logarithmic scale for better visualization of the frequency components.
+'''
+
 import os
 import sys
 import numpy as np

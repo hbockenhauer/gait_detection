@@ -1,3 +1,7 @@
+'''
+Script to evaluate performance of leg classification in QSense dataset.
+'''
+
 import os
 import sys
 import glob

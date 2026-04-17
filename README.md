@@ -30,7 +30,7 @@ gait_detection/
 │   ├── Free_living/           # Stroke patient data (50Hz)
 │   ├── HMP_Dataset/           # Fall detection dataset (32Hz)
 │   ├── Multiple_Activities/   # Self-recorded mixed activities (50Hz)
-│   ├── Qsense_tests/          # Internal test recordings and checks
+│   ├── Qsense_tests/          # Internal test recordings and checks of IMUs
 │   ├── WearGait/              # Parkinson's and control cohorts (100Hz)
 │   └── wisdm-dataset/         # Public activity recognition dataset (20Hz)
 │

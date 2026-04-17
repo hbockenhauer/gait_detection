@@ -1,3 +1,10 @@
+'''
+QSense Activity Visualization
+Helper script to make plot of predicted probabilities, energies, frequencies, and GT vs predictions for each activity type in the QSense dataset.
+'''
+
+
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
