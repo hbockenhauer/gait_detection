@@ -9,7 +9,7 @@ from collections import deque
 from config.paths import RESULTS_DIR
 
 ################# can be adjusted ##################
-THRESHOLD_STILL = 0.0
+THRESHOLD_STILL = 0.1
 DEBUG = False
 ####################################################
 

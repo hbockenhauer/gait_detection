@@ -42,11 +42,11 @@ folder = "Kheirkhahan_plots" # folder to be saved in
 
 
 DATA_PATHS = [
-    # QSENSE_CLINIC, 
-    # QSENSE_DATA, 
+    QSENSE_CLINIC, 
+    QSENSE_DATA, 
     QSENSE_EDGE, 
-    # QSENSE_MIXED, 
-    # FREELIVING_PATH
+    QSENSE_MIXED, 
+    FREELIVING_PATH
 ]
 
 SAMPLING_RATE = 50 

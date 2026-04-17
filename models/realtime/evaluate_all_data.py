@@ -31,22 +31,22 @@ from config.paths import (
 DEBUG = False
 PRINT_STATS = True 
 
-SAVE_RESULTS = True 
-OUTPUT_FILE = "Realtime/Realtime_results_own.csv"
+SAVE_RESULTS = False 
+OUTPUT_FILE = "realtime/Realtime_results_own.csv"
 ###################################################
 
 
 DATA_PATHS = [ 
-    # HMP_PATH, 
-    # WISDM_PATH, 
-    # WEARGAIT_PD,
-    # WEARGAIT_CTRL,
-    # QSENSE_DATA,
+    HMP_PATH, 
+    WISDM_PATH, 
+    WEARGAIT_PD,
+    WEARGAIT_CTRL,
+    QSENSE_DATA,
     QSENSE_EDGE,
     QSENSE_MIXED,
     QSENSE_CLINIC,
-    # FREELIVING_PATH,
-    # BIOCLITE_PATH
+    FREELIVING_PATH,
+    BIOCLITE_PATH
     ]
 
 def process_realtime(rw_merged: pd.DataFrame, lw_merged: pd.DataFrame,
