@@ -11,6 +11,8 @@ This project implements Machine Learning models (ElderNet/StrokeNet) and Signal 
 ```
 gait_detection/
 ├── Algo_flowcharts.drawio     # Pipeline and algorithm flowcharts
+├── company_presentation_13_04 # Company presentation summarising work of this study
+├── Internship_report          # Scientific paper detailing the work of this study
 ├── README.md                  # Project documentation
 ├── requirements.txt           # Python dependencies
 │
