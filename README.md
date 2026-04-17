@@ -112,14 +112,14 @@ FIles related to fine-tuned variant of ElderNet optimized for stroke patients.
 
 Files:
 - `models/StrokeNet/Energy_analysis.ipynb` - Jupyter Notebook for clinician to run end-of-day analysis
-- `models/StrokeNet/energy_report.py` - Script to perform end-of-day energy analysis of patient
+- `models/StrokeNet/energy_report.py` - Script to perform end-of-day energy analysis of patient (for unlabelled data)
 - `models/StrokeNet/helper_functions.py` - Necessary functions for Notebook 
 - `models/StrokeNet/retrain_eldernet.py` - Fine-tuning script
 - `models/StrokeNet/strokenet_comp_load.py` - Script to determine computational load of StrokeNet
-- `models/StrokeNet/strokenet_upperarm.py` - Script to perform gait detection using sensor on upper arm for Clinical dataset
+- `models/StrokeNet/strokenet_upperarm.py` - Script to perform gait detection and performance evaluation using sensor on upper arm for Clinical dataset
 - `models/StrokeNet/strokenet_utils.py` - Script to run necessary data loaders and plotters for inference
 - `models/StrokeNet/StrokeNet_weights.pth` - New model weights obtained from retrain_eldernet.py
-- `models/StrokeNet/strokenet_wrist.py` - Script to analyse different wrist fusion strategies 
+- `models/StrokeNet/strokenet_wrist.py` - Script to analyse performance of different wrist fusion strategies 
 - `models/StrokeNet/strokenet.py` - Main inference pipeline for global cross-dataset evaluation
 - `models/StrokeNet/__init__.py` - Package initializer
 
@@ -190,7 +190,7 @@ Model hyperparameters are centralized in `config/hyperparameters.py` (create if 
 ### Adding New Datasets
 1. Place dataset in `Datasets/<dataset_name>/`
 2. Add path constant in `config/paths.py`
-3. Create evaluation script (if needed) in `analysis/`
+3. Use new path variable as input in desired script
 
 ### Extending Models
 - Keep model code in `models/{ElderNet,StrokeNet,Hickey,Kheirkhahan,realtime,mstraczkiewicz}/`
