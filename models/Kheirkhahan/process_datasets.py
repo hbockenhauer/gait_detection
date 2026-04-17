@@ -250,7 +250,7 @@ def process_weargait(data_path: str, print_stats: bool = True,
         csv_df    = pd.concat([res_df, blank_row, avg_df], ignore_index=True)
         save_path = os.path.join(RESULTS_DIR, output_file)
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        csv_df.to_csv(output_file, index=False)
+        csv_df.to_csv(save_path, index=False)
         print(f"\nSaved → {output_file}")
 
     return overall_df

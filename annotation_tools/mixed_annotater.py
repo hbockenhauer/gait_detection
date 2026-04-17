@@ -15,7 +15,6 @@ from config.paths import QSENSE_MIXED, QSENSE_CLINIC, QSENSE_TEST
 # EDIT THIS BEFORE RUNNING
 # DATA_PATH = os.path.join(QSENSE_MIXED, 'Test2')
 DATA_PATH = os.path.join(QSENSE_CLINIC, 'sub5')
-#THRESHOLD = time(14, 57, 0)
 
 # The entire file for orientation is walking so label every timestamp as 1 (walk)
 LABELS = np.array([0, 
